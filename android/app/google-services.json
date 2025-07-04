@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "891691718664",
+    "project_id": "home-workers-fa5cd",
+    "storage_bucket": "home-workers-fa5cd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:891691718664:android:411e6ffdbd1e617d1459bd",
+        "android_client_info": {
+          "package_name": "com.example.home_workers_fe"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyByZ_z2fq2TGRKZKFcKrPrEEacLEttpdCY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
