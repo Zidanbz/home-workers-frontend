@@ -120,20 +120,26 @@ class _AddAddressPageState extends State<AddAddressPage> {
       appBar: AppBar(title: const Text('Tambah Alamat Baru')),
       body: Stack(
         children: [
-          GoogleMap(
-            cloudMapId: "3c6dd06f72e67224fd6ccecb ", // <-- TAMBAHKAN BARIS INI
-            initialCameraPosition: _kMakassar,
-            onMapCreated: (GoogleMapController controller) {
-              _mapController.complete(controller);
-            },
-            markers: _selectedLocation == null
-                ? {}
-                : {
-                    Marker(
-                      markerId: const MarkerId('selected-location'),
-                      position: _selectedLocation!,
-                    ),
-                  },
+          Positioned.fill(
+            child: SafeArea(
+              child: GoogleMap(
+                // cloudMapId: "3c6dd06f72e67224fd6ccecb", // <-- TAMBAHKAN BARIS INI
+                initialCameraPosition: _kMakassar,
+
+                onMapCreated: (GoogleMapController controller) {
+                  print("MAP CREATED ✅");
+                  _mapController.complete(controller);
+                },
+                markers: _selectedLocation == null
+                    ? {}
+                    : {
+                        Marker(
+                          markerId: const MarkerId('selected-location'),
+                          position: _selectedLocation!,
+                        ),
+                      },
+              ),
+            ),
           ),
           Positioned(
             top: 10,

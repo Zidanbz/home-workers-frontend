@@ -13,12 +13,12 @@ class Message {
 
   factory Message.fromJson(Map<String, dynamic> json) {
     return Message(
-      id: json['id'] ?? '',
-      text: json['text'] ?? '',
-      senderId: json['senderId'] ?? '',
-      timestamp: json['timestamp'] != null
-          ? DateTime.tryParse(json['timestamp']) ?? DateTime.now()
-          : DateTime.now(),
+      id: json['id'],
+      text: json['text'],
+      senderId: json['senderId'],
+      timestamp: DateTime.fromMillisecondsSinceEpoch(
+        json['timestamp']['_seconds'] * 1000,
+      ),
     );
   }
 }

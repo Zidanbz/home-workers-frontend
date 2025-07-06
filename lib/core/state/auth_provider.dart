@@ -3,13 +3,14 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart'
     as fba; // Beri alias untuk FirebaseAuth
+import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api_service.dart';
 import '../models/user_model.dart';
 import '../services/secure_storage_service.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 
-
 enum AuthScreen { welcome, login, register }
+
 class AuthProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
   final SecureStorageService _storageService = SecureStorageService();
@@ -17,19 +18,43 @@ class AuthProvider with ChangeNotifier {
   User? _user;
   String? _token; // Ini akan menjadi ID Token, bukan custom token
   bool _isLoading = true;
-    AuthScreen _authScreen = AuthScreen.welcome; // State awal
+  bool _hasSeenOnboarding = false;
+  AuthScreen _authScreen = AuthScreen.welcome; // State awal
 
   User? get user => _user;
   String? get token => _token;
   bool get isLoggedIn => _token != null;
   bool get isLoading => _isLoading;
+  bool get hasSeenOnboarding => _hasSeenOnboarding;
   AuthScreen get authScreen => _authScreen;
 
   AuthProvider() {
-    tryAutoLogin();
+    // tryAutoLogin();
+    initializeApp();
   }
 
-    void showLoginPage() {
+  Future<void> initializeApp() async {
+    // Cek apakah onboarding sudah dilihat
+    final prefs = await SharedPreferences.getInstance();
+    _hasSeenOnboarding = prefs.getBool('hasSeenOnboarding') ?? false;
+
+    // Coba auto-login
+    final storedToken = await _storageService.readToken();
+    if (storedToken != null && !JwtDecoder.isExpired(storedToken)) {
+      try {
+        final userProfile = await _apiService.getMyProfile(storedToken);
+        _user = userProfile;
+        _token = storedToken;
+      } catch (e) {
+        await logout();
+      }
+    }
+
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  void showLoginPage() {
     _authScreen = AuthScreen.login;
     notifyListeners();
   }
@@ -108,7 +133,7 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
-    Future<void> refreshUserData() async {
+  Future<void> refreshUserData() async {
     if (_token != null) {
       try {
         final updatedUser = await _apiService.getMyProfile(_token!);

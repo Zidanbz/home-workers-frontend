@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:home_workers_fe/core/models/category_model.dart';
 import 'package:home_workers_fe/core/services/storage_service_page.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
@@ -43,6 +44,58 @@ class _CreateEditJobPageState extends State<CreateEditJobPage> {
     'Konstruksi',
     'Layanan Elektronik',
   ];
+
+  void _showCategoryPicker() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: GridView.count(
+            crossAxisCount: 3,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            shrinkWrap: true,
+            children: categories.map((item) {
+              final isSelected = _selectedCategory == item.name;
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _selectedCategory = item.name;
+                  });
+                  Navigator.pop(context);
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? Colors.blue.shade100
+                        : Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(item.icon, size: 30, color: Colors.blueGrey),
+                      const SizedBox(height: 8),
+                      Text(
+                        item.name,
+                        style: const TextStyle(fontSize: 12),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
 
   @override
   void initState() {
@@ -184,69 +237,110 @@ class _CreateEditJobPageState extends State<CreateEditJobPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildFormField('Nama Layanan', _namaLayananController),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
               const Text(
-                'Tipe Layanan',
-                style: TextStyle(fontWeight: FontWeight.bold),
+                'Edit Pekerjaan',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
+              const SizedBox(height: 24),
+
+              // Foto & Category di 1 baris
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: RadioListTile<ServiceType>(
-                      title: const Text('Harga Tetap'),
-                      value: ServiceType.fixed,
-                      groupValue: _serviceType,
-                      onChanged: (v) => setState(() => _serviceType = v!),
-                    ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Foto',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      if (_existingImageUrls.isNotEmpty)
+                        _buildThumbnailImage(_existingImageUrls.first)
+                      else if (_pickedImages.isNotEmpty)
+                        _buildLocalThumbnail(_pickedImages.first),
+                    ],
                   ),
-                  Expanded(
-                    child: RadioListTile<ServiceType>(
-                      title: const Text('Cek Dulu'),
-                      value: ServiceType.survey,
-                      groupValue: _serviceType,
-                      onChanged: (v) => setState(() => _serviceType = v!),
-                    ),
+                  const SizedBox(width: 20),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Kategori',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      InkWell(
+                        onTap: _showCategoryPicker,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            border: Border.all(color: Colors.grey),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(_selectedCategory ?? 'Pilih Kategori'),
+                              const Icon(Icons.keyboard_arrow_down),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-              if (_serviceType == ServiceType.fixed)
-                _buildFormField(
-                  'Harga',
-                  _hargaController,
-                  keyboardType: TextInputType.number,
-                )
-              else
-                _buildFormField(
-                  'Biaya Survei (Opsional)',
-                  _biayaSurveiController,
-                  keyboardType: TextInputType.number,
+
+              const SizedBox(height: 24),
+              _buildFormField(
+                'Harga',
+                _hargaController,
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 24),
+              _buildFormField('Detail', _namaLayananController),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _deskripsiController,
+                maxLines: 4,
+                decoration: InputDecoration(
+                  hintText: 'Detail pekerjaan',
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
-
-              const SizedBox(height: 16),
+              ),
+              const SizedBox(height: 24),
               const Text(
-                'Kategori',
+                'Metode Pembayaran',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              DropdownButtonFormField<String>(
-                value: _selectedCategory,
-                hint: const Text('Pilih Kategori'),
-                items: _categories
-                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                    .toList(),
-                onChanged: (v) => setState(() => _selectedCategory = v),
-                validator: (v) => v == null ? 'Kategori wajib dipilih' : null,
+              const SizedBox(height: 8),
+              TextFormField(
+                initialValue: 'Cash & Cashless',
+                readOnly: true,
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
               ),
-
-              const SizedBox(height: 16),
-              const Text(
-                'Deskripsi',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              TextFormField(controller: _deskripsiController, maxLines: 4),
 
               const SizedBox(height: 24),
               const Text('Foto', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
               _buildPhotoGrid(),
             ],
           ),
@@ -257,9 +351,17 @@ class _CreateEditJobPageState extends State<CreateEditJobPage> {
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  backgroundColor: Colors.indigo,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
                 onPressed: _handleSaveChanges,
                 child: Text(
                   _isEditMode ? 'Simpan Perubahan' : 'Tambah Pekerjaan',
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
                 ),
               ),
       ),
@@ -325,3 +427,13 @@ class _CreateEditJobPageState extends State<CreateEditJobPage> {
     );
   }
 }
+
+Widget _buildThumbnailImage(String url) => ClipRRect(
+  borderRadius: BorderRadius.circular(12),
+  child: Image.network(url, height: 70, width: 70, fit: BoxFit.cover),
+);
+
+Widget _buildLocalThumbnail(File file) => ClipRRect(
+  borderRadius: BorderRadius.circular(12),
+  child: Image.file(file, height: 70, width: 70, fit: BoxFit.cover),
+);

@@ -1,21 +1,8 @@
 import 'package:flutter/material.dart';
-
-// Model data tiruan untuk satu notifikasi
-class NotificationItem {
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String body;
-  final String time;
-
-  NotificationItem({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.body,
-    required this.time,
-  });
-}
+import 'package:provider/provider.dart';
+import '../../../core/api/api_service.dart';
+import '../../../core/models/notification_model.dart';
+import '../../../core/state/auth_provider.dart';
 
 class NotificationPage extends StatefulWidget {
   const NotificationPage({super.key});
@@ -25,41 +12,25 @@ class NotificationPage extends StatefulWidget {
 }
 
 class _NotificationPageState extends State<NotificationPage> {
-  // Data tiruan untuk ditampilkan di list
-  final List<NotificationItem> _notifications = [
-    NotificationItem(
-      icon: Icons.campaign_outlined,
-      iconColor: Colors.blue,
-      title: 'Promo Spesial Akhir Pekan! 🎉',
-      body:
-          'Dapatkan diskon 20% untuk semua layanan kebersihan. Pesan sekarang!',
-      time: '1 jam lalu',
-    ),
-    NotificationItem(
-      icon: Icons.check_circle_outline,
-      iconColor: Colors.green,
-      title: 'Layanan Disetujui!',
-      body:
-          'Layanan Anda "Pembersihan Apartemen" telah disetujui dan kini aktif di marketplace.',
-      time: '3 jam lalu',
-    ),
-    NotificationItem(
-      icon: Icons.receipt_long_outlined,
-      iconColor: Colors.deepPurple,
-      title: 'Pesanan Baru',
-      body:
-          'Anda menerima pesanan baru untuk "Perbaikan Saluran Air" dari Siti Customer.',
-      time: 'Kemarin',
-    ),
-    NotificationItem(
-      icon: Icons.cancel_outlined,
-      iconColor: Colors.red,
-      title: 'Layanan Ditolak',
-      body:
-          'Layanan Anda "Instalasi Listrik Kompleks" ditolak. Silakan periksa detailnya.',
-      time: '2 hari lalu',
-    ),
-  ];
+  final ApiService _apiService = ApiService();
+  late Future<List<NotificationItem>> _notificationsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotifications();
+  }
+
+  Future<void> _loadNotifications() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (authProvider.token != null) {
+      setState(() {
+        _notificationsFuture = _apiService.getMyNotifications(
+          authProvider.token!,
+        );
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -72,22 +43,43 @@ class _NotificationPageState extends State<NotificationPage> {
         backgroundColor: Colors.white,
         elevation: 0.5,
       ),
-      body: ListView.separated(
-        padding: const EdgeInsets.all(16.0),
-        itemCount: _notifications.length,
-        itemBuilder: (context, index) {
-          final notification = _notifications[index];
-          return _buildNotificationCard(notification);
-        },
-        separatorBuilder: (context, index) => const Divider(),
+      body: RefreshIndicator(
+        onRefresh: _loadNotifications,
+        child: FutureBuilder<List<NotificationItem>>(
+          future: _notificationsFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return Center(child: Text('Error: ${snapshot.error}'));
+            }
+            if (!snapshot.hasData || snapshot.data!.isEmpty) {
+              return const Center(child: Text('Tidak ada notifikasi.'));
+            }
+
+            final notifications = snapshot.data!;
+            return ListView.separated(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              itemCount: notifications.length,
+              itemBuilder: (context, index) {
+                return _buildNotificationCard(notifications[index]);
+              },
+              separatorBuilder: (context, index) =>
+                  const Divider(height: 1, indent: 20, endIndent: 20),
+            );
+          },
+        ),
       ),
     );
   }
 
-  // Widget untuk satu kartu notifikasi
   Widget _buildNotificationCard(NotificationItem notification) {
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(vertical: 8.0),
+      contentPadding: const EdgeInsets.symmetric(
+        vertical: 12.0,
+        horizontal: 20.0,
+      ),
       leading: CircleAvatar(
         radius: 28,
         backgroundColor: notification.iconColor.withOpacity(0.1),
@@ -102,13 +94,10 @@ class _NotificationPageState extends State<NotificationPage> {
         child: Text(notification.body),
       ),
       trailing: Text(
-        notification.time,
+        notification.timeAgo,
         style: const TextStyle(color: Colors.grey, fontSize: 12),
       ),
-      onTap: () {
-        // TODO: Tambahkan logika navigasi saat notifikasi di-klik
-        // (misal: ke halaman detail order atau halaman promo)
-      },
+      onTap: () {},
     );
   }
 }

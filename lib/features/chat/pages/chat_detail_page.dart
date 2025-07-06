@@ -33,7 +33,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     _markAsRead();
   }
 
-    void _markAsRead() {
+  void _markAsRead() {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.token != null) {
       _apiService.markChatAsRead(authProvider.token!, widget.chatId);
@@ -49,6 +49,11 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
           widget.chatId,
         );
       });
+    }
+    if (authProvider.token != null) {
+      print("Chat ID: ${widget.chatId}");
+      
+      return;
     }
   }
 
@@ -137,7 +142,11 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       ),
       title: Row(
         children: [
-          CircleAvatar(backgroundImage: NetworkImage(widget.avatarUrl)),
+          CircleAvatar(
+            backgroundImage: (widget.avatarUrl.isNotEmpty)
+                ? NetworkImage(widget.avatarUrl)
+                : const AssetImage('assets/sp1.png') as ImageProvider,
+          ),
           const SizedBox(width: 12),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,

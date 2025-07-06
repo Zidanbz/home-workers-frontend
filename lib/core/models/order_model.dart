@@ -1,3 +1,4 @@
+import 'package:home_workers_fe/core/models/category_model.dart';
 import 'package:intl/intl.dart';
 
 class Order {
@@ -6,6 +7,7 @@ class Order {
   final DateTime jadwalPerbaikan;
   final DateTime dibuatPada;
   final String customerId;
+  final String category;
 
   // Informasi tambahan yang kita dapat dari backend
   final String serviceName;
@@ -21,6 +23,7 @@ class Order {
     required this.customerName,
     required this.customerAddress,
     required this.customerId,
+    required this.category,
   });
 
   factory Order.fromJson(Map<String, dynamic> json) {
@@ -52,6 +55,7 @@ class Order {
       customerName: customerInfo['nama'] ?? 'Customer Tidak Dikenal',
       customerAddress: customerInfo['alamat'] ?? 'Alamat Tidak Tersedia',
       customerId: json['customerId'] ?? '',
+      category: json['category'] ?? '',
     );
   }
 

@@ -40,6 +40,9 @@ class _JobDetailPageState extends State<JobDetailPage> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           title: const Text('Konfirmasi Hapus'),
           content: const Text(
             'Apakah Anda yakin ingin menghapus layanan ini? Tindakan ini tidak bisa dibatalkan.',
@@ -102,24 +105,17 @@ class _JobDetailPageState extends State<JobDetailPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: const Color(0xFFF9FAFB),
       appBar: AppBar(
-        title: const Text(
-          'Detail Pekerjaan',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        title: const Text('Detail Pekerjaan'),
+        backgroundColor: Colors.white,
+        elevation: 1,
+        iconTheme: const IconThemeData(color: Colors.black),
+        titleTextStyle: const TextStyle(
+          color: Colors.black,
+          fontWeight: FontWeight.bold,
+          fontSize: 18,
         ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        actions: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.notifications_outlined),
-          ),
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.chat_bubble_outline),
-          ),
-        ],
       ),
       body: FutureBuilder<Service>(
         future: _serviceDetailFuture,
@@ -141,40 +137,35 @@ class _JobDetailPageState extends State<JobDetailPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildActionButtons(service),
-                const SizedBox(height: 24),
                 _buildServiceHeader(service),
-                const SizedBox(height: 16),
-                _buildInfoRow(
-                  Icons.location_on_outlined,
-                  'Makassar, BTP',
-                ), // Data dummy
+                const SizedBox(height: 24),
+                _buildInfoRow(Icons.category_outlined, service.category),
                 const SizedBox(height: 8),
-                _buildInfoRow(
-                  Icons.access_time_outlined,
-                  '10:00 WITA',
-                ), // Data dummy
+                _buildInfoRow(Icons.location_on_outlined, 'Makassar, BTP'),
+                _buildInfoRow(Icons.access_time_outlined, '10:00 WITA'),
                 _buildInfoRow(
                   Icons.payment_outlined,
                   service.metodePembayaran.join(' & '),
                 ),
                 const SizedBox(height: 24),
                 const Text(
-                  'Detail',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  'Deskripsi',
+                  style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   service.deskripsiLayanan,
-                  style: TextStyle(color: Colors.grey[700], height: 1.5),
+                  style: const TextStyle(height: 1.5),
                 ),
                 const SizedBox(height: 24),
                 const Text(
-                  'Foto',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  'Foto Layanan',
+                  style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 _buildPhotoGallery(service.photoUrls),
+                const SizedBox(height: 32),
+                _buildActionButtons(service),
               ],
             ),
           );
@@ -187,49 +178,39 @@ class _JobDetailPageState extends State<JobDetailPage> {
     return Row(
       children: [
         Expanded(
-          child: _isDeleting
-              ? const Center(child: CircularProgressIndicator())
-              : ElevatedButton(
-                  onPressed: _handleDeleteService,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFE6E6E),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text(
-                    'Hapus',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
+          child: ElevatedButton.icon(
+            onPressed: _isDeleting ? null : _handleDeleteService,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            icon: const Icon(Icons.delete_outline, color: Colors.white),
+            label: const Text('Hapus', style: TextStyle(color: Colors.white)),
+          ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 12),
         Expanded(
-          child: ElevatedButton(
+          child: ElevatedButton.icon(
             onPressed: () async {
               final result = await Navigator.of(context).push<bool>(
                 MaterialPageRoute(
                   builder: (context) => CreateEditJobPage(service: service),
                 ),
               );
-              if (result == true) {
-                _loadServiceDetails(); // Refresh halaman detail
-              }
+              if (result == true) _loadServiceDetails();
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1E232C),
-              foregroundColor: Colors.white,
+              backgroundColor: Colors.indigo,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            child: const Text(
-              'Edit',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
+            icon: const Icon(Icons.edit_outlined, color: Colors.white),
+            label: const Text('Edit', style: TextStyle(color: Colors.white)),
           ),
         ),
       ],
@@ -237,61 +218,57 @@ class _JobDetailPageState extends State<JobDetailPage> {
   }
 
   Widget _buildServiceHeader(Service service) {
-    final postDate = DateFormat('dd.MM.yyyy').format(service.dibuatPada);
+    final postDate = DateFormat('dd MMM yyyy').format(service.dibuatPada);
     return Card(
-      elevation: 0,
+      color: Colors.white,
+      elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.network(
-                    service.fotoUtamaUrl,
-                    width: 60,
-                    height: 60,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      width: 60,
-                      height: 60,
-                      color: Colors.grey[200],
-                      child: const Icon(Icons.image_not_supported),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(
+                service.fotoUtamaUrl,
+                width: 70,
+                height: 70,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  width: 70,
+                  height: 70,
+                  color: Colors.grey[300],
+                  child: const Icon(Icons.image_not_supported),
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    service.namaLayanan,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        service.namaLayanan,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        "Diposting: $postDate",
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 6),
+                  Text(
+                    "Diposting: $postDate",
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
                   ),
-                ),
-              ],
-            ),
-            const Divider(height: 24),
-            Text(
-              'Harga: ${service.formattedPrice}',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Harga: ${service.formattedPrice}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -300,12 +277,20 @@ class _JobDetailPageState extends State<JobDetailPage> {
   }
 
   Widget _buildInfoRow(IconData icon, String text) {
-    return Row(
-      children: [
-        Icon(icon, color: Colors.grey[600], size: 20),
-        const SizedBox(width: 12),
-        Text(text, style: TextStyle(fontSize: 14, color: Colors.grey[800])),
-      ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.grey[700], size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(fontSize: 14, color: Colors.grey[900]),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -318,20 +303,18 @@ class _JobDetailPageState extends State<JobDetailPage> {
     }
     return SizedBox(
       height: 100,
-      child: ListView.builder(
+      child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: photoUrls.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
         itemBuilder: (context, index) {
-          return Padding(
-            padding: const EdgeInsets.only(right: 10.0),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.network(
-                photoUrls[index],
-                width: 100,
-                height: 100,
-                fit: BoxFit.cover,
-              ),
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.network(
+              photoUrls[index],
+              width: 100,
+              height: 100,
+              fit: BoxFit.cover,
             ),
           );
         },

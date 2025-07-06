@@ -13,6 +13,7 @@ class Service {
   final String deskripsiLayanan;
   final String? tipeLayanan;
   final num? biayaSurvei;
+  final Map<String, dynamic> workerInfo;
 
   Service({
     required this.id,
@@ -27,6 +28,7 @@ class Service {
     required this.deskripsiLayanan,
     this.tipeLayanan,
     this.biayaSurvei,
+    required this.workerInfo,
   });
 
   factory Service.fromJson(Map<String, dynamic> json) {
@@ -40,7 +42,7 @@ class Service {
     }
 
     return Service(
-      id: json['id'] ?? '',
+      id: json['serviceId'] ?? json['id'] ?? '',
       namaLayanan: json['namaLayanan'] ?? 'Tanpa Nama',
       category: json['category'] ?? 'Lainnya',
       harga: json['harga'] ?? 0,
@@ -54,6 +56,7 @@ class Service {
       deskripsiLayanan: json['deskripsiLayanan'] ?? '',
       tipeLayanan: json['tipeLayanan'] ?? 'fixed',
       biayaSurvei: json['biayaSurvei'] ?? 0,
+      workerInfo: json['workerInfo'] as Map<String, dynamic>? ?? {},
     );
   }
 

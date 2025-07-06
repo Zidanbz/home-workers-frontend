@@ -61,32 +61,39 @@ class _AddressManagementPageState extends State<AddressManagementPage> {
           }
 
           final addresses = snapshot.data!;
-          return ListView.builder(
-            padding: const EdgeInsets.all(16.0),
-            itemCount: addresses.length,
-            itemBuilder: (context, index) {
-              final address = addresses[index];
-              return Card(
-                margin: const EdgeInsets.only(bottom: 16),
-                child: ListTile(
-                  leading: const Icon(
-                    Icons.location_on_outlined,
-                    color: Colors.deepPurple,
-                  ),
-                  title: Text(
-                    address.label,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: Text(address.fullAddress),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.more_vert),
-                    onPressed: () {
-                      // TODO: Tampilkan opsi edit/hapus
-                    },
-                  ),
-                ),
-              );
+          return RefreshIndicator(
+            onRefresh: () async {
+              _loadAddresses();
+              await _addressesFuture;
             },
+            child: ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16.0),
+              itemCount: addresses.length,
+              itemBuilder: (context, index) {
+                final address = addresses[index];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  child: ListTile(
+                    leading: const Icon(
+                      Icons.location_on_outlined,
+                      color: Colors.deepPurple,
+                    ),
+                    title: Text(
+                      address.label,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Text(address.fullAddress),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.more_vert),
+                      onPressed: () {
+                        // TODO: Tampilkan opsi edit/hapus
+                      },
+                    ),
+                  ),
+                );
+              },
+            ),
           );
         },
       ),

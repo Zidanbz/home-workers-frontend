@@ -1,6 +1,9 @@
 // lib/features/main_page.dart - VERSI DIPERBAIKI
 
 import 'package:flutter/material.dart';
+import 'package:home_workers_fe/features/costumer_flow/dashboard/pages/costumer_dashboard_page.dart';
+import 'package:home_workers_fe/features/costumer_flow/marketplace/pages/marketplace_page.dart';
+import 'package:home_workers_fe/features/costumer_flow/orders/pages/customer_orders_page.dart';
 import 'package:home_workers_fe/features/profile/pages/profile_page.dart';
 import 'package:home_workers_fe/features/worker_flow/order_management/pages/worker_orders_page.dart';
 
@@ -10,14 +13,6 @@ import 'worker_flow/service_management/pages/my_jobs_page.dart';
 
 // --- Halaman Placeholder (Ganti dengan halaman asli Anda nanti) ---
 // Ini adalah halaman utama untuk Customer
-class MarketplacePage extends StatelessWidget {
-  const MarketplacePage({super.key});
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Marketplace')),
-    body: const Center(child: Text('Customer Home Page')),
-  );
-}
 
 // Halaman ini bisa digunakan bersama atau dibuat terpisah
 class OrdersPage extends StatelessWidget {
@@ -47,6 +42,12 @@ class _MainPageState extends State<MainPage> {
   void initState() {
     super.initState();
 
+    void jumpToPage(int index) {
+      setState(() {
+        _currentIndex = index;
+      });
+    }
+
     // --- PERUBAHAN UTAMA: Isi _pages dengan halaman asli ---
     // Tentukan halaman mana yang akan ditampilkan berdasarkan role
     if (widget.userRole == 'WORKER') {
@@ -59,11 +60,11 @@ class _MainPageState extends State<MainPage> {
     } else {
       // Asumsikan default adalah Customer
       _pages = [
-        const MarketplacePage(), // Halaman Home untuk Customer
-        const Scaffold(
-          body: Center(child: Text('Fitur Jobs tidak tersedia untuk Customer')),
-        ), // Placeholder untuk tab Jobs
-        const OrdersPage(), // Halaman Orders (bisa dibuat khusus customer)
+        CustomerDashboardPage(
+          onNavigateToOrders: () => jumpToPage(2),
+        ), // Halaman Home untuk Customer
+        MarketplacePage(),
+        const CustomerOrdersPage(), // Halaman Orders (bisa dibuat khusus customer)
         const ProfilePage(), // Halaman Profil
       ];
     }
@@ -85,12 +86,36 @@ class _MainPageState extends State<MainPage> {
         selectedItemColor: Colors.deepPurple,
         unselectedItemColor: Colors.grey,
         // --- PERUBAHAN 2: Sesuaikan dengan desain (4 item) ---
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.work), label: 'Jobs'),
-          BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: 'Orders'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-        ],
+        items: widget.userRole == 'WORKER'
+            ? const [
+                // Item untuk Worker
+                BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+                BottomNavigationBarItem(icon: Icon(Icons.work), label: 'Jobs'),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.list_alt),
+                  label: 'Orders',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.person),
+                  label: 'Profile',
+                ),
+              ]
+            : const [
+                // Item untuk Customer
+                BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.people),
+                  label: 'Pekerja',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.list_alt),
+                  label: 'Orders',
+                ), // Sesuai desain
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.person),
+                  label: 'Profile',
+                ),
+              ],
       ),
     );
   }

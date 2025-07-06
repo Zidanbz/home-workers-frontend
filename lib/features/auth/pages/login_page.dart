@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:home_workers_fe/features/auth/pages/select_role_page.dart';
 import 'package:provider/provider.dart';
 import '../../../core/state/auth_provider.dart';
 
@@ -17,6 +18,19 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _performLogin() async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    // --- VALIDASI INPUT ---
+    if (email.isEmpty || password.isEmpty) {
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(
+          backgroundColor: Colors.orange,
+          content: Text('Email dan password tidak boleh kosong.'),
+        ),
+      );
+      return; // Hentikan eksekusi jika input tidak valid
+    }
     if (!mounted) return;
     setState(() {
       _isLoading = true;
@@ -26,7 +40,7 @@ class _LoginPageState extends State<LoginPage> {
       await Provider.of<AuthProvider>(
         context,
         listen: false,
-      ).login(_emailController.text.trim(), _passwordController.text.trim());
+      ).login(email, password);
     } catch (e) {
       if (!mounted) return;
       scaffoldMessenger.showSnackBar(
@@ -188,8 +202,12 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       recognizer: TapGestureRecognizer()
                         ..onTap = () {
-                          // TODO: Navigasi ke halaman register
-                          print('Navigate to Register Page');
+                          // Navigasi ke halaman Pilih Peran
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => const SelectRolePage(),
+                            ),
+                          );
                         },
                     ),
                   ],

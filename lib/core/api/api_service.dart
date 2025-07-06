@@ -2,17 +2,17 @@ import 'dart:convert';
 import 'package:home_workers_fe/core/models/address_model.dart';
 import 'package:home_workers_fe/core/models/chat_model.dart';
 import 'package:home_workers_fe/core/models/message_model.dart';
+import 'package:home_workers_fe/core/models/notification_model.dart';
 import 'package:home_workers_fe/core/models/order_model.dart';
 import 'package:home_workers_fe/core/models/user_model.dart';
 import 'package:home_workers_fe/core/models/wallet_model.dart';
-import 'package:home_workers_fe/core/services/secure_storage_service.dart';
-import 'package:home_workers_fe/features/chat/pages/chat_detail_page.dart';
+import 'package:home_workers_fe/features/notifications/pages/notification_page.dart';
 import 'package:http/http.dart' as http;
 import '../models/service_model.dart'; // Impor model yang baru kita buat
 
 class ApiService {
   final String _baseUrl = 'https://api-eh5nicgdhq-uc.a.run.app/api';
-  final SecureStorageService _storageService = SecureStorageService();
+
   // Fungsi login (tidak berubah)
   Future<Map<String, dynamic>> loginUser(String email, String password) async {
     final url = Uri.parse('$_baseUrl/auth/login');
@@ -23,8 +23,9 @@ class ApiService {
         body: jsonEncode({'email': email, 'password': password}),
       );
       final responseBody = jsonDecode(response.body);
-      if (response.statusCode == 200) {
-        return responseBody;
+
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        return responseBody['data']; // ⬅️ Ambil hanya bagian 'data'
       } else {
         throw Exception(responseBody['message'] ?? 'Login failed');
       }
@@ -42,20 +43,19 @@ class ApiService {
         url,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token', // Gunakan token dari parameter
+          'Authorization': 'Bearer $token',
         },
       );
 
-      if (response.statusCode == 200) {
-        final List<dynamic> responseBody = jsonDecode(response.body);
-        return responseBody.map((json) => Service.fromJson(json)).toList();
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        final List<dynamic> data = responseBody['data'];
+        return data.map((json) => Service.fromJson(json)).toList();
       } else {
-        final errorBody = jsonDecode(response.body);
-        throw Exception(errorBody['message'] ?? 'Failed to load services');
+        throw Exception(responseBody['message'] ?? 'Failed to load services');
       }
     } catch (e) {
-      //
-      // Error ini yang Anda lihat jika ada masalah koneksi/URL
       throw Exception('Failed to connect to the server. $e');
     }
   }
@@ -71,11 +71,12 @@ class ApiService {
         },
       );
 
-      if (response.statusCode == 200) {
-        return User.fromJson(jsonDecode(response.body));
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        return User.fromJson(responseBody['data']); // ✅ Ambil dari 'data'
       } else {
-        final errorBody = jsonDecode(response.body);
-        throw Exception(errorBody['message'] ?? 'Failed to fetch profile');
+        throw Exception(responseBody['message'] ?? 'Failed to fetch profile');
       }
     } catch (e) {
       throw Exception('Failed to connect to the server.');
@@ -93,15 +94,13 @@ class ApiService {
         },
       );
 
-      if (response.statusCode == 200) {
-        final List<dynamic> responseBody = jsonDecode(response.body);
-        // Kirim currentUserId ke fromJson untuk memproses data
-        return responseBody
-            .map((json) => Chat.fromJson(json, currentUserId))
-            .toList();
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        final List<dynamic> data = responseBody['data'];
+        return data.map((json) => Chat.fromJson(json, currentUserId)).toList();
       } else {
-        final errorBody = jsonDecode(response.body);
-        throw Exception(errorBody['message'] ?? 'Failed to load chats');
+        throw Exception(responseBody['message'] ?? 'Failed to load chats');
       }
     } catch (e) {
       throw Exception('Failed to connect to the server. $e');
@@ -119,14 +118,18 @@ class ApiService {
         },
       );
 
-      if (response.statusCode == 200) {
-        final List<dynamic> responseBody = jsonDecode(response.body);
-        return responseBody.map((json) => Message.fromJson(json)).toList();
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        final List<dynamic> messagesJson = responseBody['data'];
+        return messagesJson.map((json) => Message.fromJson(json)).toList();
       } else {
-        final errorBody = jsonDecode(response.body);
-        throw Exception(errorBody['message'] ?? 'Failed to load messages');
+        print("response body: ${response.body}");
+
+        throw Exception(responseBody['message'] ?? 'Failed to load messages');
       }
     } catch (e) {
+      print("response body: ${e}");
       throw Exception('Failed to connect to the server.');
     }
   }
@@ -143,9 +146,10 @@ class ApiService {
         body: jsonEncode({'text': text}),
       );
 
-      if (response.statusCode != 201) {
-        final errorBody = jsonDecode(response.body);
-        throw Exception(errorBody['message'] ?? 'Failed to send message');
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode != 201 || responseBody['success'] != true) {
+        throw Exception(responseBody['message'] ?? 'Failed to send message');
       }
     } catch (e) {
       throw Exception('Failed to connect to the server.');
@@ -166,11 +170,13 @@ class ApiService {
         },
         body: jsonEncode(serviceData),
       );
-      if (response.statusCode == 201) {
-        return jsonDecode(response.body);
+
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 201 && responseBody['success'] == true) {
+        return responseBody['data'];
       } else {
-        final errorBody = jsonDecode(response.body);
-        throw Exception(errorBody['message'] ?? 'Failed to create service');
+        throw Exception(responseBody['message'] ?? 'Failed to create service');
       }
     } catch (e) {
       throw Exception('Failed to connect to the server.');
@@ -188,17 +194,16 @@ class ApiService {
         },
       );
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> responseBody = jsonDecode(response.body);
-        // Kita hanya tertarik pada pesanan sebagai worker untuk halaman ini
-        final List<dynamic> workerOrdersJson = responseBody['asWorker'] ?? [];
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        final List<dynamic> workerOrdersJson =
+            responseBody['data']['asWorker'] ?? [];
         return workerOrdersJson.map((json) => Order.fromJson(json)).toList();
       } else {
-        final errorBody = jsonDecode(response.body);
-        throw Exception(errorBody['message'] ?? 'Failed to load orders');
+        throw Exception(responseBody['message'] ?? 'Failed to load orders');
       }
     } catch (e) {
-      print('>>> Terjadi Error di getMyOrders: $e');
       throw Exception('Failed to connect to the server.');
     }
   }
@@ -238,12 +243,13 @@ class ApiService {
         },
       );
 
-      if (response.statusCode == 200) {
-        final List<dynamic> responseBody = jsonDecode(response.body);
-        return responseBody.map((json) => Address.fromJson(json)).toList();
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        final List<dynamic> addressList = responseBody['data'];
+        return addressList.map((json) => Address.fromJson(json)).toList();
       } else {
-        final errorBody = jsonDecode(response.body);
-        throw Exception(errorBody['message'] ?? 'Failed to load addresses');
+        throw Exception(responseBody['message'] ?? 'Failed to load addresses');
       }
     } catch (e) {
       throw Exception('Failed to connect to the server.');
@@ -272,10 +278,13 @@ class ApiService {
           'longitude': longitude,
         }),
       );
-      if (response.statusCode != 201) {
-        throw Exception(
-          jsonDecode(response.body)['message'] ?? 'Failed to add address',
-        );
+
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 201 && responseBody['success'] == true) {
+        // Berhasil, tidak perlu return
+      } else {
+        throw Exception(responseBody['message'] ?? 'Failed to add address');
       }
     } catch (e) {
       throw Exception('Failed to connect to the server.');
@@ -298,9 +307,12 @@ class ApiService {
         body: jsonEncode({'photoUrl': photoUrl}),
       );
 
-      if (response.statusCode != 200) {
-        final errorBody = jsonDecode(response.body);
-        throw Exception(errorBody['message'] ?? 'Failed to add photo');
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        // Photo added successfully
+      } else {
+        throw Exception(responseBody['message'] ?? 'Failed to add photo');
       }
     } catch (e) {
       throw Exception('Failed to connect to the server.');
@@ -312,15 +324,18 @@ class ApiService {
     try {
       final response = await http.get(url);
 
-      if (response.statusCode == 200) {
-        return Service.fromJson(jsonDecode(response.body));
+      final responseBody = jsonDecode(response.body);
+
+      print("response body: ${response.body}");
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        return Service.fromJson(responseBody['data']);
       } else {
-        final errorBody = jsonDecode(response.body);
         throw Exception(
-          errorBody['message'] ?? 'Failed to load service details',
+          responseBody['message'] ?? 'Failed to load service details',
         );
       }
     } catch (e) {
+      print("error: $e");
       throw Exception('Failed to connect to the server.');
     }
   }
@@ -339,9 +354,12 @@ class ApiService {
         },
       );
 
-      if (response.statusCode != 200) {
-        final errorBody = jsonDecode(response.body);
-        throw Exception(errorBody['message'] ?? 'Failed to delete service');
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        // Delete berhasil
+      } else {
+        throw Exception(responseBody['message'] ?? 'Failed to delete service');
       }
     } catch (e) {
       throw Exception('Failed to connect to the server.');
@@ -363,9 +381,13 @@ class ApiService {
         },
         body: jsonEncode(dataToUpdate),
       );
-      if (response.statusCode != 200) {
-        final errorBody = jsonDecode(response.body);
-        throw Exception(errorBody['message'] ?? 'Failed to update service');
+
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        // Update berhasil
+      } else {
+        throw Exception(responseBody['message'] ?? 'Failed to update service');
       }
     } catch (e) {
       throw Exception('Failed to connect to the server.');
@@ -386,12 +408,14 @@ class ApiService {
         },
       );
 
-      if (response.statusCode == 200) {
-        // Backend sudah memperkaya data, jadi kita bisa langsung parse
-        return Order.fromJson(jsonDecode(response.body));
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        return Order.fromJson(responseBody['data']);
       } else {
-        final errorBody = jsonDecode(response.body);
-        throw Exception(errorBody['message'] ?? 'Failed to load order details');
+        throw Exception(
+          responseBody['message'] ?? 'Failed to load order details',
+        );
       }
     } catch (e) {
       throw Exception('Failed to connect to the server.');
@@ -412,9 +436,12 @@ class ApiService {
         },
       );
 
-      if (response.statusCode != 200) {
-        final errorBody = jsonDecode(response.body);
-        throw Exception(errorBody['message'] ?? 'Failed to accept order');
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        // Accepted successfully
+      } else {
+        throw Exception(responseBody['message'] ?? 'Failed to accept order');
       }
     } catch (e) {
       throw Exception('Failed to connect to the server.');
@@ -438,8 +465,9 @@ class ApiService {
 
       final responseBody = jsonDecode(response.body);
 
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        return responseBody['chatId'];
+      if ((response.statusCode == 201 || response.statusCode == 200) &&
+          responseBody['success'] == true) {
+        return responseBody['data']['chatId'];
       } else {
         throw Exception(
           responseBody['message'] ?? 'Failed to create or get chat',
@@ -461,11 +489,12 @@ class ApiService {
         },
       );
 
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        return responseBody['data'];
       } else {
-        final errorBody = jsonDecode(response.body);
-        throw Exception(errorBody['message'] ?? 'Failed to load summary');
+        throw Exception(responseBody['message'] ?? 'Failed to load summary');
       }
     } catch (e) {
       throw Exception('Failed to connect to the server.');
@@ -475,11 +504,19 @@ class ApiService {
   Future<void> markChatAsRead(String token, String chatId) async {
     final url = Uri.parse('$_baseUrl/chats/$chatId/read');
     try {
-      // Kita tidak perlu menunggu respons, cukup kirim saja
-      http.post(url, headers: {'Authorization': 'Bearer $token'});
+      final response = await http.post(
+        url,
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      // Opsional: jika ingin memastikan response berhasil
+      final responseBody = jsonDecode(response.body);
+      if (response.statusCode != 200 || responseBody['success'] != true) {
+        throw Exception(responseBody['message'] ?? 'Failed to mark as read');
+      }
     } catch (e) {
-      // Abaikan error koneksi untuk fungsi ini agar tidak mengganggu UI
-      print("Gagal menandai chat sebagai dibaca (opsional): $e");
+      // Biarkan error tidak mengganggu UI
+      print('Mark chat as read error: $e');
     }
   }
 
@@ -494,16 +531,213 @@ class ApiService {
         },
       );
 
-      if (response.statusCode == 200) {
-        return Wallet.fromJson(jsonDecode(response.body));
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        return Wallet.fromJson(responseBody['data']);
       } else {
-        final errorBody = jsonDecode(response.body);
-        throw Exception(errorBody['message'] ?? 'Failed to load wallet');
+        throw Exception(responseBody['message'] ?? 'Failed to load wallet');
       }
     } catch (e) {
       throw Exception('Failed to connect to the server.');
     }
   }
 
-  
+  Future<List<Service>> getAllApprovedServices({String? category}) async {
+    final url = Uri.parse('$_baseUrl/services');
+
+    try {
+      final response = await http.get(url);
+      final responseBody = jsonDecode(response.body);
+
+      print("response body: ${response.body}");
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        return (responseBody['data'] as List)
+            .map((json) => Service.fromJson(json))
+            .toList();
+      } else {
+        throw Exception(responseBody['message'] ?? 'Failed to load services');
+      }
+    } catch (e) {
+      print("error: $e");
+      throw Exception('Failed to connect to the server.');
+    }
+  }
+
+  Future<Map<String, dynamic>> getCustomerDashboardSummary() async {
+    final url = Uri.parse('$_baseUrl/dashboard/customer-summary');
+    try {
+      final response = await http.get(url);
+
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        return responseBody['data'];
+      } else {
+        throw Exception(
+          responseBody['message'] ?? 'Failed to load dashboard summary',
+        );
+      }
+    } catch (e) {
+      throw Exception('Failed to connect to the server.');
+    }
+  }
+
+  Future<List<Order>> getMyOrdersCustomer(String token) async {
+    final url = Uri.parse('$_baseUrl/orders/my-orders');
+    try {
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseBody = jsonDecode(response.body);
+        // Untuk halaman ini, kita ambil pesanan sebagai customer
+        final List<dynamic> customerOrdersJson =
+            responseBody['asCustomer'] ?? [];
+        return customerOrdersJson.map((json) => Order.fromJson(json)).toList();
+      } else {
+        final errorBody = jsonDecode(response.body);
+        throw Exception(errorBody['message'] ?? 'Failed to load orders');
+      }
+    } catch (e) {
+      throw Exception('Failed to connect to the server.');
+    }
+  }
+
+  Future<List<NotificationItem>> getMyNotifications(String token) async {
+    final url = Uri.parse('$_baseUrl/users/me/notifications');
+    try {
+      final response = await http.get(
+        url,
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> body = jsonDecode(response.body);
+        return body.map((json) => NotificationItem.fromJson(json)).toList();
+      } else {
+        throw Exception(jsonDecode(response.body)['message']);
+      }
+    } catch (e) {
+      throw Exception('Failed to fetch notifications.');
+    }
+  }
+
+  Future<Map<String, dynamic>> createOrder({
+    required String token,
+    required String serviceId,
+    required DateTime jadwalPerbaikan,
+    String? catatan,
+  }) async {
+    final url = Uri.parse('$_baseUrl/orders');
+    try {
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'serviceId': serviceId,
+          'jadwalPerbaikan': jadwalPerbaikan.toIso8601String(),
+          'catatan': catatan ?? '',
+        }),
+      );
+      print("response: ${response.body}");
+      final responseBody = jsonDecode(response.body);
+      if (response.statusCode == 201) {
+        return responseBody; // Kembalikan respons yang berisi orderId
+      } else {
+        throw Exception(responseBody['message'] ?? 'Failed to create order');
+      }
+    } catch (e) {
+      print("error: $e");
+      throw Exception('Failed to connect to the server.');
+    }
+  }
+
+  Future<void> processPayment({
+    required String token,
+    required String orderId,
+    required String paymentMethod,
+  }) async {
+    // Di aplikasi nyata, endpoint ini akan berinteraksi dengan payment gateway.
+    // Untuk saat ini, kita akan buat endpoint dummy di backend yang hanya mengubah status order.
+    // Mari kita asumsikan endpointnya adalah PUT /api/orders/:orderId/pay
+    final url = Uri.parse('$_baseUrl/orders/$orderId/pay');
+    try {
+      final response = await http.put(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'paymentMethod': paymentMethod}),
+      );
+      print("response: ${response.body}");
+      if (response.statusCode != 200) {
+        final errorBody = jsonDecode(response.body);
+        throw Exception(errorBody['message'] ?? 'Failed to process payment');
+      }
+    } catch (e) {
+      print("error: $e");
+      throw Exception('Failed to connect to the server.');
+    }
+  }
+
+  Future<String> initiatePayment(String token, String orderId) async {
+    final url = Uri.parse('$_baseUrl/payments/initiate');
+    try {
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'orderId': orderId}),
+      );
+      final responseBody = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return responseBody['data']['token'];
+      } else {
+        throw Exception(responseBody['message']);
+      }
+    } catch (e) {
+      throw Exception('Failed to initiate payment.');
+    }
+  }
+
+  Future<List<Service>> getServicesByCategory(
+    String category,
+    String token,
+  ) async {
+    final url = Uri.parse('$_baseUrl/services/category/$category');
+    try {
+      final response = await http.get(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      final responseBody = jsonDecode(response.body);
+      print('Status: ${response.statusCode}');
+      print('Body: ${response.body}');
+      print('Headers: ${response.headers}');
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        final List<dynamic> data = responseBody['data'];
+        return data.map((item) => Service.fromJson(item)).toList();
+      } else {
+        throw Exception(responseBody['message'] ?? 'Failed to fetch services');
+      }
+    } catch (e) {
+      print('Error: $e');
+      throw Exception('Failed to connect to the server. $e');
+    }
+  }
 }
