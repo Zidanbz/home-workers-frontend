@@ -199,7 +199,8 @@ class _MyJobsPageState extends State<MyJobsPage> {
 
 class _JobCard extends StatelessWidget {
   final Service service;
-  final VoidCallback onActionComplete; // Callback untuk refresh
+  final VoidCallback onActionComplete;
+
   const _JobCard({required this.service, required this.onActionComplete});
 
   IconData _getIconForCategory(String category) {
@@ -211,10 +212,22 @@ class _JobCard extends StatelessWidget {
       case 'konstruksi':
         return Icons.construction_outlined;
       case 'layanan elektronik':
-        return Icons.computer_outlined;
+        return Icons.electrical_services_outlined;
       default:
         return Icons.work_outline;
     }
+  }
+
+  Color _getPriceColor() {
+    return service.tipeLayanan == 'survey' ? Colors.orange : Colors.deepPurple;
+  }
+
+  String _getPaymentText() {
+    return service.metodePembayaran == 'cash' ? 'Tunai' : 'Cashless';
+  }
+
+  IconData _getPaymentIcon() {
+    return service.metodePembayaran == 'cash' ? Icons.money : Icons.credit_card;
   }
 
   @override
@@ -222,25 +235,23 @@ class _JobCard extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      elevation: 2,
+      elevation: 4,
+      color: Colors.white,
       child: InkWell(
         onTap: () async {
-          // Tunggu hasil dari halaman detail
           final result = await Navigator.of(context).push<bool>(
             MaterialPageRoute(
               builder: (context) => JobDetailPage(serviceId: service.id),
             ),
           );
-          // Jika halaman detail kembali dengan 'true' (artinya ada delete/update), panggil refresh
-          if (result == true) {
-            onActionComplete();
-          }
+          if (result == true) onActionComplete();
         },
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Row(
             children: [
+              // Foto
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: Image.network(
@@ -248,70 +259,96 @@ class _JobCard extends StatelessWidget {
                   width: 80,
                   height: 80,
                   fit: BoxFit.cover,
-                  // Fallback jika URL gambar error
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      width: 80,
-                      height: 80,
-                      color: Colors.grey[200],
-                      child: const Icon(
-                        Icons.image_not_supported,
-                        color: Colors.grey,
-                      ),
-                    );
-                  },
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    width: 80,
+                    height: 80,
+                    color: Colors.grey[200],
+                    child: const Icon(
+                      Icons.image_not_supported,
+                      color: Colors.grey,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 16),
+
+              // Info
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      service.namaLayanan,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      service.category,
-                      style: const TextStyle(color: Colors.grey),
-                    ),
-                    const SizedBox(height: 8),
+                    // Nama & Kategori
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          service.formattedPrice,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.deepPurple,
+                        Expanded(
+                          child: Text(
+                            service.namaLayanan,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        Text(
-                          'Hingga: ${service.formattedExpiryDate}',
-                          style: const TextStyle(
-                            color: Colors.grey,
-                            fontSize: 12,
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE9E6FF),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            _getIconForCategory(service.category),
+                            color: Colors.deepPurple,
+                            size: 18,
                           ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 4),
+                    Text(
+                      service.category,
+                      style: const TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // Harga atau biaya survei
+                    Text(
+                      service.formattedPrice,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: _getPriceColor(),
+                      ),
+                    ),
+
+                    const SizedBox(height: 4),
+
+                    // Metode Pembayaran
+                    Row(
+                      children: [
+                        Icon(_getPaymentIcon(), size: 16, color: Colors.indigo),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Metode: ${_getPaymentText()}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 4),
+
+                    // Tanggal berlaku
+                    Text(
+                      'Berlaku s/d: ${service.formattedExpiryDate}',
+                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
                   ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE9E6FF),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  _getIconForCategory(service.category),
-                  color: Colors.deepPurple,
                 ),
               ),
             ],

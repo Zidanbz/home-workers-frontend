@@ -13,7 +13,7 @@
                    android:value="AIzaSyCRe7xfKI2OzPUp9pUWxR2QHH8zsdhoWTw"/>
                    
         <activity
-            android:name=".MainActivity"
+            android:name="io.flutter.embedding.android.FlutterFragmentActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""

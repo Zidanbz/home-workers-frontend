@@ -1,8 +1,12 @@
 // Lokasi: lib/core/state/auth_provider.dart
 
+import 'dart:io';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart'
     as fba; // Beri alias untuk FirebaseAuth
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api_service.dart';
 import '../models/user_model.dart';
@@ -66,43 +70,35 @@ class AuthProvider with ChangeNotifier {
 
   // --- FUNGSI LOGIN YANG DIPERBAIKI TOTAL ---
   Future<void> login(String email, String password) async {
-    try {
-      // Langkah 1: Panggil backend untuk mendapatkan Custom Token
-      final result = await _apiService.loginUser(email, password);
+  try {
+    // Langkah 1: Panggil backend untuk mendapatkan ID Token dan data user
+    final result = await _apiService.loginUser(email, password);
 
-      if (result['user'] != null && result['customToken'] != null) {
-        final String customToken = result['customToken'];
+    if (result['user'] != null && result['idToken'] != null) {
+      // Gunakan langsung ID Token dari backend
+      final String idToken = result['idToken'];
 
-        // Langkah 2: Login ke Firebase di sisi KLIEN menggunakan Custom Token
-        final userCredential = await fba.FirebaseAuth.instance
-            .signInWithCustomToken(customToken);
-        print("Berhasil login ke Firebase di sisi klien!");
+      // (Opsional) Verifikasi token ke Firebase Auth jika perlu, tapi biasanya tidak perlu
+      // final userCredential = await fba.FirebaseAuth.instance.signInWithCustomToken(idToken);
 
-        // Langkah 3: Dapatkan ID Token yang sesungguhnya untuk API call
-        final firebaseUser = userCredential.user;
-        if (firebaseUser == null)
-          throw Exception("Gagal mendapatkan user setelah sign-in.");
+      // Simpan state dan data ke storage
+      _user = User.fromJson(result['user']);
+      _token = idToken;
 
-        final String? idToken = await firebaseUser.getIdToken();
-        if (idToken == null) throw Exception("Gagal mendapatkan ID Token.");
+      await _storageService.saveTokenAndRole(
+        token: _token!,
+        role: _user!.role,
+      );
 
-        // Langkah 4: Simpan state dan data ke storage
-        _user = User.fromJson(result['user']);
-        _token = idToken; // Simpan ID Token, bukan custom token
-
-        await _storageService.saveTokenAndRole(
-          token: _token!,
-          role: _user!.role,
-        );
-
-        notifyListeners();
-      } else {
-        throw Exception('Invalid server response');
-      }
-    } catch (e) {
-      rethrow;
+      notifyListeners();
+    } else {
+      throw Exception('Invalid server response');
     }
+  } catch (e) {
+    rethrow;
   }
+}
+
 
   // Fungsi tryAutoLogin juga perlu disesuaikan
   Future<void> tryAutoLogin() async {
@@ -147,4 +143,113 @@ class AuthProvider with ChangeNotifier {
       }
     }
   }
+
+  Future<void> registerCustomer({
+    required String email,
+    required String password,
+    required String nama,
+  }) async {
+    try {
+      final result = await _apiService.registerCustomer(
+        email: email,
+        password: password,
+        nama: nama,
+      );
+
+      final data = result['data'];
+      if (data == null || data['userId'] == null) {
+        throw Exception('Gagal mengambil data user dari server.');
+      }
+
+      // Buat User secara manual karena response tidak lengkap
+      _user = User(
+        uid: data['userId'],
+        email: email,
+        nama: nama,
+        role: 'customer',
+      );
+
+      // Jika belum ada token dari backend, bisa kosongkan sementara
+      _token = null;
+
+      await _storageService.saveTokenAndRole(
+        token: _token ?? '',
+        role: _user!.role,
+      );
+      notifyListeners();
+    } catch (e) {
+      print('Error: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> registerWorker({
+    required String email,
+    required String password,
+    required String nama,
+    required List<String> keahlian,
+    required String deskripsi,
+    required File ktpFile,
+    String? portfolioLink,
+  }) async {
+    try {
+      final response = await _apiService.registerWorker(
+        email: email,
+        password: password,
+        nama: nama,
+        keahlian: keahlian,
+        deskripsi: deskripsi,
+        ktpFile: ktpFile,
+        portfolioLink: portfolioLink,
+      );
+
+      final user = User.fromJson(response['user']);
+      final token = response['idToken'];
+
+      await _storageService.saveTokenAndRole(token: token!, role: user.role);
+      notifyListeners();
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // Future<void> signInWithGoogle() async {
+  //   try {
+  //     final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+  //     if (googleUser == null) throw Exception('Login dibatalkan oleh pengguna');
+
+  //     final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+
+  //     final credential = fba.GoogleAuthProvider.credential(
+  //       accessToken: googleAuth.accessToken,
+  //       idToken: googleAuth.idToken,
+  //     );
+
+  //     // Login ke Firebase Auth
+  //     final userCredential = await fba.FirebaseAuth.instance.signInWithCredential(credential);
+  //     final user = userCredential.user;
+  //     if (user == null) throw Exception('Gagal login dengan Google');
+
+  //     // Cek apakah user sudah ada di Firestore
+  //     final userDocRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+  //     final userDoc = await userDocRef.get();
+
+  //     if (!userDoc.exists) {
+  //       await userDocRef.set({
+  //         'email': user.email,
+  //         'nama': user.displayName ?? '',
+  //         'role': 'CUSTOMER',
+  //         'createdAt': DateTime.now(),
+  //       });
+  //     }
+
+  //     // Simpan token dan role ke penyimpanan lokal
+  //     final token = await user.getIdToken();
+  //     await _storageService.saveTokenAndRole(token: token, role: 'CUSTOMER');
+
+  //     notifyListeners();
+  //   } catch (e) {
+  //     throw Exception('Login dengan Google gagal: $e');
+  //   }
+  // }
 }

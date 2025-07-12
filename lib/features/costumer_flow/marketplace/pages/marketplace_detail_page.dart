@@ -34,16 +34,6 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
         ),
         backgroundColor: Colors.white,
         elevation: 0.5,
-        actions: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.notifications_outlined),
-          ),
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.chat_bubble_outline),
-          ),
-        ],
       ),
       body: FutureBuilder<Service>(
         future: _serviceDetailFuture,
@@ -52,7 +42,7 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+            return Center(child: Text('Error: \${snapshot.error}'));
           }
           if (!snapshot.hasData) {
             return const Center(child: Text('Layanan tidak ditemukan.'));
@@ -78,12 +68,9 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
                       _buildInfoRow(
                         Icons.location_on_outlined,
                         'Makassar, BTP',
-                      ), // Data dummy
+                      ),
                       const SizedBox(height: 8),
-                      _buildInfoRow(
-                        Icons.access_time_outlined,
-                        '10:00 WITA',
-                      ), // Data dummy
+                      _buildInfoRow(Icons.access_time_outlined, '10:00 WITA'),
                       _buildInfoRow(
                         Icons.payment_outlined,
                         service.metodePembayaran.join(' & '),
@@ -153,7 +140,7 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
                       const Icon(Icons.star, color: Colors.amber, size: 16),
                       const SizedBox(width: 4),
                       Text(
-                        '${workerInfo['rating']?.toStringAsFixed(1) ?? 'N/A'} (${workerInfo['jumlahOrderSelesai'] ?? 0})',
+                        "${workerInfo['rating']?.toStringAsFixed(1) ?? 'N/A'} (${workerInfo['jumlahOrderSelesai'] ?? 0})",
                       ),
                     ],
                   ),
@@ -203,7 +190,10 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
               ),
               const SizedBox(height: 8),
               Text(
-                service.formattedPrice,
+                service.tipeLayanan == 'survey'
+                    ? "Biaya Survei: ${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ').format(service.biayaSurvei)}"
+                    : service.formattedPrice,
+
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -281,7 +271,6 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
                 builder: (context) => BookingPage(service: service),
               ),
             );
-            // TODO: Navigasi ke halaman Tanggal & Waktu Pekerjaan
           },
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF1E232C),
@@ -291,9 +280,11 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
               borderRadius: BorderRadius.circular(12),
             ),
           ),
-          child: const Text(
-            'Buat Tawaran',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          child: Text(
+            service.tipeLayanan == 'survey'
+                ? 'Buat Permintaan Survey'
+                : 'Pesan Sekarang',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
         ),
       ),

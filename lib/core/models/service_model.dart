@@ -1,3 +1,4 @@
+import 'package:home_workers_fe/core/models/availability_model.dart';
 import 'package:intl/intl.dart';
 
 class Service {
@@ -14,6 +15,7 @@ class Service {
   final String? tipeLayanan;
   final num? biayaSurvei;
   final Map<String, dynamic> workerInfo;
+  final List<Availability> availability;
 
   Service({
     required this.id,
@@ -29,10 +31,12 @@ class Service {
     this.tipeLayanan,
     this.biayaSurvei,
     required this.workerInfo,
+    required this.availability,
   });
 
   factory Service.fromJson(Map<String, dynamic> json) {
     DateTime parsedDate;
+    final availabilityMap = json['availability'] as Map<String, dynamic>? ?? {};
     if (json['dibuatPada'] != null && json['dibuatPada']['_seconds'] != null) {
       parsedDate = DateTime.fromMillisecondsSinceEpoch(
         json['dibuatPada']['_seconds'] * 1000,
@@ -40,6 +44,12 @@ class Service {
     } else {
       parsedDate = DateTime.now();
     }
+
+    final availabilityList = availabilityMap.entries.map((entry) {
+      final day = entry.key;
+      final slots = List<String>.from(entry.value ?? []);
+      return Availability(day: day, slots: slots);
+    }).toList();
 
     return Service(
       id: json['serviceId'] ?? json['id'] ?? '',
@@ -57,6 +67,7 @@ class Service {
       tipeLayanan: json['tipeLayanan'] ?? 'fixed',
       biayaSurvei: json['biayaSurvei'] ?? 0,
       workerInfo: json['workerInfo'] as Map<String, dynamic>? ?? {},
+      availability: availabilityList,
     );
   }
 

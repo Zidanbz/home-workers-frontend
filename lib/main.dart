@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:home_workers_fe/features/auth/pages/login_page.dart';
 import 'package:home_workers_fe/features/onborading/pages/onboarding_page.dart';
 import 'package:provider/provider.dart';
@@ -13,6 +14,7 @@ import 'firebase_options.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('id_ID');
+    await dotenv.load(fileName: ".env");
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   runApp(const MyApp());
@@ -26,8 +28,10 @@ class MyApp extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (context) => AuthProvider(),
       child: MaterialApp(
+        locale: const Locale('id', 'ID'),
+
         title: 'Home Workers',
-        theme: ThemeData(/* ... */),
+        theme: ThemeData(/* ... */ fontFamily: 'OpenSans'),
         // Gunakan AuthWrapper sebagai home, ia akan menangani semua logika
         home: const AuthWrapper(),
         debugShowCheckedModeBanner: false,

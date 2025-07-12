@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:home_workers_fe/core/state/auth_provider.dart';
+import 'package:home_workers_fe/features/auth/pages/register_customer_page.dart';
+import 'package:home_workers_fe/features/auth/pages/register_worker_page.dart';
 import 'package:provider/provider.dart';
 // TODO: Impor halaman registrasi customer dan worker Anda nanti
 // import 'register_customer_page.dart';
@@ -48,7 +50,7 @@ class SelectRolePage extends StatelessWidget {
                   listen: false,
                 ).showLoginPage();
                 // TODO: Navigasi ke halaman registrasi Customer
-                // Navigator.of(context).push(MaterialPageRoute(builder: (context) => const RegisterCustomerPage()));
+                 Navigator.of(context).push(MaterialPageRoute(builder: (context) => const RegisterCustomerPage()));
                 print('Navigasi ke Registrasi Customer');
               },
             ),
@@ -65,7 +67,7 @@ class SelectRolePage extends StatelessWidget {
                   listen: false,
                 ).showLoginPage();
                 // TODO: Navigasi ke halaman registrasi Worker
-                // Navigator.of(context).push(MaterialPageRoute(builder: (context) => const RegisterWorkerPage()));
+                 Navigator.of(context).push(MaterialPageRoute(builder: (context) => const RegisterWorkerPage()));
                 print('Navigasi ke Registrasi Worker');
               },
             ),

@@ -13,6 +13,7 @@ class Order {
   final String serviceName;
   final String customerName;
   final String customerAddress;
+  final String serviceType;
 
   Order({
     required this.id,
@@ -24,6 +25,7 @@ class Order {
     required this.customerAddress,
     required this.customerId,
     required this.category,
+    required this.serviceType,
   });
 
   factory Order.fromJson(Map<String, dynamic> json) {
@@ -56,6 +58,7 @@ class Order {
       customerAddress: customerInfo['alamat'] ?? 'Alamat Tidak Tersedia',
       customerId: json['customerId'] ?? '',
       category: json['category'] ?? '',
+      serviceType: json['serviceType'] ?? '',
     );
   }
 

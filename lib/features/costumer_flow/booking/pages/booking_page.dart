@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:home_workers_fe/features/costumer_flow/booking/pages/payment_options_page.dart';
+import 'package:home_workers_fe/core/models/availability_model.dart';
+import 'package:home_workers_fe/features/costumer_flow/booking/pages/snapPayment_page.dart';
+import 'package:home_workers_fe/features/workerprofile/pages/worker_profile_page.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import '../../../../core/api/api_service.dart';
-import '../../../../core/models/service_model.dart';
-import '../../../../core/state/auth_provider.dart';
-// Impor halaman pembayaran yang baru
+import 'package:home_workers_fe/core/api/api_service.dart';
+import 'package:home_workers_fe/core/models/service_model.dart';
+import 'package:home_workers_fe/core/state/auth_provider.dart';
 
 class BookingPage extends StatefulWidget {
   final Service service;
@@ -19,18 +20,22 @@ class _BookingPageState extends State<BookingPage> {
   final ApiService _apiService = ApiService();
   bool _isLoading = false;
 
-  // State untuk menyimpan pilihan pengguna
   DateTime _selectedDate = DateTime.now();
   String? _selectedTimeSlot;
   String _selectedFrequency = 'Layanan Sekali Saja';
 
-  final List<String> _timeSlots = [
-    'Pagi 09.00 - 11.00',
-    'Siang 12.00 - 15.00',
-    'Sore 16.00 - 18.00',
-  ];
+  List<String> get _availableTimeSlots {
+    final weekday = DateFormat(
+      'EEEE',
+      'id_ID',
+    ).format(_selectedDate).toLowerCase();
+    final availability = widget.service.availability.firstWhere(
+      (a) => a.day.toLowerCase() == weekday,
+      orElse: () => Availability(day: weekday, slots: []),
+    );
+    return availability.slots;
+  }
 
-  // --- FUNGSI BARU UNTUK MEMBUAT PESANAN ---
   Future<void> _handleCreateOrder() async {
     if (_selectedTimeSlot == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -39,63 +44,87 @@ class _BookingPageState extends State<BookingPage> {
       return;
     }
 
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context);
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
-    setState(() {
-      _isLoading = true;
-    });
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    setState(() => _isLoading = true);
 
     try {
       final token = authProvider.token;
-      if (token == null) throw Exception('Authentication failed.');
+      if (token == null) throw Exception('Anda belum login.');
 
-      // Gabungkan tanggal dan waktu yang dipilih
-      final hour = int.parse(_selectedTimeSlot!.substring(5, 7));
-      final finalSchedule = DateTime(
+      final regex = RegExp(r'(\d{2})\.(\d{2})');
+      final match = regex.firstMatch(_selectedTimeSlot!);
+      if (match == null) throw Exception('Format jam tidak valid');
+
+      final hour = int.parse(match.group(1)!);
+      final minute = int.parse(match.group(2)!);
+
+      final schedule = DateTime(
         _selectedDate.year,
         _selectedDate.month,
         _selectedDate.day,
         hour,
+        minute,
       );
 
-      // Panggil API untuk membuat pesanan
-      final result = await _apiService.createOrder(
-        token: token,
-        serviceId: widget.service.id,
-        jadwalPerbaikan: finalSchedule,
-      );
+      if (widget.service.tipeLayanan == 'fixed') {
+        final response = await _apiService.createOrderWithPayment(
+          token: token,
+          serviceId: widget.service.id,
+          jadwalPerbaikan: schedule,
+        );
 
-      final orderId = result['data']['orderId'] as String;
+        final snapToken = response['snapToken'];
+        final snapRedirectUrl =
+            "https://app.sandbox.midtrans.com/snap/v2/vtweb/$snapToken";
 
-      // Navigasi ke halaman pembayaran jika berhasil
-      navigator.push(
-        MaterialPageRoute(
-          builder: (context) => PaymentOptionsPage(
-            orderId: orderId,
-            totalAmount: widget.service.harga,
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => SnapPaymentPage(redirectUrl: snapRedirectUrl),
           ),
-        ),
-      );
+        );
+      } else {
+        // survey
+        final response = await _apiService.createOrder(
+          token: token,
+          serviceId: widget.service.id,
+          jadwalPerbaikan: schedule,
+        );
+
+        await showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Permintaan Berhasil Dikirim'),
+            content: const Text(
+              'Worker akan mengirimkan penawaran harga berdasarkan hasil survei. Mohon tunggu konfirmasi selanjutnya.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () =>
+                    Navigator.of(context).popUntil((route) => route.isFirst),
+                child: const Text('Kembali ke Beranda'),
+              ),
+            ],
+          ),
+        );
+      }
     } catch (e) {
       scaffoldMessenger.showSnackBar(
         SnackBar(
           backgroundColor: Colors.red,
-          content: Text('Gagal: ${e.toString().replaceAll("Exception: ", "")}'),
+          content: Text('Gagal: ${e.toString().replaceAll('Exception: ', '')}'),
         ),
       );
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isSurvey = widget.service.tipeLayanan == 'survey';
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
@@ -116,14 +145,14 @@ class _BookingPageState extends State<BookingPage> {
             _buildFrequencySelector(),
             const SizedBox(height: 24),
             const Text(
-              'Kapan Anda menginginkan layanan Anda?',
+              'Kapan Anda menginginkan layanan?',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             const SizedBox(height: 16),
             _buildDatePicker(),
             const SizedBox(height: 24),
             const Text(
-              'Jam berapa Anda ingin kami mulai?',
+              'Jam berapa Anda ingin layanan dimulai?',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             const SizedBox(height: 16),
@@ -131,7 +160,7 @@ class _BookingPageState extends State<BookingPage> {
           ],
         ),
       ),
-      bottomNavigationBar: _buildBottomBar(),
+      bottomNavigationBar: _buildBottomBar(isSurvey),
     );
   }
 
@@ -151,7 +180,40 @@ class _BookingPageState extends State<BookingPage> {
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
         ),
-        TextButton(onPressed: () {}, child: const Text('Lihat Profil >')),
+        TextButton(
+          onPressed: () async {
+            final authProvider = Provider.of<AuthProvider>(
+              context,
+              listen: false,
+            );
+            final token = authProvider.token;
+            final workerId = widget.service.workerInfo['id'];
+
+            if (token == null || workerId == null) return;
+
+            try {
+              final workerData = await _apiService.getWorkerProfile(
+                token: token,
+                workerId: workerId,
+              );
+              if (!mounted) return;
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => WorkerProfilePage(workerInfo: workerData),
+                ),
+              );
+            } catch (e) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Gagal membuka profil: ${e.toString()}'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          },
+          child: const Text('Lihat Profil >'),
+        ),
       ],
     );
   }
@@ -161,7 +223,7 @@ class _BookingPageState extends State<BookingPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'Seberapa sering Anda membutuhkan ini?',
+          'Seberapa sering Anda membutuhkan layanan ini?',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
         const SizedBox(height: 8),
@@ -169,15 +231,11 @@ class _BookingPageState extends State<BookingPage> {
           value: _selectedFrequency,
           items: ['Layanan Sekali Saja', 'Mingguan', 'Bulanan']
               .map(
-                (label) => DropdownMenuItem(child: Text(label), value: label),
+                (label) => DropdownMenuItem(value: label, child: Text(label)),
               )
               .toList(),
           onChanged: (value) {
-            if (value != null) {
-              setState(() {
-                _selectedFrequency = value;
-              });
-            }
+            if (value != null) setState(() => _selectedFrequency = value);
           },
           decoration: InputDecoration(
             filled: true,
@@ -197,17 +255,13 @@ class _BookingPageState extends State<BookingPage> {
       height: 80,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        itemCount: 7, // Tampilkan 7 hari ke depan
+        itemCount: 7,
         itemBuilder: (context, index) {
           final date = DateTime.now().add(Duration(days: index));
-          final bool isSelected = DateUtils.isSameDay(_selectedDate, date);
+          final isSelected = DateUtils.isSameDay(_selectedDate, date);
 
           return GestureDetector(
-            onTap: () {
-              setState(() {
-                _selectedDate = date;
-              });
-            },
+            onTap: () => setState(() => _selectedDate = date),
             child: Container(
               width: 60,
               margin: const EdgeInsets.only(right: 12),
@@ -220,7 +274,7 @@ class _BookingPageState extends State<BookingPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    DateFormat('EEE', 'id_ID').format(date), // Hari (Sen, Sel)
+                    DateFormat('EEE', 'id_ID').format(date),
                     style: TextStyle(
                       color: isSelected ? Colors.white : Colors.grey,
                     ),
@@ -244,19 +298,23 @@ class _BookingPageState extends State<BookingPage> {
   }
 
   Widget _buildTimeSlotPicker() {
+    final slots = _availableTimeSlots;
+    if (slots.isEmpty) {
+      return const Text(
+        'Tidak ada waktu tersedia pada hari ini.',
+        style: TextStyle(color: Colors.red),
+      );
+    }
     return Wrap(
       spacing: 12.0,
       runSpacing: 12.0,
-      children: _timeSlots.map((slot) {
-        final bool isSelected = _selectedTimeSlot == slot;
+      children: slots.map((slot) {
+        final isSelected = _selectedTimeSlot == slot;
         return ChoiceChip(
           label: Text(slot),
           selected: isSelected,
-          onSelected: (selected) {
-            setState(() {
-              _selectedTimeSlot = selected ? slot : null;
-            });
-          },
+          onSelected: (selected) =>
+              setState(() => _selectedTimeSlot = selected ? slot : null),
           selectedColor: const Color(0xFF3A3F51),
           labelStyle: TextStyle(
             color: isSelected ? Colors.white : Colors.black,
@@ -272,7 +330,7 @@ class _BookingPageState extends State<BookingPage> {
     );
   }
 
-  Widget _buildBottomBar() {
+  Widget _buildBottomBar(bool isSurvey) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -291,7 +349,9 @@ class _BookingPageState extends State<BookingPage> {
               children: [
                 const Text('Total Biaya', style: TextStyle(color: Colors.grey)),
                 Text(
-                  widget.service.formattedPrice,
+                  isSurvey
+                      ? 'Menunggu Penawaran'
+                      : widget.service.formattedPrice,
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -302,7 +362,7 @@ class _BookingPageState extends State<BookingPage> {
             _isLoading
                 ? const CircularProgressIndicator()
                 : ElevatedButton(
-                    onPressed: _handleCreateOrder, // Panggil fungsi yang baru
+                    onPressed: _handleCreateOrder,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF1E232C),
                       foregroundColor: Colors.white,
@@ -311,7 +371,9 @@ class _BookingPageState extends State<BookingPage> {
                         vertical: 14,
                       ),
                     ),
-                    child: const Text('Lanjut ke Pembayaran'),
+                    child: Text(
+                      isSurvey ? 'Kirim Permintaan' : 'Lanjut ke Pembayaran',
+                    ),
                   ),
           ],
         ),

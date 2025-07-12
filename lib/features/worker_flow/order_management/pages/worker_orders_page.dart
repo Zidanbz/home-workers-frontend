@@ -1,3 +1,4 @@
+// Tetap sama: import
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/api/api_service.dart';
@@ -29,18 +30,12 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
   Future<void> _loadOrders() {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.token != null) {
-      // Buat future untuk panggilan API
       final future = _apiService.getMyOrders(authProvider.token!);
-
-      // Perbarui state agar FutureBuilder bisa me-rebuild
       setState(() {
         _ordersFuture = future;
       });
-
-      // Kembalikan future ini agar RefreshIndicator bisa menunggunya
       return future;
     }
-    // Jika tidak ada token, kembalikan future yang sudah selesai dengan error
     return Future.error('Anda tidak terautentikasi.');
   }
 
@@ -146,13 +141,12 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
   }
 }
 
-// --- WIDGET KARTU PESANAN YANG DIPERBAIKI TOTAL ---
 class _OrderCard extends StatelessWidget {
   final Order order;
   final VoidCallback onRefresh;
+
   const _OrderCard({required this.order, required this.onRefresh});
 
-  // Fungsi untuk menangani aksi tombol
   void _handleAction(BuildContext context) async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
@@ -162,28 +156,19 @@ class _OrderCard extends StatelessWidget {
     if (authProvider.token == null) return;
     final token = authProvider.token!;
 
-    switch (order.status) {
-      case 'pending':
-        try {
+    try {
+      switch (order.status) {
+        case 'pending':
           await apiService.acceptOrder(token: token, orderId: order.id);
           scaffoldMessenger.showSnackBar(
             const SnackBar(
-              content: Text('Pesanan berhasil diterima.'),
+              content: Text('Pesanan diterima.'),
               backgroundColor: Colors.green,
             ),
           );
-          onRefresh(); // Refresh daftar pesanan
-        } catch (e) {
-          scaffoldMessenger.showSnackBar(
-            SnackBar(
-              content: Text('Gagal menerima pesanan: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        break;
-      case 'accepted':
-        try {
+          break;
+        case 'accepted':
+        case 'work_in_progress':
           final chatId = await apiService.createChat(
             token: token,
             recipientId: order.customerId,
@@ -193,20 +178,68 @@ class _OrderCard extends StatelessWidget {
               builder: (context) => ChatDetailPage(
                 chatId: chatId,
                 name: order.customerName,
-                avatarUrl: '', // TODO: Dapatkan avatar customer
+                avatarUrl: '', // TODO: Tambahkan avatar customer jika tersedia
               ),
             ),
           );
-        } catch (e) {
-          scaffoldMessenger.showSnackBar(
-            SnackBar(
-              content: Text('Gagal membuka chat: $e'),
-              backgroundColor: Colors.red,
-            ),
+          break;
+        case 'quote_proposed':
+          final nominal = await showDialog<num>(
+            context: context,
+            builder: (context) {
+              final controller = TextEditingController();
+              return AlertDialog(
+                title: const Text('Ajukan Harga'),
+                content: TextField(
+                  controller: controller,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Masukkan harga penawaran',
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Batal'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      final value = num.tryParse(controller.text);
+                      if (value != null) {
+                        Navigator.pop(context, value);
+                      }
+                    },
+                    child: const Text('Kirim'),
+                  ),
+                ],
+              );
+            },
           );
-        }
-        break;
+
+          if (nominal != null) {
+            await apiService.sendQuote(
+              token: token,
+              orderId: order.id,
+              proposedPrice: nominal,
+            );
+            scaffoldMessenger.showSnackBar(
+              const SnackBar(
+                content: Text('Penawaran dikirim.'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+          break;
+        default:
+          return;
+      }
+    } catch (e) {
+      scaffoldMessenger.showSnackBar(
+        SnackBar(content: Text('Gagal: $e'), backgroundColor: Colors.red),
+      );
     }
+
+    onRefresh(); // Refresh setelah aksi
   }
 
   @override
@@ -222,9 +255,12 @@ class _OrderCard extends StatelessWidget {
         break;
       case 'accepted':
       case 'work_in_progress':
-      case 'quote_proposed':
         buttonColor = Colors.blue.shade100;
         buttonText = 'Tanya';
+        break;
+      case 'quote_proposed':
+        buttonColor = Colors.indigo.shade100;
+        buttonText = 'Ajukan Harga';
         break;
       case 'completed':
         buttonColor = Colors.green.shade100;
@@ -234,11 +270,11 @@ class _OrderCard extends StatelessWidget {
       case 'cancelled':
       case 'quote_rejected':
         buttonColor = Colors.red.shade100;
-        buttonText = 'Batal';
+        buttonText = 'Dibatalkan';
         onPressed = null;
         break;
       default:
-        buttonColor = Colors.grey.shade200;
+        buttonColor = Colors.grey.shade300;
         buttonText = 'Status';
         onPressed = null;
     }
@@ -251,7 +287,7 @@ class _OrderCard extends StatelessWidget {
         onTap: () {
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (context) => OrderDetailPage(orderId: order.id),
+              builder: (_) => OrderDetailPage(orderId: order.id),
             ),
           );
         },
@@ -301,7 +337,7 @@ class _OrderCard extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Icon(Icons.access_time, color: Colors.grey, size: 16),
+                  const Icon(Icons.access_time, color: Colors.grey, size: 16),
                   const SizedBox(width: 4),
                   Text(
                     order.timeAgo,

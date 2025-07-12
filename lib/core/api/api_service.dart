@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
 import 'package:home_workers_fe/core/models/address_model.dart';
 import 'package:home_workers_fe/core/models/chat_model.dart';
 import 'package:home_workers_fe/core/models/message_model.dart';
@@ -738,6 +740,209 @@ class ApiService {
     } catch (e) {
       print('Error: $e');
       throw Exception('Failed to connect to the server. $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> registerCustomer({
+    required String email,
+    required String password,
+    required String nama,
+  }) async {
+    final url = Uri.parse('$_baseUrl/auth/register/customer');
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email, 'password': password, 'nama': nama}),
+      );
+
+      final responseBody = jsonDecode(response.body);
+      print('response body: ${response.body}');
+      if (response.statusCode == 201 && responseBody['success'] == true) {
+        return responseBody; // <- yang akan dikembalikan ke AuthProvider
+      } else {
+        throw Exception(responseBody['message'] ?? 'Registrasi gagal');
+      }
+    } catch (e) {
+      print('Error: $e');
+      throw Exception('Gagal menghubungi server.');
+    }
+  }
+
+  Future<Map<String, dynamic>> registerWorker({
+    required String email,
+    required String password,
+    required String nama,
+    required List<String> keahlian,
+    required String deskripsi,
+    required File ktpFile,
+    String? portfolioLink,
+  }) async {
+    var uri = Uri.parse('$_baseUrl/auth/register-worker');
+    var request = http.MultipartRequest('POST', uri);
+
+    request.fields['email'] = email;
+    request.fields['password'] = password;
+    request.fields['nama'] = nama;
+    request.fields['deskripsi'] = deskripsi;
+    request.fields['keahlian'] = jsonEncode(keahlian);
+    if (portfolioLink != null && portfolioLink.isNotEmpty) {
+      request.fields['portfolio'] = portfolioLink;
+    }
+
+    request.files.add(
+      await http.MultipartFile.fromPath('ktpFile', ktpFile.path),
+    );
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    final decoded = jsonDecode(response.body);
+    if (response.statusCode == 201) {
+      return decoded['data'];
+    } else {
+      throw Exception(decoded['message']);
+    }
+  }
+
+  Future<void> sendQuote({
+    required String token,
+    required String orderId,
+    required num proposedPrice,
+  }) async {
+    final url = Uri.parse('$_baseUrl/orders/$orderId/quote');
+    try {
+      final response = await http.put(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'proposedPrice': proposedPrice}),
+      );
+
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        // Quote dikirim berhasil
+      } else {
+        throw Exception(responseBody['message'] ?? 'Gagal mengirim quote');
+      }
+    } catch (e) {
+      throw Exception('Gagal terhubung ke server. $e');
+    }
+  }
+
+  Future<void> rejectOrder({
+    required String token,
+    required String orderId,
+  }) async {
+    final url = Uri.parse('$_baseUrl/orders/$orderId/reject');
+    try {
+      final response = await http.put(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode != 200 || responseBody['success'] != true) {
+        throw Exception(responseBody['message'] ?? 'Gagal menolak pesanan');
+      }
+    } catch (e) {
+      throw Exception('Gagal terhubung ke server. $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> getWorkerProfile({
+    required String token,
+    required String workerId,
+  }) async {
+    final url = Uri.parse('$_baseUrl/workers/$workerId');
+
+    final response = await http.get(
+      url,
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Gagal memuat profil worker');
+    }
+
+    return jsonDecode(response.body)['data'];
+  }
+
+  Future<List<Service>> searchServices({
+    String? search,
+    String? category,
+  }) async {
+    var queryParams = <String, String>{};
+    if (search != null && search.isNotEmpty) queryParams['search'] = search;
+    if (category != null && category.isNotEmpty)
+      queryParams['category'] = category;
+
+    final uri = Uri.parse(
+      '$_baseUrl/services/search',
+    ).replace(queryParameters: queryParams);
+    final response = await http.get(uri);
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return List<Service>.from(
+        data['data'].map((item) => Service.fromJson(item)),
+      );
+    } else {
+      throw Exception('Gagal mengambil layanan');
+    }
+  }
+
+  Future<Map<String, dynamic>> createOrderWithPayment({
+    required String token,
+    required String serviceId,
+    required DateTime jadwalPerbaikan,
+  }) async {
+    final url = Uri.parse('$_baseUrl/payments/initiate');
+    final response = await http.post(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'serviceId': serviceId,
+        'jadwalPerbaikan': jadwalPerbaikan.toIso8601String(),
+      }),
+    );
+
+    if (response.statusCode == 201) {
+      final data = jsonDecode(response.body)['data'];
+      print('✅ Order & Snap token: $data');
+      return data;
+    } else {
+      print('❌ Order error: ${response.body}');
+      throw Exception('Gagal membuat order dan transaksi Midtrans $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> getMidtransStatus({
+    required String token,
+    required String orderId,
+  }) async {
+    final url = Uri.parse('$_baseUrl/api/payments/status/$orderId');
+    final response = await http.get(
+      url,
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200) {
+      return data['data'];
+    } else {
+      throw Exception('Gagal mengambil status transaksi Midtrans');
     }
   }
 }

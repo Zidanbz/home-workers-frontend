@@ -15,7 +15,7 @@ class OrderDetailPage extends StatefulWidget {
 class _OrderDetailPageState extends State<OrderDetailPage> {
   final ApiService _apiService = ApiService();
   late Future<Order> _orderFuture;
-  bool _isProcessing = false; // State untuk loading pada tombol aksi
+  bool _isProcessing = false;
 
   @override
   void initState() {
@@ -35,29 +35,71 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     }
   }
 
-  // --- FUNGSI BARU UNTUK MENERIMA PESANAN ---
+  Future<void> _handleRejectOrder() async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Konfirmasi'),
+        content: const Text('Apakah Anda yakin ingin menolak pesanan ini?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Tolak'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() => _isProcessing = true);
+      try {
+        final token = authProvider.token!;
+        await _apiService.rejectOrder(token: token, orderId: widget.orderId);
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.green,
+            content: Text('Pesanan berhasil ditolak.'),
+          ),
+        );
+        Navigator.pop(context); // Kembali ke halaman sebelumnya
+      } catch (e) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.red,
+            content: Text(
+              'Gagal menolak pesanan: ${e.toString().replaceAll("Exception: ", "")}',
+            ),
+          ),
+        );
+      } finally {
+        if (mounted) setState(() => _isProcessing = false);
+      }
+    }
+  }
+
   Future<void> _handleAcceptOrder() async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-    setState(() {
-      _isProcessing = true;
-    });
+    setState(() => _isProcessing = true);
 
     try {
-      final token = authProvider.token;
-      if (token == null) throw Exception('Authentication failed.');
-
+      final token = authProvider.token!;
       await _apiService.acceptOrder(token: token, orderId: widget.orderId);
-
       scaffoldMessenger.showSnackBar(
         const SnackBar(
           backgroundColor: Colors.green,
           content: Text('Pesanan berhasil diterima.'),
         ),
       );
-
-      // Refresh halaman untuk menampilkan status baru
       _loadOrderDetails();
     } catch (e) {
       scaffoldMessenger.showSnackBar(
@@ -69,10 +111,65 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         ),
       );
     } finally {
-      if (mounted) {
-        setState(() {
-          _isProcessing = false;
-        });
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  Future<void> _handleSendQuote(Order order) async {
+    final TextEditingController priceController = TextEditingController();
+
+    final result = await showDialog<num>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Ajukan Penawaran'),
+        content: TextField(
+          controller: priceController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Harga yang ditawarkan'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final price = num.tryParse(priceController.text);
+              if (price != null) {
+                Navigator.pop(context, price);
+              }
+            },
+            child: const Text('Kirim'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null) {
+      setState(() => _isProcessing = true);
+      try {
+        final token = Provider.of<AuthProvider>(context, listen: false).token!;
+        await _apiService.sendQuote(
+          token: token,
+          orderId: order.id,
+          proposedPrice: result,
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.green,
+            content: Text('Penawaran berhasil dikirim.'),
+          ),
+        );
+        _loadOrderDetails(); // Refresh
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.red,
+            content: Text('Gagal mengirim penawaran: $e'),
+          ),
+        );
+      } finally {
+        if (mounted) setState(() => _isProcessing = false);
       }
     }
   }
@@ -89,15 +186,12 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       body: FutureBuilder<Order>(
         future: _orderFuture,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting)
             return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
+          if (snapshot.hasError)
             return Center(child: Text('Error: ${snapshot.error}'));
-          }
-          if (!snapshot.hasData) {
+          if (!snapshot.hasData)
             return const Center(child: Text('Detail pesanan tidak ditemukan.'));
-          }
 
           final order = snapshot.data!;
           return RefreshIndicator(
@@ -125,10 +219,13 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                       Icons.receipt_long_outlined,
                       'Status: ${order.status}',
                     ),
+                    _buildInfoRow(
+                      Icons.category_outlined,
+                      'Tipe: ${order.serviceType}',
+                    ),
                   ],
                 ),
                 const SizedBox(height: 40),
-                // --- PERUBAHAN UTAMA: Tampilkan tombol aksi berdasarkan status ---
                 if (_isProcessing)
                   const Center(child: CircularProgressIndicator())
                 else
@@ -141,17 +238,14 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     );
   }
 
-  // --- WIDGET BARU UNTUK TOMBOL AKSI ---
   Widget _buildActionButtons(Order order) {
-    // Tampilkan tombol hanya jika statusnya 'pending'
     if (order.status == 'pending') {
       return Row(
         children: [
           Expanded(
             child: OutlinedButton(
-              onPressed: () {
-                // TODO: Implementasi logika tolak pesanan
-              },
+              onPressed: _handleRejectOrder,
+              // TODO: Tambahkan logika tolak pesanan
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.red,
                 side: const BorderSide(color: Colors.red),
@@ -175,10 +269,21 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         ],
       );
     }
-    // TODO: Tambahkan tombol lain untuk status yang berbeda,
-    // misalnya tombol "Ajukan Penawaran" jika status 'accepted' dan tipe 'survey'.
 
-    // Jika status bukan 'pending', tidak ada tombol aksi yang ditampilkan.
+    // Jika sudah accepted dan tipe survei, tampilkan tombol "Ajukan Penawaran"
+    if (order.status == 'accepted' && order.serviceType == 'survey') {
+      return ElevatedButton.icon(
+        icon: const Icon(Icons.attach_money),
+        label: const Text('Ajukan Penawaran'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.orange,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+        ),
+        onPressed: () => _handleSendQuote(order),
+      );
+    }
+
     return const SizedBox.shrink();
   }
 

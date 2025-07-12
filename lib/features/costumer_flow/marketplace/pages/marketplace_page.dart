@@ -21,6 +21,8 @@ class _MarketplacePageState extends State<MarketplacePage> {
   final ApiService _apiService = ApiService();
   late Future<List<Service>> _servicesFuture;
   String _searchQuery = '';
+  String _selectedCategory = '';
+  String _selectedSort = 'default';
 
   @override
   void initState() {
@@ -30,7 +32,9 @@ class _MarketplacePageState extends State<MarketplacePage> {
 
   Future<void> _loadServices() async {
     setState(() {
-      _servicesFuture = _apiService.getAllApprovedServices();
+      _servicesFuture = _apiService.getAllApprovedServices(
+        category: _selectedCategory,
+      );
     });
   }
 
@@ -91,11 +95,24 @@ class _MarketplacePageState extends State<MarketplacePage> {
                   }
 
                   final allServices = snapshot.data!;
-                  final filteredServices = allServices.where((service) {
+                  List<Service> filteredServices = allServices.where((service) {
                     return service.namaLayanan.toLowerCase().contains(
                       _searchQuery.toLowerCase(),
                     );
                   }).toList();
+
+                  // Urutkan
+                  if (_selectedSort == 'harga-asc') {
+                    filteredServices.sort((a, b) => a.harga.compareTo(b.harga));
+                  } else if (_selectedSort == 'harga-desc') {
+                    filteredServices.sort((a, b) => b.harga.compareTo(a.harga));
+                  } else if (_selectedSort == 'rating-desc') {
+                    filteredServices.sort((a, b) {
+                      final ratingA = a.workerInfo['rating'] ?? 0;
+                      final ratingB = b.workerInfo['rating'] ?? 0;
+                      return ratingB.compareTo(ratingA);
+                    });
+                  }
 
                   return ListView.builder(
                     padding: const EdgeInsets.all(20.0),
@@ -122,22 +139,51 @@ class _MarketplacePageState extends State<MarketplacePage> {
           Row(
             children: [
               Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.category_outlined),
-                  label: const Text('Pengaturan Kategori'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF3A3F51),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                child: DropdownButtonFormField<String>(
+                  value: _selectedCategory.isEmpty ? null : _selectedCategory,
+                  hint: const Text('Pilih Kategori'),
+                  items: ['Kebersihan', 'Perbaikan', 'Home Improvement']
+                      .map(
+                        (cat) => DropdownMenuItem(value: cat, child: Text(cat)),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    setState(() => _selectedCategory = value ?? '');
+                    _loadServices();
+                  },
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: Colors.grey[200],
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
                   ),
                 ),
               ),
               const SizedBox(width: 10),
-              OutlinedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.sort),
-                label: const Text('Urutkan'),
+              DropdownButton<String>(
+                value: _selectedSort,
+                items: const [
+                  DropdownMenuItem(value: 'default', child: Text('Default')),
+                  DropdownMenuItem(
+                    value: 'harga-asc',
+                    child: Text('Harga Termurah'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'harga-desc',
+                    child: Text('Harga Tertinggi'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'rating-desc',
+                    child: Text('Rating Tertinggi'),
+                  ),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _selectedSort = value ?? 'default';
+                  });
+                },
               ),
             ],
           ),
@@ -149,7 +195,7 @@ class _MarketplacePageState extends State<MarketplacePage> {
               });
             },
             decoration: InputDecoration(
-              hintText: 'Cari',
+              hintText: 'Cari layanan...',
               prefixIcon: const Icon(Icons.search),
               filled: true,
               fillColor: Colors.grey[200],
@@ -183,12 +229,25 @@ class _ServiceCard extends StatelessWidget {
     }
   }
 
+  Color _getPriceColor() {
+    return service.tipeLayanan == 'survey' ? Colors.orange : Colors.deepPurple;
+  }
+
+  String _getPaymentText() {
+    return service.metodePembayaran == 'cash' ? 'Tunai' : 'Cashless';
+  }
+
+  IconData _getPaymentIcon() {
+    return service.metodePembayaran == 'cash' ? Icons.money : Icons.credit_card;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       elevation: 3,
+      color: Colors.white,
       child: InkWell(
         onTap: () {
           Navigator.of(context).push(
@@ -202,7 +261,9 @@ class _ServiceCard extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Foto
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: Image.network(
@@ -214,63 +275,79 @@ class _ServiceCard extends StatelessWidget {
                     width: 80,
                     height: 80,
                     color: Colors.grey[200],
-                    child: const Icon(
-                      Icons.image_not_supported,
-                      color: Colors.grey,
-                    ),
+                    child: const Icon(Icons.image_not_supported),
                   ),
                 ),
               ),
               const SizedBox(width: 16),
+
+              // Info
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      service.namaLayanan,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    // Judul dan Kategori
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            service.namaLayanan,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Icon(
+                          _getIconForCategory(service.category),
+                          color: Colors.deepPurple,
+                          size: 18,
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
                       service.category,
                       style: const TextStyle(color: Colors.grey),
                     ),
+
                     const SizedBox(height: 8),
+
+                    // Harga / Biaya Survey
+                    Text(
+                      service.formattedPrice,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: _getPriceColor(),
+                      ),
+                    ),
+
+                    const SizedBox(height: 6),
+
+                    // Metode pembayaran dan tanggal berlaku
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
+                        Icon(_getPaymentIcon(), size: 16, color: Colors.indigo),
+                        const SizedBox(width: 6),
                         Text(
-                          service.formattedPrice,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.deepPurple,
-                          ),
+                          _getPaymentText(),
+                          style: const TextStyle(fontSize: 13),
                         ),
+                        const Spacer(),
                         Text(
-                          'Hingga: ${service.formattedExpiryDate}',
+                          'Sampai: ${service.formattedExpiryDate}',
                           style: const TextStyle(
-                            color: Colors.grey,
                             fontSize: 12,
+                            color: Colors.grey,
                           ),
                         ),
                       ],
                     ),
                   ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE9E6FF),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  _getIconForCategory(service.category),
-                  color: Colors.deepPurple,
                 ),
               ),
             ],
