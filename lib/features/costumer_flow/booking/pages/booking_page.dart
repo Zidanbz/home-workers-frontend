@@ -36,6 +36,55 @@ class _BookingPageState extends State<BookingPage> {
     return availability.slots;
   }
 
+  Map<String, List<String>> _bookedSlotsByDate = {};
+
+  Future<void> _fetchBookedSlots(DateTime date) async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final token = authProvider.token;
+    final formattedDate = DateFormat('yyyy-MM-dd').format(date);
+
+    try {
+      final workerId = widget.service.workerInfo['id'];
+      final result = await _apiService.getBookedSlots(
+        token: token!,
+        workerId: workerId,
+        date: formattedDate,
+      );
+
+      setState(() {
+        _bookedSlotsByDate[formattedDate] = List<String>.from(result);
+      });
+    } catch (e) {
+      debugPrint('Gagal fetch booked slots: $e');
+    }
+  }
+
+  List<String> _bookedSlots = [];
+
+  Future<void> _loadBookedSlots() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final token = authProvider.token;
+    final workerId = widget.service.workerInfo['id'];
+
+    if (token == null || workerId == null) return;
+
+    final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
+    try {
+      final booked = await _apiService.getBookedSlots(
+        token: token,
+        workerId: workerId,
+        date: dateStr,
+      );
+      if (mounted) {
+        setState(() {
+          _bookedSlots = booked;
+        });
+      }
+    } catch (e) {
+      debugPrint('Gagal ambil booked slots: $e');
+    }
+  }
+
   Future<void> _handleCreateOrder() async {
     if (_selectedTimeSlot == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -261,7 +310,13 @@ class _BookingPageState extends State<BookingPage> {
           final isSelected = DateUtils.isSameDay(_selectedDate, date);
 
           return GestureDetector(
-            onTap: () => setState(() => _selectedDate = date),
+            onTap: () {
+              setState(() {
+                _selectedDate = date;
+                _selectedTimeSlot = null; // reset pilihan jam
+              });
+              _loadBookedSlots(); // 🚀 ambil slot yang sudah dibooking
+            },
             child: Container(
               width: 60,
               margin: const EdgeInsets.only(right: 12),
@@ -305,24 +360,38 @@ class _BookingPageState extends State<BookingPage> {
         style: TextStyle(color: Colors.red),
       );
     }
+    final booked =
+        _bookedSlotsByDate[DateFormat('yyyy-MM-dd').format(_selectedDate)] ??
+        [];
     return Wrap(
       spacing: 12.0,
       runSpacing: 12.0,
       children: slots.map((slot) {
         final isSelected = _selectedTimeSlot == slot;
+        final isDisabled = _bookedSlots.contains(slot);
+
         return ChoiceChip(
           label: Text(slot),
           selected: isSelected,
-          onSelected: (selected) =>
-              setState(() => _selectedTimeSlot = selected ? slot : null),
+          onSelected: isDisabled
+              ? null
+              : (selected) =>
+                    setState(() => _selectedTimeSlot = selected ? slot : null),
           selectedColor: const Color(0xFF3A3F51),
           labelStyle: TextStyle(
-            color: isSelected ? Colors.white : Colors.black,
+            color: isDisabled
+                ? Colors.grey
+                : (isSelected ? Colors.white : Colors.black),
+            decoration: isDisabled
+                ? TextDecoration.lineThrough
+                : TextDecoration.none,
           ),
-          backgroundColor: Colors.white,
+          backgroundColor: isDisabled ? Colors.grey.shade200 : Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.grey.shade300),
+            side: BorderSide(
+              color: isDisabled ? Colors.grey.shade300 : Colors.grey.shade400,
+            ),
           ),
           showCheckmark: false,
         );

@@ -572,7 +572,7 @@ class ApiService {
       final response = await http.get(url);
 
       final responseBody = jsonDecode(response.body);
-
+      print("response body: ${response.body}");
       if (response.statusCode == 200 && responseBody['success'] == true) {
         return responseBody['data'];
       } else {
@@ -585,8 +585,12 @@ class ApiService {
     }
   }
 
-  Future<List<Order>> getMyOrdersCustomer(String token) async {
+  Future<List<Order>> getMyOrdersCustomer(
+    String token, {
+    bool asWorker = false,
+  }) async {
     final url = Uri.parse('$_baseUrl/orders/my-orders');
+
     try {
       final response = await http.get(
         url,
@@ -598,15 +602,21 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseBody = jsonDecode(response.body);
-        // Untuk halaman ini, kita ambil pesanan sebagai customer
-        final List<dynamic> customerOrdersJson =
-            responseBody['asCustomer'] ?? [];
-        return customerOrdersJson.map((json) => Order.fromJson(json)).toList();
+
+        // ✅ Akses ke dalam key "data" dulu
+        final ordersJson =
+            responseBody['data'][asWorker ? 'asWorker' : 'asCustomer'] ?? [];
+
+        print("✅ Jumlah pesanan: ${ordersJson.length}");
+        print("ordersJson: ${jsonEncode(ordersJson)}");
+        print("responseBody: ${jsonEncode(responseBody)}");
+        return ordersJson.map<Order>((json) => Order.fromJson(json)).toList();
       } else {
         final errorBody = jsonDecode(response.body);
         throw Exception(errorBody['message'] ?? 'Failed to load orders');
       }
     } catch (e) {
+      print("error: $e");
       throw Exception('Failed to connect to the server.');
     }
   }
@@ -770,39 +780,56 @@ class ApiService {
     }
   }
 
+  // Ganti fungsi registerWorker yang lama dengan yang ini
   Future<Map<String, dynamic>> registerWorker({
     required String email,
     required String password,
     required String nama,
     required List<String> keahlian,
     required String deskripsi,
+    required String noKtp, // <-- 1. TAMBAHKAN PARAMETER INI
     required File ktpFile,
+    required File fotoDiriFile,
     String? portfolioLink,
   }) async {
-    var uri = Uri.parse('$_baseUrl/auth/register-worker');
+    var uri = Uri.parse('$_baseUrl/auth/register/worker');
     var request = http.MultipartRequest('POST', uri);
 
+    // Tambahkan semua fields teks ke request
     request.fields['email'] = email;
     request.fields['password'] = password;
     request.fields['nama'] = nama;
     request.fields['deskripsi'] = deskripsi;
     request.fields['keahlian'] = jsonEncode(keahlian);
+    request.fields['noktp'] = noKtp; // <-- 2. TAMBAHKAN FIELD INI
+
     if (portfolioLink != null && portfolioLink.isNotEmpty) {
-      request.fields['portfolio'] = portfolioLink;
+      request.fields['linkPortofolio'] = portfolioLink;
     }
 
+    // Tambahkan file ke request
+    request.files.add(await http.MultipartFile.fromPath('ktp', ktpFile.path));
     request.files.add(
-      await http.MultipartFile.fromPath('ktpFile', ktpFile.path),
+      await http.MultipartFile.fromPath('fotoDiri', fotoDiriFile.path),
     );
 
-    final streamedResponse = await request.send();
-    final response = await http.Response.fromStream(streamedResponse);
+    try {
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+      final decoded = jsonDecode(response.body);
 
-    final decoded = jsonDecode(response.body);
-    if (response.statusCode == 201) {
-      return decoded['data'];
-    } else {
-      throw Exception(decoded['message']);
+      if (response.statusCode == 201 && decoded['success'] == true) {
+        print('Registrasi berhasil: ${response.body}');
+        return decoded['data'] ?? {};
+      } else {
+        print('Registrasi gagal: ${response.body}');
+        throw Exception(
+          decoded['message'] ?? 'Terjadi kesalahan saat registrasi',
+        );
+      }
+    } catch (e) {
+      print('Error saat mengirim request: $e');
+      throw Exception('Tidak dapat terhubung ke server.');
     }
   }
 
@@ -943,6 +970,34 @@ class ApiService {
       return data['data'];
     } else {
       throw Exception('Gagal mengambil status transaksi Midtrans');
+    }
+  }
+
+  Future<List<String>> getBookedSlots({
+    required String token,
+    required String workerId,
+    required String date, // Format: yyyy-MM-dd
+  }) async {
+    final url = Uri.parse(
+      '$_baseUrl/orders/booked-slots?workerId=$workerId&date=$date',
+    );
+
+    final response = await http.get(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    final responseBody = jsonDecode(response.body);
+
+    if (response.statusCode == 200 && responseBody['success'] == true) {
+      return List<String>.from(responseBody['data']);
+    } else {
+      throw Exception(
+        responseBody['message'] ?? 'Failed to fetch booked slots',
+      );
     }
   }
 }

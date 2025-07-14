@@ -15,6 +15,12 @@ class Order {
   final String customerAddress;
   final String serviceType;
 
+  final String? lokasi;
+  final String? workerDescription;
+  final String? workerName;
+  final String? workerId;
+  final String? workerAvatar;
+
   Order({
     required this.id,
     required this.status,
@@ -26,6 +32,11 @@ class Order {
     required this.customerId,
     required this.category,
     required this.serviceType,
+    this.lokasi,
+    this.workerDescription,
+    this.workerName,
+    this.workerId,
+    this.workerAvatar,
   });
 
   factory Order.fromJson(Map<String, dynamic> json) {
@@ -59,6 +70,11 @@ class Order {
       customerId: json['customerId'] ?? '',
       category: json['category'] ?? '',
       serviceType: json['serviceType'] ?? '',
+      lokasi: json['lokasi'] ?? '',
+      workerDescription: json['workerDescription'] ?? '',
+      workerName: json['workerName'] ?? '',
+      workerId: json['workerId'] ?? '',
+      workerAvatar: json['workerAvatar'] ?? '',
     );
   }
 

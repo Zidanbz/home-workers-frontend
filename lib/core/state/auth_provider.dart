@@ -190,7 +190,9 @@ class AuthProvider with ChangeNotifier {
     required List<String> keahlian,
     required String deskripsi,
     required File ktpFile,
+    required File fotoDiriFile,
     String? portfolioLink,
+    required String noKtp,
   }) async {
     try {
       final response = await _apiService.registerWorker(
@@ -201,6 +203,8 @@ class AuthProvider with ChangeNotifier {
         deskripsi: deskripsi,
         ktpFile: ktpFile,
         portfolioLink: portfolioLink,
+        noKtp: noKtp,
+        fotoDiriFile: fotoDiriFile,
       );
 
       final user = User.fromJson(response['user']);

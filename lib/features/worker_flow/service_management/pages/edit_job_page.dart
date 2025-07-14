@@ -10,6 +10,25 @@ import '../../../../core/state/auth_provider.dart';
 
 enum ServiceType { fixed, survey }
 
+final List<CategoryItem> categories = [
+  CategoryItem("Kebersihan", Icons.cleaning_services),
+  CategoryItem("Perbaikan", Icons.handyman),
+  CategoryItem("Instalasi", Icons.download),
+  CategoryItem("Renovasi", Icons.home_repair_service),
+  CategoryItem("Elektronik", Icons.electrical_services),
+  CategoryItem("Otomotif", Icons.directions_car),
+  CategoryItem("Perawatan Taman", Icons.local_florist),
+  CategoryItem("Pembangunan", Icons.construction),
+  CategoryItem("Gadget", Icons.phone_android),
+];
+
+class CategoryItem {
+  final String name;
+  final IconData icon;
+
+  CategoryItem(this.name, this.icon);
+}
+
 class CreateEditJobPage extends StatefulWidget {
   final Service? service;
   const CreateEditJobPage({super.key, this.service});

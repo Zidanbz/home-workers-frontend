@@ -39,6 +39,7 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
     });
   }
 
+
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).user;
@@ -136,28 +137,24 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
           backgroundImage: NetworkImage('https://i.pravatar.cc/150?img=49'),
         ),
         const SizedBox(width: 12),
-        const Column(
+        Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Lokasi Saat Ini',
+            const Text(
+              'Halo,',
               style: TextStyle(color: Colors.white70, fontSize: 12),
             ),
-            Row(
-              children: [
-                Text(
-                  'Makassar',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-                Icon(Icons.arrow_drop_down, color: Colors.white),
-              ],
+            Text(
+              userName,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
             ),
           ],
         ),
+
         const Spacer(),
         IconButton(
           onPressed: () {
@@ -317,7 +314,7 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
     );
   }
 
-  Widget _buildCategoryList(List<Category> categories) {
+ Widget _buildCategoryList(List<Category> categories) {
     return SizedBox(
       height: 130,
       child: ListView.builder(
@@ -327,8 +324,7 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
         itemBuilder: (context, index) {
           final category = categories[index];
           return InkWell(
-              onTap: () {
-              // Navigasi ke halaman layanan berdasarkan kategori
+            onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (context) =>
@@ -349,7 +345,11 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(category.icon, color: Colors.deepPurple, size: 30),
+                  Icon(
+                    category.icon, // tidak perlu mapping lagi, sudah di model
+                    color: Colors.deepPurple,
+                    size: 30,
+                  ),
                   const SizedBox(height: 8),
                   Text(
                     category.name,
@@ -367,6 +367,7 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
       ),
     );
   }
+
 
   Widget _buildPerformerList(List<Performer> performers) {
     return SizedBox(

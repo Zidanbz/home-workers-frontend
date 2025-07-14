@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:home_workers_fe/core/api/api_service.dart';
+import 'package:home_workers_fe/features/auth/pages/login_page.dart';
 
 class RegisterWorkerPage extends StatefulWidget {
   const RegisterWorkerPage({super.key});
@@ -18,8 +21,12 @@ class _RegisterWorkerPageState extends State<RegisterWorkerPage> {
   final _passwordController = TextEditingController();
   final _ktpNumberController = TextEditingController();
   final _linkPortofolioController = TextEditingController();
+  final _deskripsiController = TextEditingController();
+  final _keahlianController = TextEditingController();
 
   File? _ktpFile;
+  File? _fotoDiriFile;
+  bool _isLoading = false;
 
   void _nextPage() {
     if (_currentPage < 3) {
@@ -41,20 +48,135 @@ class _RegisterWorkerPageState extends State<RegisterWorkerPage> {
     }
   }
 
-  Future<void> _submitRegistration() async {
-    // TODO: Lakukan validasi dan kirim data ke backend
-    print('Email: ${_emailController.text}');
-    print('Nama: ${_namaController.text}');
-    print('Password: ${_passwordController.text}');
-    print('KTP No: ${_ktpNumberController.text}');
-    print('Portofolio: ${_linkPortofolioController.text}');
-    print('File KTP: ${_ktpFile?.path}');
+    Future<void> _pickFotoDiriFile() async {
+    final result = await FilePicker.platform.pickFiles(type: FileType.image);
+    if (result != null && result.files.single.path != null) {
+      setState(() {
+        _fotoDiriFile = File(result.files.single.path!);
+      });
+    }
+  }
+
+ Future<void> _submitRegistration() async {
+    // Perbarui validasi
+    if (_ktpFile == null || _fotoDiriFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Silakan unggah file KTP dan Foto Diri')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    final keahlianList = _keahlianController.text
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    try {
+      await ApiService().registerWorker(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+        nama: _namaController.text.trim(),
+        noKtp: _ktpNumberController.text.trim(),
+        deskripsi: _deskripsiController.text.trim(),
+        keahlian: keahlianList,
+        ktpFile: _ktpFile!,
+        fotoDiriFile: _fotoDiriFile!, // <-- 3. KIRIM FOTO DIRI
+        portfolioLink: _linkPortofolioController.text.trim(),
+      );
+
+      if (mounted) {
+        await _showSuccessDialog();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Gagal registrasi: $e')));
+        print(e);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _showSuccessDialog() async {
+    final navigator = Navigator.of(context);
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20.0),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                const Icon(
+                  Icons.mark_email_read_outlined,
+                  color: Colors.green,
+                  size: 70,
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Registrasi Berhasil!',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Akun Anda telah dibuat dan sedang dalam proses peninjauan oleh Admin.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, color: Colors.black54),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueGrey,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'Oke, Saya Mengerti',
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      navigator.pushAndRemoveUntil(
+                        MaterialPageRoute(
+                          builder: (context) => const LoginPage(),
+                        ),
+                        (Route<dynamic> route) => false,
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final steps = ['Akun', 'KTP', 'Portofolio', 'Syarat'];
-    final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -130,8 +252,17 @@ class _RegisterWorkerPageState extends State<RegisterWorkerPage> {
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.all(24),
         child: ElevatedButton.icon(
-          icon: Icon(_currentPage < 3 ? Icons.arrow_forward : Icons.check),
-          onPressed: _nextPage,
+          icon: _isLoading
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : Icon(_currentPage < 3 ? Icons.arrow_forward : Icons.check),
+          onPressed: _isLoading ? null : _nextPage,
           label: Text(_currentPage < 3 ? 'Lanjut' : 'Daftar'),
           style: ElevatedButton.styleFrom(
             padding: const EdgeInsets.symmetric(vertical: 16),
@@ -179,29 +310,60 @@ class _RegisterWorkerPageState extends State<RegisterWorkerPage> {
     );
   }
 
-  Widget _buildStep2UploadKtp() {
+    Widget _buildStep2UploadKtp() {
     return _buildCardWrapper(
-      title: 'Upload KTP Anda',
+      title: 'Upload Dokumen',
       children: [
+        // Picker untuk Foto Diri
+        const Text('Pilih Foto Diri Anda', style: TextStyle(fontSize: 16)),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: _pickFotoDiriFile,
+          child: Container(
+            height: 160,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey),
+            ),
+            child: _fotoDiriFile != null
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.file(
+                      _fotoDiriFile!,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                    ),
+                  )
+                : const Center(child: Text('Klik untuk pilih Foto Diri')),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Picker untuk KTP
         const Text('Pilih Foto KTP', style: TextStyle(fontSize: 16)),
         const SizedBox(height: 8),
         GestureDetector(
           onTap: _pickKtpFile,
           child: Container(
             height: 160,
+            width: double.infinity,
             decoration: BoxDecoration(
               color: Colors.grey[200],
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: Colors.grey),
             ),
-            child: Center(
-              child: _ktpFile != null
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.file(_ktpFile!, fit: BoxFit.cover),
-                    )
-                  : const Text('Klik untuk pilih file KTP'),
-            ),
+            child: _ktpFile != null
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.file(
+                      _ktpFile!,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                    ),
+                  )
+                : const Center(child: Text('Klik untuk pilih file KTP')),
           ),
         ),
         const SizedBox(height: 16),
@@ -217,17 +379,43 @@ class _RegisterWorkerPageState extends State<RegisterWorkerPage> {
     );
   }
 
+  // Ganti fungsi lama Anda dengan yang ini
+
   Widget _buildStep3UploadPortfolio() {
     return _buildCardWrapper(
-      title: 'Link Portofolio (Opsional)',
+      title: 'Data Tambahan',
       children: [
+        // Kolom untuk Link Portofolio
         TextFormField(
           controller: _linkPortofolioController,
           decoration: const InputDecoration(
-            hintText: 'https://portfolio.example.com',
+            labelText: 'Link Portofolio (Opsional)',
             prefixIcon: Icon(Icons.link),
           ),
           keyboardType: TextInputType.url,
+        ),
+        const SizedBox(height: 16),
+
+        // Kolom untuk Keahlian (YANG HILANG)
+        TextFormField(
+          controller: _keahlianController,
+          decoration: const InputDecoration(
+            labelText: 'Keahlian (pisahkan dengan koma)',
+            prefixIcon: Icon(Icons.build),
+            hintText: 'Contoh: tukang listrik, ahli pipa, dll.',
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Kolom untuk Deskripsi Diri (YANG HILANG)
+        TextFormField(
+          controller: _deskripsiController,
+          decoration: const InputDecoration(
+            labelText: 'Deskripsi Diri',
+            prefixIcon: Icon(Icons.description),
+            hintText: 'Jelaskan pengalaman dan keunggulan Anda.',
+          ),
+          maxLines: 3,
         ),
       ],
     );

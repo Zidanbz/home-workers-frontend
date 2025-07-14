@@ -29,7 +29,7 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
       backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
         title: const Text(
-          'Pesanan',
+          'Detail Layanan',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.white,
@@ -42,7 +42,7 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Error: \${snapshot.error}'));
+            return Center(child: Text('Error: ${snapshot.error}'));
           }
           if (!snapshot.hasData) {
             return const Center(child: Text('Layanan tidak ditemukan.'));
@@ -50,7 +50,6 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
 
           final service = snapshot.data!;
           final workerInfo = service.workerInfo;
-
           return Column(
             children: [
               Expanded(
@@ -65,19 +64,20 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
                       const SizedBox(height: 24),
                       _buildInfoRow(Icons.category_outlined, service.category),
                       const SizedBox(height: 8),
-                      _buildInfoRow(
-                        Icons.location_on_outlined,
-                        'Makassar, BTP',
-                      ),
+                      // _buildInfoRow(
+                      //   Icons.location_on_outlined,
+                      //   'Makassar, BTP',
+                      // ),
                       const SizedBox(height: 8),
-                      _buildInfoRow(Icons.access_time_outlined, '10:00 WITA'),
                       _buildInfoRow(
                         Icons.payment_outlined,
-                        service.metodePembayaran.join(' & '),
+                        service.metodePembayaran.isNotEmpty
+                            ? service.metodePembayaran.join(' & ')
+                            : 'Metode belum tersedia',
                       ),
                       const SizedBox(height: 24),
                       const Text(
-                        'Pembersihan Apartemen',
+                        'Deskripsi Layanan',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -120,7 +120,8 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
             CircleAvatar(
               radius: 25,
               backgroundImage: NetworkImage(
-                workerInfo['avatarUrl'] ?? 'https://i.pravatar.cc/150',
+                workerInfo['avatarUrl'] ??
+                    'https://i.pravatar.cc/150?u=${workerInfo['id']}',
               ),
             ),
             const SizedBox(width: 12),
@@ -135,20 +136,13 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
                       fontSize: 16,
                     ),
                   ),
-                  Row(
-                    children: [
-                      const Icon(Icons.star, color: Colors.amber, size: 16),
-                      const SizedBox(width: 4),
-                      Text(
-                        "${workerInfo['rating']?.toStringAsFixed(1) ?? 'N/A'} (${workerInfo['jumlahOrderSelesai'] ?? 0})",
-                      ),
-                    ],
-                  ),
                 ],
               ),
             ),
             IconButton(
-              onPressed: () {},
+              onPressed: () {
+                // TODO: Navigasi ke halaman chat
+              },
               icon: const Icon(
                 Icons.chat_bubble_outline,
                 color: Colors.deepPurple,
@@ -162,12 +156,15 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
 
   Widget _buildServiceHeader(Service service) {
     final postDate = DateFormat('dd.MM.yyyy').format(service.dibuatPada);
+
     return Row(
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: Image.network(
-            service.fotoUtamaUrl,
+            service.fotoUtamaUrl.isNotEmpty
+                ? service.fotoUtamaUrl
+                : 'https://via.placeholder.com/80',
             width: 80,
             height: 80,
             fit: BoxFit.cover,
@@ -184,16 +181,12 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
                 "Diposting: $postDate",
                 style: const TextStyle(color: Colors.grey, fontSize: 12),
               ),
-              Text(
-                "Hingga: ${service.formattedExpiryDate}",
-                style: const TextStyle(color: Colors.grey, fontSize: 12),
-              ),
               const SizedBox(height: 8),
               Text(
-                service.tipeLayanan == 'survey'
-                    ? "Biaya Survei: ${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ').format(service.biayaSurvei)}"
-                    : service.formattedPrice,
-
+                NumberFormat.currency(
+                  locale: 'id_ID',
+                  symbol: 'Rp ',
+                ).format(service.harga),
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,

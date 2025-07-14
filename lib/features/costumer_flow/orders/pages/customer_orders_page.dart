@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:home_workers_fe/features/costumer_flow/chat/pages/customer_chat_list_page.dart';
+import 'package:home_workers_fe/features/costumer_flow/orders/pages/customer_order_detail_page.dart';
 import 'package:home_workers_fe/features/notifications/pages/notification_page.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -30,8 +31,15 @@ class _CustomerOrdersPageState extends State<CustomerOrdersPage>
   Future<void> _loadOrders() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.token != null) {
+      // ✅ Tunggu dulu hasil Future-nya
+      final future = _apiService.getMyOrdersCustomer(
+        authProvider.token!,
+        asWorker: false,
+      );
+
+      // ✅ Baru assign ke state
       setState(() {
-        _ordersFuture = _apiService.getMyOrdersCustomer(authProvider.token!);
+        _ordersFuture = future;
       });
     }
   }
@@ -327,7 +335,7 @@ class _OrderCard extends StatelessWidget {
                     const SizedBox(width: 4),
                     Text(
                       DateFormat(
-                        'EEEE, HH:mm',
+                        'EEEE, d MMM yyyy • HH:mm',
                         'id_ID',
                       ).format(order.jadwalPerbaikan),
                       style: const TextStyle(
@@ -362,6 +370,13 @@ class _OrderCard extends StatelessWidget {
                     if (canReview) const SizedBox(width: 8),
                     OutlinedButton.icon(
                       onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                CustomerOrderDetailPage(order: order),
+                          ),
+                        );
                         // TODO: Navigasi ke detail pesanan
                       },
                       icon: const Icon(Icons.info_outline, size: 16),

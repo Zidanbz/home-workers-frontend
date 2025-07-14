@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:home_workers_fe/core/state/auth_provider.dart';
+import 'package:home_workers_fe/features/auth/pages/login_page.dart';
 import 'package:home_workers_fe/features/auth/pages/register_customer_page.dart';
 import 'package:home_workers_fe/features/auth/pages/register_worker_page.dart';
 import 'package:provider/provider.dart';
@@ -50,7 +51,11 @@ class SelectRolePage extends StatelessWidget {
                   listen: false,
                 ).showLoginPage();
                 // TODO: Navigasi ke halaman registrasi Customer
-                 Navigator.of(context).push(MaterialPageRoute(builder: (context) => const RegisterCustomerPage()));
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const RegisterCustomerPage(),
+                  ),
+                );
                 print('Navigasi ke Registrasi Customer');
               },
             ),
@@ -67,7 +72,11 @@ class SelectRolePage extends StatelessWidget {
                   listen: false,
                 ).showLoginPage();
                 // TODO: Navigasi ke halaman registrasi Worker
-                 Navigator.of(context).push(MaterialPageRoute(builder: (context) => const RegisterWorkerPage()));
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const RegisterWorkerPage(),
+                  ),
+                );
                 print('Navigasi ke Registrasi Worker');
               },
             ),
@@ -81,8 +90,13 @@ class SelectRolePage extends StatelessWidget {
                 ),
                 TextButton(
                   onPressed: () {
-                    Provider.of<AuthProvider>(context, listen: false)
-                        .showLoginPage();
+                    Provider.of<AuthProvider>(
+                      context,
+                      listen: false,
+                    ).showLoginPage();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const LoginPage()),
+                    );
                   },
                   child: const Text(
                     'Login sekarang!',

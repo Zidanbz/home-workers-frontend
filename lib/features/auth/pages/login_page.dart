@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:home_workers_fe/features/auth/pages/select_role_page.dart';
+import 'package:home_workers_fe/features/main_page.dart';
 import 'package:provider/provider.dart';
 import '../../../core/state/auth_provider.dart';
 
@@ -18,29 +19,43 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _performLogin() async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    // Simpan provider sebelum blok async untuk menghindari warning
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    // --- VALIDASI INPUT ---
     if (email.isEmpty || password.isEmpty) {
       scaffoldMessenger.showSnackBar(
-        const SnackBar(
-          backgroundColor: Colors.orange,
-          content: Text('Email dan password tidak boleh kosong.'),
-        ),
+        const SnackBar(content: Text('Email dan password tidak boleh kosong.')),
       );
-      return; // Hentikan eksekusi jika input tidak valid
+      return;
     }
+
     if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
-      await Provider.of<AuthProvider>(
-        context,
-        listen: false,
-      ).login(email, password);
+      // 1. Lakukan login
+      await authProvider.login(email, password);
+
+      // 2. Jika berhasil, dapatkan role dari user yang baru saja login
+      final userRole = authProvider.user?.role;
+
+      // 3. Cek jika role ada, lalu navigasi dengan membawa role tersebut
+      if (userRole != null && mounted) {
+        await navigator.pushAndRemoveUntil(
+          MaterialPageRoute(
+            // Berikan userRole ke MainPage
+            builder: (context) => MainPage(userRole: userRole),
+          ),
+          (route) => false, // Hapus semua halaman sebelumnya
+        );
+      } else {
+        // Jika karena suatu alasan role tidak ditemukan setelah login
+        throw Exception("Gagal mendapatkan role pengguna.");
+      }
     } catch (e) {
       if (!mounted) return;
       scaffoldMessenger.showSnackBar(
@@ -53,9 +68,7 @@ class _LoginPageState extends State<LoginPage> {
       );
     } finally {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -67,12 +80,12 @@ class _LoginPageState extends State<LoginPage> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1E232C)),
-          onPressed: () {
-            Provider.of<AuthProvider>(context, listen: false).showWelcomePage();
-          },
-        ),
+        // leading: IconButton(
+        //   icon: const Icon(Icons.arrow_back, color: Color(0xFF1E232C)),
+        //   onPressed: () {
+        //     Provider.of<AuthProvider>(context, listen: false).showWelcomePage();
+        //   },
+        // ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24.0),
