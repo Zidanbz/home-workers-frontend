@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:home_workers_fe/features/worker_flow/wallet/worker_withdraw_page.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/api/api_service.dart';
@@ -146,7 +147,15 @@ class _WorkerWalletPageState extends State<WorkerWalletPage>
             Center(
               child: OutlinedButton.icon(
                 onPressed: () {
-                  // TODO: Navigasi ke halaman tarik dana
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const WorkerWithdrawPage(),
+                    ),
+                  ).then((_) {
+                    // Refresh dompet setelah kembali dari halaman tarik
+                    _loadWalletData();
+                  });
                 },
                 icon: const Icon(Icons.arrow_downward),
                 label: const Text('Tarik'),

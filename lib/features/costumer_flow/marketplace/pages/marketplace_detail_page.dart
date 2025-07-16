@@ -23,16 +23,34 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
     _serviceDetailFuture = _apiService.getServiceById(widget.serviceId);
   }
 
+  // METODE BANTU BARU untuk mendapatkan ikon kategori secara dinamis
+  IconData _getIconForCategory(String category) {
+    switch (category.toLowerCase()) {
+      case 'kebersihan':
+        return Icons.cleaning_services_outlined;
+      case 'perbaikan':
+        return Icons.build_outlined;
+      case 'konstruksi':
+        return Icons.construction_outlined;
+      case 'layanan elektronik':
+        return Icons.electrical_services_outlined;
+      case 'home improvement':
+        return Icons.cottage_outlined;
+      default:
+        return Icons.work_outline;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: const Color(0xFFFFFFFF),
       appBar: AppBar(
         title: const Text(
           'Detail Layanan',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFF1A374D),
         elevation: 0.5,
       ),
       body: FutureBuilder<Service>(
@@ -60,14 +78,10 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
                     children: [
                       _buildWorkerHeader(workerInfo),
                       const SizedBox(height: 16),
+                      // PERUBAHAN UTAMA ADA DI DALAM METHOD DI BAWAH INI
                       _buildServiceHeader(service),
                       const SizedBox(height: 24),
                       _buildInfoRow(Icons.category_outlined, service.category),
-                      const SizedBox(height: 8),
-                      // _buildInfoRow(
-                      //   Icons.location_on_outlined,
-                      //   'Makassar, BTP',
-                      // ),
                       const SizedBox(height: 8),
                       _buildInfoRow(
                         Icons.payment_outlined,
@@ -79,8 +93,9 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
                       const Text(
                         'Deskripsi Layanan',
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
+                          color: Color(0xFF1A374D),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -92,8 +107,9 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
                       const Text(
                         'Foto',
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
+                          color: Color(0xFF1A374D),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -111,8 +127,10 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
   }
 
   Widget _buildWorkerHeader(Map<String, dynamic> workerInfo) {
+    // ... (Tidak ada perubahan di sini, biarkan seperti semula)
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: const Color(0xFFD9D9D9),
       child: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Row(
@@ -134,6 +152,7 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
+                      color: Color(0xFF1A374D),
                     ),
                   ),
                 ],
@@ -145,7 +164,7 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
               },
               icon: const Icon(
                 Icons.chat_bubble_outline,
-                color: Colors.deepPurple,
+                color: Color(0xFF1A374D),
               ),
             ),
           ],
@@ -155,7 +174,28 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
   }
 
   Widget _buildServiceHeader(Service service) {
-    final postDate = DateFormat('dd.MM.yyyy').format(service.dibuatPada);
+    final postDate = DateFormat(
+      'dd MMMM yyyy',
+      'id_ID',
+    ).format(service.dibuatPada);
+
+    // PERUBAHAN DI SINI: Tentukan label dan nilai harga berdasarkan tipe layanan
+    final formatCurrency = NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp ',
+      decimalDigits: 0,
+    );
+
+    String priceLabel;
+    String priceValue;
+
+    if (service.tipeLayanan == 'survey') {
+      priceLabel = 'Biaya Survei';
+      priceValue = formatCurrency.format(service.biayaSurvei ?? 0);
+    } else {
+      priceLabel = 'Harga Layanan';
+      priceValue = formatCurrency.format(service.harga ?? 0);
+    }
 
     return Row(
       children: [
@@ -181,16 +221,20 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
                 "Diposting: $postDate",
                 style: const TextStyle(color: Colors.grey, fontSize: 12),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
+              // Menampilkan label harga
               Text(
-                NumberFormat.currency(
-                  locale: 'id_ID',
-                  symbol: 'Rp ',
-                ).format(service.harga),
+                priceLabel,
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+              const SizedBox(height: 2),
+              // Menampilkan nilai harga
+              Text(
+                priceValue,
                 style: const TextStyle(
-                  fontSize: 18,
+                  fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: Colors.deepPurple,
+                  color: Color(0xFF1A374D),
                 ),
               ),
             ],
@@ -202,9 +246,10 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
             color: const Color(0xFFE9E6FF),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: const Icon(
-            Icons.cleaning_services_outlined,
-            color: Colors.deepPurple,
+          // Menggunakan ikon dinamis dari metode baru
+          child: Icon(
+            _getIconForCategory(service.category),
+            color: const Color(0xFF1A374D),
           ),
         ),
       ],
@@ -212,6 +257,7 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
   }
 
   Widget _buildInfoRow(IconData icon, String text) {
+    // ... (Tidak ada perubahan di sini, biarkan seperti semula)
     return Row(
       children: [
         Icon(icon, color: Colors.grey[600], size: 20),
@@ -222,6 +268,7 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
   }
 
   Widget _buildPhotoGallery(List<dynamic> photoUrls) {
+    // ... (Tidak ada perubahan di sini, biarkan seperti semula)
     if (photoUrls.isEmpty) return const SizedBox.shrink();
     return SizedBox(
       height: 100,
@@ -247,10 +294,11 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
   }
 
   Widget _buildBottomBar(Service service) {
+    // ... (Tidak ada perubahan di sini, sudah benar)
     return Container(
       padding: const EdgeInsets.all(20).copyWith(top: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFFFFFFFF),
         boxShadow: [
           BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10),
         ],
@@ -266,7 +314,7 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
             );
           },
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF1E232C),
+            backgroundColor: const Color(0xFF1A374D),
             foregroundColor: Colors.white,
             minimumSize: const Size(double.infinity, 50),
             shape: RoundedRectangleBorder(

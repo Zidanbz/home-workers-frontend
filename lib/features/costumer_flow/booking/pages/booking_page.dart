@@ -38,27 +38,6 @@ class _BookingPageState extends State<BookingPage> {
 
   Map<String, List<String>> _bookedSlotsByDate = {};
 
-  Future<void> _fetchBookedSlots(DateTime date) async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final token = authProvider.token;
-    final formattedDate = DateFormat('yyyy-MM-dd').format(date);
-
-    try {
-      final workerId = widget.service.workerInfo['id'];
-      final result = await _apiService.getBookedSlots(
-        token: token!,
-        workerId: workerId,
-        date: formattedDate,
-      );
-
-      setState(() {
-        _bookedSlotsByDate[formattedDate] = List<String>.from(result);
-      });
-    } catch (e) {
-      debugPrint('Gagal fetch booked slots: $e');
-    }
-  }
-
   List<String> _bookedSlots = [];
 
   Future<void> _loadBookedSlots() async {
@@ -116,53 +95,30 @@ class _BookingPageState extends State<BookingPage> {
         minute,
       );
 
-      if (widget.service.tipeLayanan == 'fixed') {
-        final response = await _apiService.createOrderWithPayment(
-          token: token,
-          serviceId: widget.service.id,
-          jadwalPerbaikan: schedule,
-        );
+      final response = await _apiService.createOrderWithPayment(
+        token: token,
+        serviceId: widget.service.id,
+        jadwalPerbaikan: schedule,
+        catatan: 'Permintaan survei dulu ya kak!',
+      );
 
-        final snapToken = response['snapToken'];
-        final snapRedirectUrl =
-            "https://app.sandbox.midtrans.com/snap/v2/vtweb/$snapToken";
+      final snapToken = response['snapToken'];
+      final snapRedirectUrl =
+          "https://app.sandbox.midtrans.com/snap/v2/vtweb/$snapToken";
 
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => SnapPaymentPage(redirectUrl: snapRedirectUrl),
-          ),
-        );
-      } else {
-        // survey
-        final response = await _apiService.createOrder(
-          token: token,
-          serviceId: widget.service.id,
-          jadwalPerbaikan: schedule,
-        );
-
-        await showDialog(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: const Text('Permintaan Berhasil Dikirim'),
-            content: const Text(
-              'Worker akan mengirimkan penawaran harga berdasarkan hasil survei. Mohon tunggu konfirmasi selanjutnya.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () =>
-                    Navigator.of(context).popUntil((route) => route.isFirst),
-                child: const Text('Kembali ke Beranda'),
-              ),
-            ],
-          ),
-        );
-      }
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SnapPaymentPage(redirectUrl: snapRedirectUrl),
+        ),
+      );
     } catch (e) {
       scaffoldMessenger.showSnackBar(
         SnackBar(
           backgroundColor: Colors.red,
-          content: Text('Gagal: ${e.toString().replaceAll('Exception: ', '')}'),
+          content: Text(
+            'Gagal: ${e.toString().replaceFirst('Exception: ', '')}',
+          ),
         ),
       );
     } finally {
@@ -352,6 +308,8 @@ class _BookingPageState extends State<BookingPage> {
     );
   }
 
+  
+
   Widget _buildTimeSlotPicker() {
     final slots = _availableTimeSlots;
     if (slots.isEmpty) {
@@ -360,15 +318,34 @@ class _BookingPageState extends State<BookingPage> {
         style: TextStyle(color: Colors.red),
       );
     }
+
+    final now = DateTime.now();
+    final isToday = DateUtils.isSameDay(_selectedDate, now);
     final booked =
         _bookedSlotsByDate[DateFormat('yyyy-MM-dd').format(_selectedDate)] ??
         [];
+
     return Wrap(
       spacing: 12.0,
       runSpacing: 12.0,
       children: slots.map((slot) {
         final isSelected = _selectedTimeSlot == slot;
-        final isDisabled = _bookedSlots.contains(slot);
+        final isBooked = _bookedSlots.contains(slot);
+
+        // Parsing slot "08.00" jadi DateTime
+        final match = RegExp(r'(\d{2})\.(\d{2})').firstMatch(slot);
+        final slotHour = int.parse(match?.group(1) ?? '0');
+        final slotMinute = int.parse(match?.group(2) ?? '0');
+        final slotTime = DateTime(
+          _selectedDate.year,
+          _selectedDate.month,
+          _selectedDate.day,
+          slotHour,
+          slotMinute,
+        );
+
+        final isPast = isToday && slotTime.isBefore(now);
+        final isDisabled = isBooked || isPast;
 
         return ChoiceChip(
           label: Text(slot),

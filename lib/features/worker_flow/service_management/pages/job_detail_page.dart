@@ -108,11 +108,11 @@ class _JobDetailPageState extends State<JobDetailPage> {
       backgroundColor: const Color(0xFFF9FAFB),
       appBar: AppBar(
         title: const Text('Detail Pekerjaan'),
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFF1A374D), // Primary color
         elevation: 1,
-        iconTheme: const IconThemeData(color: Colors.black),
+        iconTheme: const IconThemeData(color: Colors.white),
         titleTextStyle: const TextStyle(
-          color: Colors.black,
+          color: Colors.white,
           fontWeight: FontWeight.bold,
           fontSize: 18,
         ),
@@ -203,7 +203,7 @@ class _JobDetailPageState extends State<JobDetailPage> {
               if (result == true) _loadServiceDetails();
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.indigo,
+              backgroundColor: const Color(0xFF1A374D), // Primary color
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -252,6 +252,7 @@ class _JobDetailPageState extends State<JobDetailPage> {
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
+                      color: Color(0xFF1A374D), // Primary color
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -265,6 +266,7 @@ class _JobDetailPageState extends State<JobDetailPage> {
                     style: const TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
+                      color: Color(0xFF1A374D), // Primary color
                     ),
                   ),
                 ],
@@ -281,12 +283,15 @@ class _JobDetailPageState extends State<JobDetailPage> {
       padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
         children: [
-          Icon(icon, color: Colors.grey[700], size: 20),
+          Icon(icon, color: const Color(0xFF1A374D), size: 20), // Primary color
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               text,
-              style: TextStyle(fontSize: 14, color: Colors.grey[900]),
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF1A374D),
+              ), // Primary color
             ),
           ),
         ],

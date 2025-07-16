@@ -149,7 +149,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       setState(() => _isProcessing = true);
       try {
         final token = Provider.of<AuthProvider>(context, listen: false).token!;
-        await _apiService.sendQuote(
+        await _apiService.proposeQuote(
           token: token,
           orderId: order.id,
           proposedPrice: result,
@@ -174,6 +174,36 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     }
   }
 
+  Future<void> _handleUpdateStatus(String orderId, String newStatus) async {
+    final token = Provider.of<AuthProvider>(context, listen: false).token!;
+    setState(() => _isProcessing = true);
+
+    try {
+      await _apiService.updateOrderStatus(
+        token: token,
+        orderId: orderId,
+        newStatus: newStatus,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Colors.green,
+          content: Text('Status berhasil diperbarui.'),
+        ),
+      );
+      _loadOrderDetails();
+    } catch (e) {
+      print(e);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.red,
+          content: Text('Gagal memperbarui status: $e'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -182,6 +212,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           'Detail Pesanan',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
+        backgroundColor: const Color(0xFF1A374D),
       ),
       body: FutureBuilder<Order>(
         future: _orderFuture,
@@ -194,6 +225,9 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
             return const Center(child: Text('Detail pesanan tidak ditemukan.'));
 
           final order = snapshot.data!;
+          print('Status: ${order.status}');
+          print('ServiceType: ${order.serviceType}');
+
           return RefreshIndicator(
             onRefresh: _loadOrderDetails,
             child: ListView(
@@ -217,12 +251,17 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                     _buildInfoRow(Icons.schedule, order.formattedSchedule),
                     _buildInfoRow(
                       Icons.receipt_long_outlined,
-                      'Status: ${order.status}',
+                      'Status: ${_getFormattedStatus(order.status)}',
                     ),
                     _buildInfoRow(
                       Icons.category_outlined,
                       'Tipe: ${order.serviceType}',
                     ),
+                    if (order.status == 'quote_proposed')
+                      _buildInfoRow(
+                        Icons.monetization_on_outlined,
+                        'Penawaran: Rp ${order.quotedPrice}',
+                      ),
                   ],
                 ),
                 const SizedBox(height: 40),
@@ -245,11 +284,13 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           Expanded(
             child: OutlinedButton(
               onPressed: _handleRejectOrder,
-              // TODO: Tambahkan logika tolak pesanan
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.red,
                 side: const BorderSide(color: Colors.red),
                 padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
               child: const Text('Tolak Pesanan'),
             ),
@@ -259,9 +300,12 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
             child: ElevatedButton(
               onPressed: _handleAcceptOrder,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
+                backgroundColor: const Color(0xFF1A374D),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
               child: const Text('Terima Pesanan'),
             ),
@@ -270,17 +314,50 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       );
     }
 
-    // Jika sudah accepted dan tipe survei, tampilkan tombol "Ajukan Penawaran"
-    if (order.status == 'accepted' && order.serviceType == 'survey') {
+    if ((order.status == 'accepted' || order.status == 'quote_proposed') &&
+        order.serviceType == 'survey') {
       return ElevatedButton.icon(
         icon: const Icon(Icons.attach_money),
-        label: const Text('Ajukan Penawaran'),
+        label: Text(
+          order.status == 'quote_proposed'
+              ? 'Ubah Penawaran'
+              : 'Ajukan Penawaran',
+        ),
+        onPressed: () => _handleSendQuote(order),
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.orange,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
-        onPressed: () => _handleSendQuote(order),
+      );
+    }
+
+    if (order.status == 'quote_accepted') {
+      return ElevatedButton.icon(
+        icon: const Icon(Icons.play_arrow),
+        label: const Text('Mulai Pengerjaan'),
+        onPressed: () => _handleUpdateStatus(order.id, 'work_in_progress'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.green,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+    }
+
+    if (order.status == 'work_in_progress') {
+      return ElevatedButton.icon(
+        icon: const Icon(Icons.check_circle),
+        label: const Text('Selesaikan Pekerjaan'),
+        onPressed: () => _handleUpdateStatus(order.id, 'completed'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
       );
     }
 
@@ -292,7 +369,11 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       padding: const EdgeInsets.only(bottom: 8.0),
       child: Text(
         title,
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        style: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          color: Color(0xFF1A374D),
+        ),
       ),
     );
   }
@@ -300,7 +381,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   Widget _buildInfoCard({required List<Widget> children}) {
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 2,
+      elevation: 4,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(children: children),
@@ -313,11 +394,32 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
         children: [
-          Icon(icon, color: Colors.grey[600], size: 20),
+          Icon(icon, color: const Color(0xFF1A374D), size: 20),
           const SizedBox(width: 16),
           Expanded(child: Text(text, style: const TextStyle(fontSize: 16))),
         ],
       ),
     );
+  }
+
+  String _getFormattedStatus(String status) {
+    switch (status) {
+      case 'quote_proposed':
+        return 'Penawaran diajukan';
+      case 'quote_rejected':
+        return 'Penawaran ditolak';
+      case 'quote_accepted':
+        return 'Penawaran diterima';
+      case 'pending':
+        return 'Menunggu Konfirmasi';
+      case 'accepted':
+        return 'Diterima';
+      case 'work_in_progress':
+        return 'Sedang Dikerjakan';
+      case 'completed':
+        return 'Selesai';
+      default:
+        return status;
+    }
   }
 }

@@ -61,7 +61,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       );
 
       // Refresh data pengguna di AuthProvider
-      await authProvider.refreshUserData();
+      // await authProvider.refreshUserData();
 
       scaffoldMessenger.showSnackBar(
         const SnackBar(

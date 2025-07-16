@@ -1,4 +1,3 @@
-import 'package:home_workers_fe/core/models/category_model.dart';
 import 'package:intl/intl.dart';
 
 class Order {
@@ -8,18 +7,17 @@ class Order {
   final DateTime dibuatPada;
   final String customerId;
   final String category;
-
-  // Informasi tambahan yang kita dapat dari backend
   final String serviceName;
   final String customerName;
   final String customerAddress;
   final String serviceType;
-
+final bool hasBeenReviewed;
   final String? lokasi;
   final String? workerDescription;
   final String? workerName;
   final String? workerId;
   final String? workerAvatar;
+  final num? quotedPrice;
 
   Order({
     required this.id,
@@ -37,19 +35,18 @@ class Order {
     this.workerName,
     this.workerId,
     this.workerAvatar,
+    this.quotedPrice,
+    required this.hasBeenReviewed,
   });
 
   factory Order.fromJson(Map<String, dynamic> json) {
-    // Helper untuk parsing tanggal dari format Firestore dengan aman
     DateTime parseFirestoreTimestamp(dynamic timestamp) {
       if (timestamp == null) return DateTime.now();
-      // Cek jika formatnya adalah Map dari Firestore
       if (timestamp is Map && timestamp['_seconds'] != null) {
         return DateTime.fromMillisecondsSinceEpoch(
           timestamp['_seconds'] * 1000,
         );
       }
-      // Fallback jika formatnya adalah String ISO
       if (timestamp is String) {
         return DateTime.tryParse(timestamp) ?? DateTime.now();
       }
@@ -69,21 +66,23 @@ class Order {
       customerAddress: customerInfo['alamat'] ?? 'Alamat Tidak Tersedia',
       customerId: json['customerId'] ?? '',
       category: json['category'] ?? '',
-      serviceType: json['serviceType'] ?? '',
+      serviceType: json['tipeLayanan'] ?? '',
       lokasi: json['lokasi'] ?? '',
       workerDescription: json['workerDescription'] ?? '',
       workerName: json['workerName'] ?? '',
       workerId: json['workerId'] ?? '',
       workerAvatar: json['workerAvatar'] ?? '',
+      quotedPrice: json['quotedPrice'] != null
+          ? num.tryParse(json['quotedPrice'].toString())
+          : null,
+          hasBeenReviewed: json['hasBeenReviewed'] ?? false,
     );
   }
 
-  // Helper untuk format jadwal ke Bahasa Indonesia
   String get formattedSchedule {
     return DateFormat('EEEE, dd MMM, HH:mm', 'id_ID').format(jadwalPerbaikan);
   }
 
-  // Helper untuk format waktu lalu
   String get timeAgo {
     final difference = DateTime.now().difference(dibuatPada);
     if (difference.inDays > 0) return '${difference.inDays} hari lalu';

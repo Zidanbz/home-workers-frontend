@@ -39,13 +39,12 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
     });
   }
 
-
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).user;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF3A3F51), // Background utama gelap
+      backgroundColor: const Color(0xFF1A374D), // Background utama gelap
       body: SafeArea(
         bottom: false, // Agar background bisa sampai ke bawah
         child: Column(
@@ -314,7 +313,7 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
     );
   }
 
- Widget _buildCategoryList(List<Category> categories) {
+  Widget _buildCategoryList(List<Category> categories) {
     return SizedBox(
       height: 130,
       child: ListView.builder(
@@ -367,7 +366,6 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
       ),
     );
   }
-
 
   Widget _buildPerformerList(List<Performer> performers) {
     return SizedBox(

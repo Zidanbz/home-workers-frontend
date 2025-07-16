@@ -32,6 +32,7 @@ class ApiService {
         throw Exception(responseBody['message'] ?? 'Login failed');
       }
     } catch (e) {
+      print("error: $e");
       throw Exception('Could not connect to the server. Please try again.');
     }
   }
@@ -163,24 +164,42 @@ class ApiService {
     required Map<String, dynamic> serviceData,
   }) async {
     final url = Uri.parse('$_baseUrl/services');
+
+    // 1. Definisikan headers dan body sebagai variabel terpisah
+    final headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    };
+    final encodedBody = jsonEncode(serviceData);
+
+    // 2. Letakkan DEBUG PRINT di sini, SEBELUM mengirim permintaan
+    print('====================================');
+    print('MENGIRIM PERMINTAAN KE: $url');
+    print('HEADERS: $headers');
+    print('BODY: $encodedBody');
+    print('====================================');
+
     try {
+      // 3. Gunakan variabel yang sudah dibuat di dalam http.post
       final response = await http.post(
         url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode(serviceData),
+        headers: headers,
+        body: encodedBody,
       );
 
       final responseBody = jsonDecode(response.body);
 
+      // Anda bisa menambahkan print untuk melihat respons dari server
+      print('STATUS CODE: ${response.statusCode}');
+      print('RESPONSE BODY: ${response.body}');
+
       if (response.statusCode == 201 && responseBody['success'] == true) {
-        return responseBody['data'];
+        return responseBody['data'] ?? {};
       } else {
         throw Exception(responseBody['message'] ?? 'Failed to create service');
       }
     } catch (e) {
+      print('Error saat memanggil API: $e');
       throw Exception('Failed to connect to the server.');
     }
   }
@@ -833,20 +852,20 @@ class ApiService {
     }
   }
 
-  Future<void> sendQuote({
+  Future<void> proposeQuote({
     required String token,
     required String orderId,
     required num proposedPrice,
   }) async {
     final url = Uri.parse('$_baseUrl/orders/$orderId/quote');
     try {
-      final response = await http.put(
+      final response = await http.post(
         url,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-        body: jsonEncode({'proposedPrice': proposedPrice}),
+        body: jsonEncode({'price': proposedPrice}),
       );
 
       final responseBody = jsonDecode(response.body);
@@ -931,6 +950,7 @@ class ApiService {
     required String token,
     required String serviceId,
     required DateTime jadwalPerbaikan,
+    required String catatan,
   }) async {
     final url = Uri.parse('$_baseUrl/payments/initiate');
     final response = await http.post(
@@ -942,6 +962,7 @@ class ApiService {
       body: jsonEncode({
         'serviceId': serviceId,
         'jadwalPerbaikan': jadwalPerbaikan.toIso8601String(),
+        'catatan': catatan ?? '',
       }),
     );
 
@@ -950,8 +971,8 @@ class ApiService {
       print('✅ Order & Snap token: $data');
       return data;
     } else {
-      print('❌ Order error: ${response.body}');
-      throw Exception('Gagal membuat order dan transaksi Midtrans $e');
+      final json = jsonDecode(response.body);
+      throw Exception(json['message'] ?? 'Terjadi kesalahan');
     }
   }
 
@@ -998,6 +1019,136 @@ class ApiService {
       throw Exception(
         responseBody['message'] ?? 'Failed to fetch booked slots',
       );
+    }
+  }
+
+  Future<void> requestWithdraw({
+    required String token,
+    required int amount,
+    required String destinationType,
+    required String destinationValue,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/wallet/me/withdraw'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'amount': amount,
+        'destination': {'type': destinationType, 'value': destinationValue},
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(jsonDecode(response.body)['message']);
+    }
+  }
+
+  Future<void> markNotificationAsRead({
+    required String token,
+    required String notificationId,
+  }) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/notifications/$notificationId/read'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Gagal menandai notifikasi sebagai dibaca');
+    }
+  }
+
+  Future<void> updateOrderStatus({
+    required String token,
+    required String orderId,
+    required String newStatus,
+  }) async {
+    final url = Uri.parse('$_baseUrl/orders/$orderId/status');
+
+    final response = await http.patch(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'status': newStatus}),
+    );
+    print('Response Status Code: ${response.statusCode}');
+    print('Response Body: ${response.body}');
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        jsonDecode(response.body)['message'] ??
+            'Gagal memperbarui status order',
+      );
+    }
+  }
+
+  Future<void> respondToQuote({
+    required String token,
+    required String orderId,
+    required String decision,
+  }) async {
+    final url = Uri.parse('$_baseUrl/orders/$orderId/quote/respond');
+    final response = await http.put(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'decision': decision}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to respond to quote: ${response.body}');
+    }
+  }
+
+  Future<Map<String, dynamic>> startPaymentForQuote({
+    required String token,
+    required String orderId,
+  }) async {
+    final url = Uri.parse('$_baseUrl/payments/start/$orderId');
+
+    final response = await http.post(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['success'] == true) {
+        return data['data']; // { orderId, snapToken }
+      } else {
+        throw Exception(data['message']);
+      }
+    } else {
+      throw Exception('Gagal memulai pembayaran: ${response.body}');
+    }
+  }
+
+  Future<void> submitReview({
+    required String token,
+    required String orderId,
+    required int rating,
+    required String comment,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/reviews/orders/$orderId'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'rating': rating, 'comment': comment}),
+    );
+
+    if (response.statusCode != 201) {
+      final data = jsonDecode(response.body);
+      throw Exception(data['message'] ?? 'Gagal mengirim ulasan');
     }
   }
 }

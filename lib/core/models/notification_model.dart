@@ -8,6 +8,7 @@ class NotificationItem {
   final DateTime timestamp;
   final bool isRead;
   final String type;
+  final String? relatedId; 
 
   NotificationItem({
     required this.id,
@@ -16,6 +17,7 @@ class NotificationItem {
     required this.timestamp,
     required this.isRead,
     required this.type,
+    this.relatedId,
   });
 
   factory NotificationItem.fromJson(Map<String, dynamic> json) {
@@ -34,6 +36,7 @@ class NotificationItem {
       timestamp: parsedTimestamp,
       isRead: json['isRead'] ?? false,
       type: json['type'] ?? '',
+      relatedId: json['relatedId'],
     );
   }
 

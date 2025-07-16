@@ -69,36 +69,39 @@ class AuthProvider with ChangeNotifier {
   }
 
   // --- FUNGSI LOGIN YANG DIPERBAIKI TOTAL ---
+  // --- FUNGSI LOGIN YANG SUDAH DIPERBAIKI ---
   Future<void> login(String email, String password) async {
-  try {
-    // Langkah 1: Panggil backend untuk mendapatkan ID Token dan data user
-    final result = await _apiService.loginUser(email, password);
+    try {
+      final result = await _apiService.loginUser(email, password);
 
-    if (result['user'] != null && result['idToken'] != null) {
-      // Gunakan langsung ID Token dari backend
-      final String idToken = result['idToken'];
+      // Ambil KEDUA token dari backend
+      final String? customToken = result['customToken'];
+      final String? idToken = result['idToken'];
+      final Map<String, dynamic>? userJson = result['user'];
 
-      // (Opsional) Verifikasi token ke Firebase Auth jika perlu, tapi biasanya tidak perlu
-      // final userCredential = await fba.FirebaseAuth.instance.signInWithCustomToken(idToken);
+      if (customToken != null && idToken != null && userJson != null) {
+        // LANGKAH BARU YANG PALING PENTING:
+        // Login ke Firebase SDK menggunakan customToken.
+        // Ini yang akan memberi Anda izin untuk upload file.
+        await fba.FirebaseAuth.instance.signInWithCustomToken(customToken);
+        print('Berhasil login ke Firebase SDK.');
 
-      // Simpan state dan data ke storage
-      _user = User.fromJson(result['user']);
-      _token = idToken;
+        // Bagian lama Anda tetap dipertahankan
+        _user = User.fromJson(userJson);
+        _token = idToken; // Simpan idToken untuk API calls lain
+        await _storageService.saveTokenAndRole(
+          token: _token!,
+          role: _user!.role,
+        );
 
-      await _storageService.saveTokenAndRole(
-        token: _token!,
-        role: _user!.role,
-      );
-
-      notifyListeners();
-    } else {
-      throw Exception('Invalid server response');
+        notifyListeners();
+      } else {
+        throw Exception('Respons dari backend tidak lengkap.');
+      }
+    } catch (e) {
+      rethrow;
     }
-  } catch (e) {
-    rethrow;
   }
-}
-
 
   // Fungsi tryAutoLogin juga perlu disesuaikan
   Future<void> tryAutoLogin() async {
@@ -122,9 +125,13 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> logout() async {
-    await fba.FirebaseAuth.instance.signOut(); // Logout dari Firebase client
+    // Baris ini sudah benar dan harus dipertahankan
+    await fba.FirebaseAuth.instance.signOut();
+    print('Berhasil logout dari Firebase SDK.');
+
     _user = null;
     _token = null;
+    _authScreen = AuthScreen.welcome;
     await _storageService.deleteAll();
     notifyListeners();
   }
