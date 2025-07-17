@@ -8,14 +8,14 @@ import 'package:provider/provider.dart';
 import '../../../../core/models/order_model.dart';
 
 class CustomerOrderDetailPage extends StatefulWidget {
-  final Order order;
+  final Order initialOrder;
 
   static const Color primaryColor = Color(0xFF1A374D);
   static const Color lightGray = Color(0xFFD9D9D9);
   static const Color white = Color(0xFFFFFFFF);
   static const Color backgroundGray = Color(0xFFF8F9FA);
 
-  const CustomerOrderDetailPage({super.key, required this.order});
+  const CustomerOrderDetailPage({super.key, required this.initialOrder});
 
   @override
   State<CustomerOrderDetailPage> createState() =>
@@ -23,13 +23,41 @@ class CustomerOrderDetailPage extends StatefulWidget {
 }
 
 class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
+  late Order _order;
   bool _isLoading = false;
-  String _currentStatus = ''; // <-- status sekarang
+  final ApiService _apiService = ApiService();
 
   @override
   void initState() {
     super.initState();
-    _currentStatus = widget.order.status; // ambil status awal
+    _order = widget.initialOrder;
+  }
+
+  Future<void> _refreshOrderDetails() async {
+    if (!mounted) return;
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    if (auth.token == null) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final updatedOrder = await _apiService.getOrderById(
+        token: auth.token!,
+        orderId: _order.id,
+      );
+      if (mounted) {
+        setState(() {
+          _order = updatedOrder;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal memuat data terbaru: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   Color _statusColor(String status) {
@@ -100,39 +128,34 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
 
   Future<void> _handlePayment() async {
     final auth = Provider.of<AuthProvider>(context, listen: false);
-    final apiService = ApiService();
-
-    if (auth.token == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Anda harus login dulu.')));
-      return;
-    }
+    if (auth.token == null) return;
 
     setState(() => _isLoading = true);
-
     try {
-      final paymentData = await apiService.startPaymentForQuote(
+      final paymentData = await _apiService.startPaymentForQuote(
         token: auth.token!,
-        orderId: widget.order.id,
+        orderId: _order.id,
       );
-
       final snapToken = paymentData['snapToken'];
       final snapRedirectUrl =
           "https://app.sandbox.midtrans.com/snap/v2/vtweb/$snapToken";
 
       if (!mounted) return;
 
-      Navigator.push(
+      await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => SnapPaymentPage(redirectUrl: snapRedirectUrl),
         ),
       );
+
+      await _refreshOrderDetails();
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Gagal memulai pembayaran: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Gagal memulai pembayaran: $e')));
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -140,57 +163,45 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
 
   Future<void> _respondToQuote(String decision) async {
     final auth = Provider.of<AuthProvider>(context, listen: false);
-    final apiService = ApiService();
-
+    setState(() => _isLoading = true);
     try {
-      await apiService.respondToQuote(
+      await _apiService.respondToQuote(
         token: auth.token!,
-        orderId: widget.order.id,
+        orderId: _order.id,
         decision: decision,
       );
 
       if (!mounted) return;
-
-      // ✅ Update status lokal
-      setState(() {
-        _currentStatus = decision == 'accept'
-            ? 'quote_accepted'
-            : 'quote_rejected';
-      });
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Penawaran ${decision == 'accept' ? 'diterima' : 'ditolak'}',
+            'Penawaran berhasil ${decision == 'accept' ? 'diterima' : 'ditolak'}',
           ),
         ),
       );
 
-      // ✅ Jika diterima, langsung buka pembayaran
-      if (decision == 'accept') {
-        await _handlePayment();
-      }
+      await _refreshOrderDetails();
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Gagal memproses penawaran: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal memproses penawaran: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final isMidnight =
-        widget.order.jadwalPerbaikan.hour == 0 &&
-        widget.order.jadwalPerbaikan.minute == 0;
+        _order.jadwalPerbaikan.hour == 0 && _order.jadwalPerbaikan.minute == 0;
     final formattedDate = isMidnight
-        ? DateFormat(
-            'EEEE, d MMM yyyy',
-            'id_ID',
-          ).format(widget.order.jadwalPerbaikan)
+        ? DateFormat('EEEE, d MMM yyyy', 'id_ID').format(_order.jadwalPerbaikan)
         : DateFormat(
             'EEEE, d MMM yyyy • HH:mm',
             'id_ID',
-          ).format(widget.order.jadwalPerbaikan);
+          ).format(_order.jadwalPerbaikan);
 
     return Scaffold(
       backgroundColor: CustomerOrderDetailPage.backgroundGray,
@@ -208,23 +219,28 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
           color: CustomerOrderDetailPage.primaryColor,
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildStatusCard(formattedDate),
-            const SizedBox(height: 24),
-            _buildServiceInfo(),
-            const SizedBox(height: 20),
-            _buildScheduleCard(formattedDate),
-            const SizedBox(height: 20),
-            _buildDescriptionCard(),
-            const SizedBox(height: 20),
-            _buildWorkerCard(),
-            const SizedBox(height: 32),
-            _buildActionButtons(),
-          ],
+      body: RefreshIndicator(
+        onRefresh: _refreshOrderDetails,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildStatusCard(formattedDate),
+              const SizedBox(height: 24),
+              _buildServiceInfo(),
+              const SizedBox(height: 20),
+              _buildScheduleCard(formattedDate),
+              const SizedBox(height: 20),
+              _buildDescriptionCard(),
+              const SizedBox(height: 20),
+              _buildWorkerCard(),
+              const SizedBox(height: 32),
+              _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _buildActionButtons(),
+            ],
+          ),
         ),
       ),
     );
@@ -235,16 +251,14 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            _statusColor(_currentStatus).withOpacity(0.15),
-            _statusColor(_currentStatus).withOpacity(0.05),
+            _statusColor(_order.status).withOpacity(0.15),
+            _statusColor(_order.status).withOpacity(0.05),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: _statusColor(_currentStatus).withOpacity(0.2),
-        ),
+        border: Border.all(color: _statusColor(_order.status).withOpacity(0.2)),
       ),
       padding: const EdgeInsets.all(20),
       child: Row(
@@ -252,12 +266,12 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: _statusColor(_currentStatus).withOpacity(0.2),
+              color: _statusColor(_order.status).withOpacity(0.2),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(
-              _statusIcon(_currentStatus),
-              color: _statusColor(_currentStatus),
+              _statusIcon(_order.status),
+              color: _statusColor(_order.status),
               size: 24,
             ),
           ),
@@ -267,11 +281,11 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _statusText(_currentStatus),
+                  _statusText(_order.status),
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 16,
-                    color: _statusColor(_currentStatus),
+                    color: _statusColor(_order.status),
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -301,7 +315,7 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            widget.order.serviceName,
+            _order.serviceName,
             style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w700,
@@ -309,7 +323,7 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
             ),
           ),
           const SizedBox(height: 12),
-          Text('Kategori: ${widget.order.category}'),
+          Text('Kategori: ${_order.category}'),
         ],
       ),
     );
@@ -323,21 +337,24 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(formattedDate),
-          if (widget.order.lokasi != null && widget.order.lokasi!.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8.0),
-              child: Text(widget.order.lokasi!),
-            ),
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Text(_order.customerAddress),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildDescriptionCard() {
+    // Asumsi: Model Order memiliki field `description` untuk deskripsi masalah.
+    // Ganti `_order.description` jika nama fieldnya berbeda.
     return _buildInfoCard(
       icon: Icons.description_rounded,
-      title: 'Deskripsi',
-      child: Text(widget.order.workerDescription ?? 'Tidak ada deskripsi'),
+      title: 'Deskripsi Masalah',
+      child: Text(
+        _order.workerDescription ?? 'Tidak ada deskripsi dari customer.',
+      ),
     );
   }
 
@@ -345,46 +362,46 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
     return _buildInfoCard(
       icon: Icons.person_rounded,
       title: 'Dikerjakan oleh',
-      child: widget.order.workerName != null
+      child: _order.workerName != null
           ? Row(
               children: [
                 CircleAvatar(
                   radius: 20,
-                  backgroundImage: widget.order.workerAvatar != null
-                      ? NetworkImage(widget.order.workerAvatar!)
+                  backgroundImage:
+                      _order.workerAvatar != null &&
+                          _order.workerAvatar!.isNotEmpty
+                      ? NetworkImage(_order.workerAvatar!)
                       : const AssetImage('assets/default_profile.png')
                             as ImageProvider,
                 ),
                 const SizedBox(width: 12),
-                Expanded(child: Text(widget.order.workerName!)),
+                Expanded(child: Text(_order.workerName!)),
                 TextButton.icon(
                   onPressed: () async {
                     final auth = Provider.of<AuthProvider>(
                       context,
                       listen: false,
                     );
-                    final apiService = ApiService();
-
+                    if (auth.token == null || _order.workerId == null) return;
                     try {
-                      final chatId = await apiService.createChat(
+                      final chatId = await _apiService.createChat(
                         token: auth.token!,
-                        recipientId: widget.order.workerId!,
+                        recipientId: _order.workerId!,
                       );
-
-                      if (!context.mounted) return;
-
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ChatDetailPage(
-                            chatId: chatId,
-                            name: widget.order.workerName ?? '',
-                            avatarUrl: widget.order.workerAvatar ?? '',
+                      if (mounted) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ChatDetailPage(
+                              chatId: chatId,
+                              name: _order.workerName ?? 'Teknisi',
+                              avatarUrl: _order.workerAvatar ?? '',
+                            ),
                           ),
-                        ),
-                      );
+                        );
+                      }
                     } catch (e) {
-                      if (context.mounted) {
+                      if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text('Gagal membuka chat: $e')),
                         );
@@ -406,6 +423,7 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
     required Widget child,
   }) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: CustomerOrderDetailPage.white,
@@ -425,7 +443,13 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
             children: [
               Icon(icon, color: CustomerOrderDetailPage.primaryColor),
               const SizedBox(width: 8),
-              Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -436,40 +460,60 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
   }
 
   Widget _buildActionButtons() {
-    if (_currentStatus == 'quote_proposed') {
+    if (_order.status == 'quote_proposed') {
       return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           ElevatedButton(
-            onPressed: () async {
-              await _respondToQuote('accept');
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            onPressed: () => _respondToQuote('accept'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF4CAF50),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
             child: const Text('Terima Penawaran'),
           ),
           const SizedBox(height: 12),
           OutlinedButton(
-            onPressed: () async {
-              await _respondToQuote('reject');
-            },
-            style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+            onPressed: () => _respondToQuote('reject'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFFF44336),
+              side: const BorderSide(color: Color(0xFFF44336)),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
             child: const Text('Tolak Penawaran'),
           ),
         ],
       );
     }
 
-    if (_currentStatus == 'quote_accepted') {
+    if (_order.status == 'quote_accepted') {
       return SizedBox(
         width: double.infinity,
         child: ElevatedButton(
-          onPressed: _isLoading ? null : _handlePayment,
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-          child: _isLoading
-              ? const CircularProgressIndicator(color: Colors.white)
-              : const Text('Bayar Sekarang'),
+          onPressed: _handlePayment,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF2196F3),
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          child: const Text('Bayar Sekarang'),
         ),
       );
     }
+
+    // Anda bisa menambahkan tombol lain di sini,
+    // misalnya tombol untuk memberi ulasan jika status 'completed'
+    // if (_order.status == 'completed' && !_order.hasBeenReviewed) {
+    //   return ...
+    // }
 
     return const SizedBox.shrink();
   }

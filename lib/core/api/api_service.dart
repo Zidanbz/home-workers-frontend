@@ -658,38 +658,38 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> createOrder({
-    required String token,
-    required String serviceId,
-    required DateTime jadwalPerbaikan,
-    String? catatan,
-  }) async {
-    final url = Uri.parse('$_baseUrl/orders');
-    try {
-      final response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({
-          'serviceId': serviceId,
-          'jadwalPerbaikan': jadwalPerbaikan.toIso8601String(),
-          'catatan': catatan ?? '',
-        }),
-      );
-      print("response: ${response.body}");
-      final responseBody = jsonDecode(response.body);
-      if (response.statusCode == 201) {
-        return responseBody; // Kembalikan respons yang berisi orderId
-      } else {
-        throw Exception(responseBody['message'] ?? 'Failed to create order');
-      }
-    } catch (e) {
-      print("error: $e");
-      throw Exception('Failed to connect to the server.');
-    }
-  }
+  // Future<Map<String, dynamic>> createOrder({
+  //   required String token,
+  //   required String serviceId,
+  //   required DateTime jadwalPerbaikan,
+  //   String? catatan,
+  // }) async {
+  //   final url = Uri.parse('$_baseUrl/orders');
+  //   try {
+  //     final response = await http.post(
+  //       url,
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //         'Authorization': 'Bearer $token',
+  //       },
+  //       body: jsonEncode({
+  //         'serviceId': serviceId,
+  //         'jadwalPerbaikan': jadwalPerbaikan.toIso8601String(),
+  //         'catatan': catatan ?? '',
+  //       }),
+  //     );
+  //     print("response: ${response.body}");
+  //     final responseBody = jsonDecode(response.body);
+  //     if (response.statusCode == 201) {
+  //       return responseBody; // Kembalikan respons yang berisi orderId
+  //     } else {
+  //       throw Exception(responseBody['message'] ?? 'Failed to create order');
+  //     }
+  //   } catch (e) {
+  //     print("error: $e");
+  //     throw Exception('Failed to connect to the server.');
+  //   }
+  // }
 
   Future<void> processPayment({
     required String token,

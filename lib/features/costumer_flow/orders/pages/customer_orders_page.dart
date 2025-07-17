@@ -324,7 +324,6 @@ class _CustomerOrdersPageState extends State<CustomerOrdersPage>
 
 class _OrderCard extends StatelessWidget {
   final Order order;
-  
 
   // Color Palette
   static const Color primaryColor = Color(0xFF1A374D);
@@ -495,13 +494,10 @@ class _OrderCard extends StatelessWidget {
     }
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     final bool canReview =
         order.status == 'completed' && (order.hasBeenReviewed == false);
-
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -637,7 +633,7 @@ class _OrderCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-if (canReview)
+                    if (canReview)
                       ElevatedButton.icon(
                         onPressed: () {
                           _showReviewDialog(context, order);
@@ -661,7 +657,7 @@ if (canReview)
                           context,
                           MaterialPageRoute(
                             builder: (_) =>
-                                CustomerOrderDetailPage(order: order),
+                                CustomerOrderDetailPage(initialOrder: order),
                           ),
                         );
                       },

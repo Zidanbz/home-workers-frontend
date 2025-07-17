@@ -37,7 +37,8 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
     _animationController.forward();
   }
 
-  Future<void> _loadOrders() {
+  /// Memuat ulang daftar pesanan dari API dan memperbarui FutureBuilder.
+  Future<List<Order>> _loadOrders() {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.token != null) {
       final future = _apiService.getMyOrders(authProvider.token!);
@@ -231,7 +232,10 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
     return Container(
       decoration: const BoxDecoration(color: Colors.white),
       child: RefreshIndicator(
-        onRefresh: _loadOrders,
+        // Tarik ke bawah untuk refresh
+        onRefresh: () async {
+          await _loadOrders();
+        },
         color: const Color(0xFF1A374D),
         child: FutureBuilder<List<Order>>(
           future: _ordersFuture,
@@ -243,30 +247,32 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
               return _buildErrorState(snapshot.error.toString());
             }
             if (!snapshot.hasData || snapshot.data!.isEmpty) {
+              // Pastikan tetap bisa tarik untuk refresh
               return _buildEmptyState();
             }
 
             final allOrders = snapshot.data!;
-            final queuedOrders = allOrders
-                .where(
-                  (o) => [
-                    'pending',
-                    'accepted',
-                    'quote_proposed',
-                    'work_in_progress',
-                  ].contains(o.status),
-                )
+            final validOrders = allOrders
+                .where((o) => o.status != 'awaiting_payment')
                 .toList();
-            final historyOrders = allOrders
-                .where(
-                  (o) => [
-                    'completed',
-                    'cancelled',
-                    'quote_rejected',
-                    'rejected',
-                  ].contains(o.status),
-                )
-                .toList();
+
+            final queuedOrders = validOrders.where((o) {
+              return [
+                'pending',
+                'accepted',
+                'quote_proposed',
+                'work_in_progress',
+              ].contains(o.status);
+            }).toList();
+
+            final historyOrders = validOrders.where((o) {
+              return [
+                'completed',
+                'cancelled',
+                'quote_rejected',
+                'rejected',
+              ].contains(o.status);
+            }).toList();
 
             return TabBarView(
               controller: _tabController,
@@ -282,134 +288,153 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
   }
 
   Widget _buildLoadingState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A374D).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1A374D)),
-              strokeWidth: 3,
-            ),
+    return ListView(
+      // Biar RefreshIndicator tetap bisa ditarik saat loading
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        const SizedBox(height: 120),
+        Center(
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A374D).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1A374D)),
+                  strokeWidth: 3,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Memuat pesanan...',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF1A374D),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 20),
-          const Text(
-            'Memuat pesanan...',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              color: Color(0xFF1A374D),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
   Widget _buildErrorState(String error) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Icon(
-                Icons.error_outline,
-                color: Colors.red,
-                size: 48,
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Oops! Terjadi kesalahan',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1A374D),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              error,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: _loadOrders,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Coba Lagi'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1A374D),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        const SizedBox(height: 120),
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Icon(
+                    Icons.error_outline,
+                    color: Colors.red,
+                    size: 48,
+                  ),
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                const SizedBox(height: 20),
+                const Text(
+                  'Oops! Terjadi kesalahan',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1A374D),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 8),
+                Text(
+                  error,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.grey),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton.icon(
+                  onPressed: _loadOrders,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Coba Lagi'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1A374D),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(30),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A374D).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(30),
-              ),
-              child: const Icon(
-                Icons.assignment_outlined,
-                size: 64,
-                color: Color(0xFF1A374D),
-              ),
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        const SizedBox(height: 120),
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(30),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A374D).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  child: const Icon(
+                    Icons.assignment_outlined,
+                    size: 64,
+                    color: Color(0xFF1A374D),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Belum Ada Pesanan',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1A374D),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Pesanan akan muncul di sini ketika ada pelanggan yang memesan layanan Anda',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey, fontSize: 14),
+                ),
+              ],
             ),
-            const SizedBox(height: 24),
-            const Text(
-              'Belum Ada Pesanan',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1A374D),
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Pesanan akan muncul di sini ketika ada pelanggan yang memesan layanan Anda',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey, fontSize: 14),
-            ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
   Widget _buildOrderList(List<Order> orders, String type) {
     if (orders.isEmpty) {
+      // state kosong per-tab
       return LayoutBuilder(
         builder: (ctx, constraints) => SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -474,7 +499,12 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
               offset: Offset(0, 30 * (1 - value)),
               child: Opacity(
                 opacity: value,
-                child: _OrderCard(order: orders[index], onRefresh: _loadOrders),
+                child: _OrderCard(
+                  order: orders[index],
+                  onRefresh: () async {
+                    await _loadOrders();
+                  },
+                ),
               ),
             );
           },
@@ -486,12 +516,12 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
 
 class _OrderCard extends StatelessWidget {
   final Order order;
-  final VoidCallback onRefresh;
+  final Future<void> Function()? onRefresh;
 
-  const _OrderCard({Key? key, required this.order, required this.onRefresh})
+  const _OrderCard({Key? key, required this.order, this.onRefresh})
     : super(key: key);
 
-  void _handleAction(BuildContext context) async {
+  Future<void> _handleAction(BuildContext context) async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -511,22 +541,24 @@ class _OrderCard extends StatelessWidget {
             ),
           );
           break;
+
         case 'accepted':
         case 'work_in_progress':
           final chatId = await apiService.createChat(
             token: token,
             recipientId: order.customerId,
           );
-          navigator.push(
+          await navigator.push(
             MaterialPageRoute(
               builder: (context) => ChatDetailPage(
                 chatId: chatId,
                 name: order.customerName,
-                avatarUrl: '', // TODO: Tambahkan avatar customer jika tersedia
+                avatarUrl: '', // TODO: avatar customer jika ada
               ),
             ),
           );
           break;
+
         case 'quote_proposed':
           final nominal = await showDialog<num>(
             context: context,
@@ -583,7 +615,8 @@ class _OrderCard extends StatelessWidget {
       );
     }
 
-    onRefresh(); // Refresh setelah aksi
+    // Refresh daftar setelah aksi.
+    if (onRefresh != null) await onRefresh!.call();
   }
 
   @override
@@ -628,12 +661,17 @@ class _OrderCard extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       elevation: 2,
       child: InkWell(
-        onTap: () {
-          Navigator.of(context).push(
+        onTap: () async {
+          // Buka detail, tunggu user kembali
+          final changed = await Navigator.of(context).push<bool>(
             MaterialPageRoute(
               builder: (_) => OrderDetailPage(orderId: order.id),
             ),
           );
+          // Kalau detail mengembalikan true (ada perubahan), atau default (null) -> tetap refresh
+          if (changed == true || changed == null) {
+            if (onRefresh != null) await onRefresh!.call();
+          }
         },
         borderRadius: BorderRadius.circular(16),
         child: Padding(
@@ -641,9 +679,11 @@ class _OrderCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Header + action
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  // Info layanan
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -671,6 +711,7 @@ class _OrderCard extends StatelessWidget {
                     ),
                   ),
 
+                  // Tombol aksi cepat
                   ElevatedButton(
                     onPressed: onPressed,
                     style: ElevatedButton.styleFrom(
@@ -685,17 +726,25 @@ class _OrderCard extends StatelessWidget {
                   ),
                 ],
               ),
+
               const SizedBox(height: 8),
-              Text(
-                order.customerAddress,
-                style: TextStyle(color: Colors.grey[600]),
-              ),
+
+              // Alamat
+              // Text(
+              //   order.customerAddress,
+              //   style: TextStyle(color: Colors.grey[600]),
+              // ),
               const SizedBox(height: 4),
+
+              // Jadwal
               Text(
                 order.formattedSchedule,
                 style: TextStyle(color: Colors.grey[600]),
               ),
+
               const Divider(height: 24),
+
+              // Time ago
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [

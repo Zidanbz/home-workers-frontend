@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/api/api_service.dart';
 import '../../../../core/models/order_model.dart';
@@ -16,6 +17,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   final ApiService _apiService = ApiService();
   late Future<Order> _orderFuture;
   bool _isProcessing = false;
+  GoogleMapController? _mapController;
 
   @override
   void initState() {
@@ -174,6 +176,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     }
   }
 
+  /// Generic status updater with snackbars & refresh
   Future<void> _handleUpdateStatus(String orderId, String newStatus) async {
     final token = Provider.of<AuthProvider>(context, listen: false).token!;
     setState(() => _isProcessing = true);
@@ -192,7 +195,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       );
       _loadOrderDetails();
     } catch (e) {
-      print(e);
+      debugPrint(e.toString());
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.red,
@@ -204,29 +207,62 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     }
   }
 
+  /// Pop-up konfirmasi untuk menyelesaikan pekerjaan (umum, dipakai fixed & lainnya)
+  Future<void> _confirmAndCompleteOrder(String orderId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Konfirmasi Selesai'),
+        content: const Text('Apakah pekerjaan sudah benar-benar selesai?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Belum'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            child: const Text('Ya, Selesaikan'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await _handleUpdateStatus(orderId, 'completed');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
           'Detail Pesanan',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
         backgroundColor: const Color(0xFF1A374D),
+        iconTheme: const IconThemeData(
+          color:
+              Colors.white, // <-- TAMBAHKAN INI UNTUK MEMBUAT PANAH JADI PUTIH
+        ),
       ),
       body: FutureBuilder<Order>(
         future: _orderFuture,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting)
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
-          if (snapshot.hasError)
+          }
+          if (snapshot.hasError) {
             return Center(child: Text('Error: ${snapshot.error}'));
-          if (!snapshot.hasData)
+          }
+          if (!snapshot.hasData) {
             return const Center(child: Text('Detail pesanan tidak ditemukan.'));
+          }
 
           final order = snapshot.data!;
-          print('Status: ${order.status}');
-          print('ServiceType: ${order.serviceType}');
+          debugPrint('Status: ${order.status}');
+          debugPrint('ServiceType: ${order.serviceType}');
 
           return RefreshIndicator(
             onRefresh: _loadOrderDetails,
@@ -243,6 +279,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                     ),
                   ],
                 ),
+                _buildMapView(order),
                 const SizedBox(height: 24),
                 _buildSectionTitle('Detail Layanan'),
                 _buildInfoCard(
@@ -277,7 +314,50 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     );
   }
 
+  Widget _buildMapView(Order order) {
+    if (order.coordinates == null) {
+      return const SizedBox.shrink();
+    }
+
+    final LatLng position = order.coordinates!;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 24),
+        _buildSectionTitle('Lokasi Pengerjaan'),
+        SizedBox(
+          height: 250,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: GoogleMap(
+              onMapCreated: (controller) {
+                _mapController = controller;
+              },
+              initialCameraPosition: CameraPosition(
+                target: position,
+                zoom: 16.0,
+              ),
+              markers: {
+                Marker(
+                  markerId: const MarkerId('orderLocation'),
+                  position: position,
+                  infoWindow: InfoWindow(
+                    title: order.customerName,
+                    snippet: order.customerAddress,
+                  ),
+                ),
+              },
+              zoomControlsEnabled: true,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildActionButtons(Order order) {
+    // 1. STATUS: pending => tampilkan Tolak / Terima
     if (order.status == 'pending') {
       return Row(
         children: [
@@ -314,6 +394,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       );
     }
 
+    // 2. SURVEY: accepted || quote_proposed => Ajukan / Ubah Penawaran
     if ((order.status == 'accepted' || order.status == 'quote_proposed') &&
         order.serviceType == 'survey') {
       return ElevatedButton.icon(
@@ -333,6 +414,23 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       );
     }
 
+    // 3. FIXED: accepted => langsung tampilkan tombol Selesaikan Pekerjaan (dengan konfirmasi)
+    //    (Jika kamu ingin ada status "work_in_progress" di alur fixed, ubah logika ini)
+    if (order.serviceType == 'fixed' && order.status == 'accepted') {
+      return ElevatedButton.icon(
+        icon: const Icon(Icons.check_circle),
+        label: const Text('Selesaikan Pekerjaan'),
+        onPressed: () => _confirmAndCompleteOrder(order.id),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+    }
+
+    // 4. SURVEY: quote_accepted => bisa Mulai Pengerjaan
     if (order.status == 'quote_accepted') {
       return ElevatedButton.icon(
         icon: const Icon(Icons.play_arrow),
@@ -347,11 +445,12 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       );
     }
 
+    // 5. work_in_progress => tombol Selesaikan Pekerjaan (umum)
     if (order.status == 'work_in_progress') {
       return ElevatedButton.icon(
         icon: const Icon(Icons.check_circle),
         label: const Text('Selesaikan Pekerjaan'),
-        onPressed: () => _handleUpdateStatus(order.id, 'completed'),
+        onPressed: () => _confirmAndCompleteOrder(order.id),
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.blue,
           foregroundColor: Colors.white,
