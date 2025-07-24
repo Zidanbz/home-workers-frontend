@@ -1,196 +1,229 @@
 import 'package:flutter/material.dart';
+import 'package:home_workers_fe/core/api/api_service.dart';
+import 'package:home_workers_fe/core/models/worker_model.dart';
 
-class WorkerProfilePage extends StatelessWidget {
-  final Map<String, dynamic> workerInfo;
+class WorkerProfilePage extends StatefulWidget {
+  final String workerId;
 
-  const WorkerProfilePage({super.key, required this.workerInfo});
+  const WorkerProfilePage({super.key, required this.workerId});
+
+  @override
+  State<WorkerProfilePage> createState() => _WorkerProfilePageState();
+}
+
+class _WorkerProfilePageState extends State<WorkerProfilePage>
+    with SingleTickerProviderStateMixin {
+  late Future<Worker> _workerFuture;
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _workerFuture = ApiService().getWorkerById(widget.workerId);
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final experience = workerInfo['experience'] ?? 3; // tahun pengalaman
-    final rating = workerInfo['rating'] ?? 5.0;
-    final totalReviews = workerInfo['totalReviews'] ?? 122;
-    final totalOrders = workerInfo['totalOrders'] ?? 155;
-    final bio = workerInfo['bio'] ?? 'Deskripsi belum tersedia.';
-
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Penyedia Jasa'),
-          actions: const [
-            Icon(Icons.notifications_none),
-            SizedBox(width: 12),
-            Icon(Icons.chat_bubble_outline),
-            SizedBox(width: 12),
-            Icon(Icons.share),
-            SizedBox(width: 12),
-            Icon(Icons.info_outline, color: Colors.red),
-            SizedBox(width: 12),
-          ],
-        ),
-        body: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            _buildHeader(workerInfo, experience),
-            const SizedBox(height: 16),
-            const TabBar(
-              labelColor: Colors.black,
-              indicatorColor: Colors.yellow,
-              tabs: [
-                Tab(text: 'Profil'),
-                Tab(text: 'Ulasan tentang pekerja'),
-                Tab(text: 'Ulasan pelanggan'),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _buildRatingCard(rating, totalReviews, totalOrders),
-            const SizedBox(height: 24),
-            _buildContactSection(),
-            const SizedBox(height: 24),
-            _buildCompanyDescription(bio),
-            const SizedBox(height: 24),
-            // _buildTawarkanButton(context),
-          ],
-        ),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Profil Penyedia Jasa'),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0.5,
       ),
-    );
-  }
+      body: FutureBuilder<Worker>(
+        future: _workerFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          } else if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          } else if (!snapshot.hasData) {
+            return const Center(child: Text('Data tidak ditemukan.'));
+          }
 
-  Widget _buildHeader(Map<String, dynamic> info, int experience) {
-    return Row(
-      children: [
-        CircleAvatar(
-          radius: 40,
-          backgroundImage: NetworkImage(info['avatarUrl'] ?? ''),
-        ),
-        const SizedBox(width: 16),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              info['nama'] ?? 'Nama Worker',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            Text(
-              '$experience Tahun Pengalaman',
-              style: const TextStyle(color: Colors.grey),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
+          final worker = snapshot.data!;
 
-  Widget _buildRatingCard(double rating, int ulasan, int selesai) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF9F9F9),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        children: [
-          Row(
+          return Column(
             children: [
-              Text(
-                rating.toStringAsFixed(1),
-                style: const TextStyle(
-                  fontSize: 40,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(width: 20),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text('Profesionalisme ⭐⭐⭐⭐⭐'),
-                  Text('Ketepatan Waktu ⭐⭐⭐⭐⭐'),
-                  Text('Skala Waktu ⭐⭐⭐⭐⭐'),
+              _buildHeader(worker),
+              _buildInfoCards(worker),
+              const SizedBox(height: 10),
+              TabBar(
+                controller: _tabController,
+                labelColor: Colors.black,
+                indicatorColor: Colors.blue,
+                tabs: const [
+                  Tab(text: "Profil"),
+                  Tab(text: "Ulasan"),
                 ],
               ),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [_buildProfileTab(worker), _buildReviewTab()],
+                ),
+              ),
             ],
+          );
+        },
+      ),
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.all(16),
+        child: ElevatedButton(
+          onPressed: () {
+            // Navigasi ke BookingPage
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blueAccent,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Text(
-                '$ulasan Ulasan',
-                style: const TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(width: 24),
-              Text(
-                '$selesai Pesanan Selesai',
-                style: const TextStyle(color: Colors.grey),
-              ),
-            ],
+          child: const Text(
+            "Ajukan Pesanan",
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(Worker worker) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 3)),
+        ],
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 40,
+            backgroundImage: NetworkImage(worker.avatarUrl ?? ''),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  worker.nama,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(worker.email, style: const TextStyle(color: Colors.grey)),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(Icons.star, color: Colors.amber, size: 18),
+                    const SizedBox(width: 4),
+                    Text(
+                      worker.rating.toStringAsFixed(1),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildContactSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Kontak',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF9F9F9),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Row(
-            children: const [
-              Icon(Icons.mail_outline, color: Colors.blue),
-              SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Kontak penyedia jasa hanya dapat dilihat oleh pelanggannya. Jika Anda tertarik dengan layanan ini, ajukan pesanan kepadanya.',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+  Widget _buildInfoCards(Worker worker) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // _infoCard("Pengalaman", "${worker.experience} Th"),
+          _infoCard("Pesanan", "${worker.totalOrders}"),
+          _infoCard("Ulasan", "${worker.totalReviews}"),
+        ],
+      ),
     );
   }
 
-  Widget _buildCompanyDescription(String bio) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Tentang Perusahaan',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-        const SizedBox(height: 8),
-        Text(bio, style: const TextStyle(color: Colors.black87)),
-      ],
+  Widget _infoCard(String title, String value) {
+    return Container(
+      width: 100,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 6)],
+      ),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Text(title, style: const TextStyle(color: Colors.grey)),
+        ],
+      ),
     );
+  }
+
+  Widget _buildProfileTab(Worker worker) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Tentang Penyedia",
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(worker.bio),
+          const SizedBox(height: 16),
+          const Text(
+            "Keahlian",
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: worker.keahlian.map((e) => Chip(label: Text(e))).toList(),
+          ),
+          const SizedBox(height: 16),
+          if (worker.linkPortofolio != null)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Portofolio",
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  worker.linkPortofolio!,
+                  style: const TextStyle(color: Colors.blue),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReviewTab() {
+    return const Center(child: Text("Belum ada ulasan"));
   }
 }
-
-//   Widget _buildTawarkanButton(BuildContext context) {
-//     return ElevatedButton(
-//       onPressed: () {
-//         Navigator.pop(context); // atau lanjut ke BookingPage lagi
-//       },
-//       style: ElevatedButton.styleFrom(
-//         backgroundColor: const Color(0xFF1E232C),
-//         padding: const EdgeInsets.symmetric(vertical: 16),
-//         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-//       ),
-//       child: const Text(
-//         'Tawarkan Pekerjaan',
-//         style: TextStyle(fontSize: 16),
-//       ),
-//     );
-//   }
-// }

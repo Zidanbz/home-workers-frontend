@@ -89,7 +89,8 @@ class _MyJobsPageState extends State<MyJobsPage> with TickerProviderStateMixin {
           ),
         ],
       ),
-      floatingActionButton: _buildFloatingActionButton(),
+      // Remove floatingActionButton here
+      // floatingActionButton: _buildFloatingActionButton(),
     );
   }
 
@@ -139,6 +140,31 @@ class _MyJobsPageState extends State<MyJobsPage> with TickerProviderStateMixin {
                             color: Colors.white,
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      // Add the "Add Service" button here
+                      IconButton(
+                        onPressed: () async {
+                          final result = await Navigator.of(context).push<bool>(
+                            MaterialPageRoute(
+                              builder: (context) => const CreateEditJobPage(),
+                            ),
+                          );
+                          if (result == true) {
+                            _loadServices(); // Refresh after adding
+                          }
+                        },
+                        icon: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.add,
+                            color: Colors.white,
+                            size: 24,
                           ),
                         ),
                       ),
@@ -554,24 +580,7 @@ class _MyJobsPageState extends State<MyJobsPage> with TickerProviderStateMixin {
       ),
     );
   }
-
-  Widget _buildFloatingActionButton() {
-    return FloatingActionButton(
-      onPressed: () async {
-        final result = await Navigator.of(context).push<bool>(
-          MaterialPageRoute(builder: (context) => const CreateEditJobPage()),
-        );
-        if (result == true) {
-          _loadServices(); // Refresh setelah menambah
-        }
-      },
-      backgroundColor: const Color(0xFF667EEA),
-      child: const Icon(Icons.add),
-    );
-  }
 }
-
-// ... (import lainnya yang relevan)
 
 class _JobCard extends StatelessWidget {
   final Service service;

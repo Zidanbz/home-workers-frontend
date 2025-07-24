@@ -1,55 +1,87 @@
-// Lokasi: lib/core/state/auth_provider.dart
-
 import 'dart:io';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart'
-    as fba; // Beri alias untuk FirebaseAuth
-import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart'; // opsional: untuk debug/snackbar
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:jwt_decoder/jwt_decoder.dart';
+
+import 'package:firebase_auth/firebase_auth.dart' as fba;
+import 'package:firebase_messaging/firebase_messaging.dart';
+
 import '../api/api_service.dart';
 import '../models/user_model.dart';
 import '../services/secure_storage_service.dart';
-import 'package:jwt_decoder/jwt_decoder.dart';
 
+/// Layar auth apa yang ingin ditampilkan root widget.
 enum AuthScreen { welcome, login, register }
 
+/// Hasil login: dipakai UI untuk memutuskan arah navigasi.
+class AuthLoginResult {
+  final bool success;
+  final bool requireEmailVerification;
+  final User user;
+  final String idToken; // Bearer ke backend
+  final String customToken; // Untuk Firebase sign-in
+
+  AuthLoginResult({
+    required this.success,
+    required this.requireEmailVerification,
+    required this.user,
+    required this.idToken,
+    required this.customToken,
+  });
+}
+
 class AuthProvider with ChangeNotifier {
+  // ---------------------------------------------------------------------------
+  // Dependencies
+  // ---------------------------------------------------------------------------
   final ApiService _apiService = ApiService();
   final SecureStorageService _storageService = SecureStorageService();
 
+  // ---------------------------------------------------------------------------
+  // State
+  // ---------------------------------------------------------------------------
   User? _user;
-  String? _token; // Ini akan menjadi ID Token, bukan custom token
+  String?
+  _token; // idToken dari backend (Firebase ID token). Dipakai untuk API bearer.
   bool _isLoading = true;
   bool _hasSeenOnboarding = false;
-  AuthScreen _authScreen = AuthScreen.welcome; // State awal
+  AuthScreen _authScreen = AuthScreen.welcome;
 
+  // flag internal: apakah login terakhir butuh verifikasi email
+  bool _lastLoginRequiresEmailVerification = false;
+
+  AuthProvider() {
+    initializeApp();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Getters
+  // ---------------------------------------------------------------------------
   User? get user => _user;
   String? get token => _token;
   bool get isLoggedIn => _token != null;
   bool get isLoading => _isLoading;
   bool get hasSeenOnboarding => _hasSeenOnboarding;
   AuthScreen get authScreen => _authScreen;
+  bool get lastLoginRequiresEmailVerification =>
+      _lastLoginRequiresEmailVerification;
 
-  AuthProvider() {
-    // tryAutoLogin();
-    initializeApp();
-  }
-
+  // ---------------------------------------------------------------------------
+  // Init / Auto Login
+  // ---------------------------------------------------------------------------
   Future<void> initializeApp() async {
-    // Cek apakah onboarding sudah dilihat
     final prefs = await SharedPreferences.getInstance();
     _hasSeenOnboarding = prefs.getBool('hasSeenOnboarding') ?? false;
 
-    // Coba auto-login
     final storedToken = await _storageService.readToken();
     if (storedToken != null && !JwtDecoder.isExpired(storedToken)) {
       try {
         final userProfile = await _apiService.getMyProfile(storedToken);
         _user = userProfile;
         _token = storedToken;
-      } catch (e) {
+      } catch (_) {
         await logout();
       }
     }
@@ -58,6 +90,26 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> tryAutoLogin() async {
+    final storedToken = await _storageService.readToken();
+
+    if (storedToken != null && !JwtDecoder.isExpired(storedToken)) {
+      try {
+        final userProfile = await _apiService.getMyProfile(storedToken);
+        _user = userProfile;
+        _token = storedToken;
+      } catch (_) {
+        await logout();
+      }
+    }
+
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------------
+  // UI State Switchers
+  // ---------------------------------------------------------------------------
   void showLoginPage() {
     _authScreen = AuthScreen.login;
     notifyListeners();
@@ -68,128 +120,137 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // --- FUNGSI LOGIN YANG DIPERBAIKI TOTAL ---
-  // --- FUNGSI LOGIN YANG SUDAH DIPERBAIKI ---
-  Future<void> login(String email, String password) async {
+  void showRegisterPage() {
+    _authScreen = AuthScreen.register;
+    notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------------
+  // LOGIN (backend + Firebase via custom token)
+  // ---------------------------------------------------------------------------
+  Future<AuthLoginResult> login({
+    required String email,
+    required String password,
+    String? fcmToken,
+  }) async {
     try {
-      final result = await _apiService.loginUser(email, password);
+      _isLoading = true;
+      notifyListeners();
 
-      // Ambil KEDUA token dari backend
-      final String? customToken = result['customToken'];
-      final String? idToken = result['idToken'];
-      final Map<String, dynamic>? userJson = result['user'];
+      final resolvedFcm =
+          fcmToken ?? await FirebaseMessaging.instance.getToken();
 
-      if (customToken != null && idToken != null && userJson != null) {
-        // LANGKAH BARU YANG PALING PENTING:
-        // Login ke Firebase SDK menggunakan customToken.
-        // Ini yang akan memberi Anda izin untuk upload file.
-        await fba.FirebaseAuth.instance.signInWithCustomToken(customToken);
-        print('Berhasil login ke Firebase SDK.');
+      // Hit backend, dapatkan seluruh body respons
+      final responseBody = await _apiService.loginUser(
+        email: email,
+        password: password,
+        fcmToken: resolvedFcm,
+      );
 
-        // Bagian lama Anda tetap dipertahankan
-        _user = User.fromJson(userJson);
-        _token = idToken; // Simpan idToken untuk API calls lain
-        await _storageService.saveTokenAndRole(
-          token: _token!,
-          role: _user!.role,
+      // ================== PERUBAHAN UTAMA DI SINI ==================
+
+      // 1. Ambil object 'data' dari dalam respons body
+      final Map<String, dynamic>? data = responseBody['data'];
+
+      // 2. Tambahkan pengecekan untuk memastikan object 'data' ada
+      if (data == null) {
+        throw Exception(
+          'Struktur respons dari backend tidak valid (field "data" tidak ditemukan).',
         );
+      }
 
-        notifyListeners();
-      } else {
+      // 3. Ambil semua value dari dalam 'data', bukan dari level atas lagi
+      final String? customToken = data['customToken'];
+      final String? idToken = data['idToken'];
+      final Map<String, dynamic>? userJson = data['user'];
+      final bool requireEmailVerification =
+          data['requireEmailVerification'] ?? false;
+
+      // ===============================================================
+
+      if (customToken == null || idToken == null || userJson == null) {
         throw Exception('Respons dari backend tidak lengkap.');
       }
+
+      // Sign in ke Firebase client pakai custom token
+      await _signInFirebaseWithCustomTokenIfNeeded(customToken);
+
+      // Update state
+      _user = User.fromJson(userJson);
+      _token = idToken;
+      _lastLoginRequiresEmailVerification = requireEmailVerification;
+
+      // Simpan token + role ke storage
+      await _storageService.saveTokenAndRole(token: _token!, role: _user!.role);
+
+      // notifyListeners();
+
+      return AuthLoginResult(
+        success: true,
+        requireEmailVerification: requireEmailVerification,
+        user: _user!,
+        idToken: _token!,
+        customToken: customToken,
+      );
     } catch (e) {
+      _lastLoginRequiresEmailVerification = false;
+      // Jangan notifyListeners() di sini agar error bisa di-handle UI
       rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
-  // Fungsi tryAutoLogin juga perlu disesuaikan
-  Future<void> tryAutoLogin() async {
-    final storedToken = await _storageService.readToken();
-
-    if (storedToken != null && !JwtDecoder.isExpired(storedToken)) {
-      try {
-        // Karena kita tidak punya custom token di sini, kita perlu login ulang
-        // atau memanggil API untuk me-refresh sesi. Untuk saat ini, kita
-        // panggil API /me untuk mendapatkan data user.
-        final userProfile = await _apiService.getMyProfile(storedToken);
-        _user = userProfile;
-        _token = storedToken;
-      } catch (e) {
-        await logout();
-      }
-    }
-
-    _isLoading = false;
-    notifyListeners();
+  /// Sign-in Firebase hanya jika belum ada user aktif.
+  Future<void> _signInFirebaseWithCustomTokenIfNeeded(
+    String customToken,
+  ) async {
+    final current = fba.FirebaseAuth.instance.currentUser;
+    if (current != null) return;
+    await fba.FirebaseAuth.instance.signInWithCustomToken(customToken);
+    debugPrint('Firebase sign-in success (custom token).');
   }
 
-  Future<void> logout() async {
-    // Baris ini sudah benar dan harus dipertahankan
-    await fba.FirebaseAuth.instance.signOut();
-    print('Berhasil logout dari Firebase SDK.');
-
-    _user = null;
-    _token = null;
-    _authScreen = AuthScreen.welcome;
-    await _storageService.deleteAll();
-    notifyListeners();
-  }
-
-  Future<void> refreshUserData() async {
-    if (_token != null) {
-      try {
-        final updatedUser = await _apiService.getMyProfile(_token!);
-        _user = updatedUser;
-        // Beri tahu UI untuk update dengan data baru
-        notifyListeners();
-      } catch (e) {
-        print("Gagal me-refresh data pengguna: $e");
-        // Mungkin token sudah tidak valid, lakukan logout
-        logout();
-      }
-    }
-  }
-
+  // ---------------------------------------------------------------------------
+  // REGISTER CUSTOMER (no auto-login)
+  // ---------------------------------------------------------------------------
   Future<void> registerCustomer({
     required String email,
     required String password,
     required String nama,
+    String? fcmToken,
   }) async {
     try {
-      final result = await _apiService.registerCustomer(
+      String? resolvedFcm; // Deklarasikan di sini
+
+      try {
+        // Coba dapatkan token
+        resolvedFcm = fcmToken ?? await FirebaseMessaging.instance.getToken();
+      } catch (e) {
+        // Jika gagal, biarkan resolvedFcm null dan cetak pesan error
+        debugPrint(
+          'PERINGATAN: Gagal mendapatkan FCM token. Melanjutkan tanpa token. Error: $e',
+        );
+        resolvedFcm = null;
+      }
+
+      await _apiService.registerCustomer(
         email: email,
         password: password,
         nama: nama,
+        fcmToken:
+            resolvedFcm, // Kirim token jika berhasil, atau null jika gagal
       );
-
-      final data = result['data'];
-      if (data == null || data['userId'] == null) {
-        throw Exception('Gagal mengambil data user dari server.');
-      }
-
-      // Buat User secara manual karena response tidak lengkap
-      _user = User(
-        uid: data['userId'],
-        email: email,
-        nama: nama,
-        role: 'customer',
-      );
-
-      // Jika belum ada token dari backend, bisa kosongkan sementara
-      _token = null;
-
-      await _storageService.saveTokenAndRole(
-        token: _token ?? '',
-        role: _user!.role,
-      );
-      notifyListeners();
     } catch (e) {
-      print('Error: $e');
+      debugPrint('Error registerCustomer: $e');
       rethrow;
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // REGISTER WORKER (no auto-login)
+  // ---------------------------------------------------------------------------
   Future<void> registerWorker({
     required String email,
     required String password,
@@ -200,67 +261,186 @@ class AuthProvider with ChangeNotifier {
     required File fotoDiriFile,
     String? portfolioLink,
     required String noKtp,
+    String? fcmToken,
   }) async {
     try {
-      final response = await _apiService.registerWorker(
+      final resolvedFcm =
+          fcmToken ?? await FirebaseMessaging.instance.getToken();
+      await _apiService.registerWorker(
         email: email,
         password: password,
         nama: nama,
         keahlian: keahlian,
         deskripsi: deskripsi,
         ktpFile: ktpFile,
+        fotoDiriFile: fotoDiriFile,
         portfolioLink: portfolioLink,
         noKtp: noKtp,
-        fotoDiriFile: fotoDiriFile,
+        fcmToken: resolvedFcm,
+      );
+    } catch (e) {
+      debugPrint('Error registerWorker: $e');
+      rethrow;
+    }
+  }
+
+  Future<AuthLoginResult> loginAndGetData({
+    required String email,
+    required String password,
+    String? fcmToken,
+  }) async {
+    try {
+      final resolvedFcm =
+          fcmToken ?? await FirebaseMessaging.instance.getToken();
+      final responseBody = await _apiService.loginUser(
+        email: email,
+        password: password,
+        fcmToken: resolvedFcm,
       );
 
-      final user = User.fromJson(response['user']);
-      final token = response['idToken'];
+      final Map<String, dynamic>? data = responseBody['data'];
+      if (data == null) {
+        throw Exception('Struktur respons dari backend tidak valid.');
+      }
 
-      await _storageService.saveTokenAndRole(token: token!, role: user.role);
-      notifyListeners();
+      final user = User.fromJson(data['user']);
+      final requireEmailVerification =
+          data['requireEmailVerification'] ?? false;
+
+      // Fungsi ini HANYA mengembalikan data, tidak mengubah state provider
+      return AuthLoginResult(
+        success: true,
+        requireEmailVerification: requireEmailVerification,
+        user: user,
+        idToken: data['idToken'],
+        customToken: data['customToken'],
+      );
     } catch (e) {
       rethrow;
     }
   }
 
-  // Future<void> signInWithGoogle() async {
-  //   try {
-  //     final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
-  //     if (googleUser == null) throw Exception('Login dibatalkan oleh pengguna');
+  // FUNGSI BARU (untuk memproses data login dan mengubah state)
+  Future<void> processLoginSuccess(AuthLoginResult loginResult) async {
+    _user = loginResult.user;
+    _token = loginResult.idToken;
+    _lastLoginRequiresEmailVerification = loginResult.requireEmailVerification;
 
-  //     final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+    await _signInFirebaseWithCustomTokenIfNeeded(loginResult.customToken);
+    await _storageService.saveTokenAndRole(token: _token!, role: _user!.role);
 
-  //     final credential = fba.GoogleAuthProvider.credential(
-  //       accessToken: googleAuth.accessToken,
-  //       idToken: googleAuth.idToken,
-  //     );
+    // Sekarang, baru kita beritahu seluruh aplikasi bahwa login benar-benar selesai
+    notifyListeners();
+  }
 
-  //     // Login ke Firebase Auth
-  //     final userCredential = await fba.FirebaseAuth.instance.signInWithCredential(credential);
-  //     final user = userCredential.user;
-  //     if (user == null) throw Exception('Gagal login dengan Google');
+  // ---------------------------------------------------------------------------
+  // CHECK EMAIL VERIFICATION (call backend /me)
+  // ---------------------------------------------------------------------------
+  Future<bool> checkEmailVerification() async {
+    if (_token == null) return false;
+    try {
+      final updatedUser = await _apiService.getMyProfile(_token!);
+      final verified = updatedUser.emailVerified;
+      _user = updatedUser;
+      notifyListeners();
+      return verified;
+    } catch (e) {
+      debugPrint('Gagal cek verifikasi email: $e');
+      return false;
+    }
+  }
 
-  //     // Cek apakah user sudah ada di Firestore
-  //     final userDocRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
-  //     final userDoc = await userDocRef.get();
+  // ---------------------------------------------------------------------------
+  // RESEND EMAIL VERIFICATION
+  // ---------------------------------------------------------------------------
+  Future<void> resendEmailVerification() async {
+    final email = _user?.email;
+    if (email == null) throw Exception('Tidak ada email pengguna.');
+    try {
+      // Jika endpoint kamu butuh auth, ganti token: _token!
+      await _apiService.resendVerificationEmail(
+        email: email,
+        token: _token ?? '',
+      );
+    } catch (e) {
+      debugPrint('Gagal resend verifikasi email: $e');
+      rethrow;
+    }
+  }
 
-  //     if (!userDoc.exists) {
-  //       await userDocRef.set({
-  //         'email': user.email,
-  //         'nama': user.displayName ?? '',
-  //         'role': 'CUSTOMER',
-  //         'createdAt': DateTime.now(),
-  //       });
-  //     }
+  // ---------------------------------------------------------------------------
+  // Sync FCM Token
+  // ---------------------------------------------------------------------------
+  Future<void> syncFcmToken(String fcmToken) async {
+    if (!isLoggedIn || _token == null) return;
+    try {
+      await _apiService.updateFcmToken(token: _token!, fcmToken: fcmToken);
+    } catch (e) {
+      debugPrint('Gagal sync FCM token: $e');
+    }
+  }
 
-  //     // Simpan token dan role ke penyimpanan lokal
-  //     final token = await user.getIdToken();
-  //     await _storageService.saveTokenAndRole(token: token, role: 'CUSTOMER');
+  // ---------------------------------------------------------------------------
+  // Change Avatar
+  // ---------------------------------------------------------------------------
+  Future<void> changeAvatar(String storageDownloadUrl) async {
+    final tkn = _token;
+    if (_user == null || tkn == null) {
+      throw Exception('No user logged in.');
+    }
+    await _apiService.updateAvatar(token: tkn, avatarUrl: storageDownloadUrl);
+    _user = _user!.copyWith(avatarUrl: storageDownloadUrl);
+    notifyListeners();
+  }
 
-  //     notifyListeners();
-  //   } catch (e) {
-  //     throw Exception('Login dengan Google gagal: $e');
-  //   }
-  // }
+  // ---------------------------------------------------------------------------
+  // Refresh User Data
+  // ---------------------------------------------------------------------------
+  Future<void> refreshUserData() async {
+    if (_token == null) return;
+    try {
+      final updatedUser = await _apiService.getMyProfile(_token!);
+      _user = updatedUser;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Gagal refresh user: $e');
+      await logout();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Logout
+  // ---------------------------------------------------------------------------
+  Future<void> logout() async {
+    try {
+      await fba.FirebaseAuth.instance.signOut();
+      debugPrint('Firebase signOut success.');
+    } catch (e) {
+      debugPrint('Firebase signOut error: $e');
+    }
+
+    _user = null;
+    _token = null;
+    _lastLoginRequiresEmailVerification = false;
+    _authScreen = AuthScreen.welcome;
+    await _storageService.deleteAll();
+    notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Forgot Password
+  // ---------------------------------------------------------------------------
+  Future<void> forgotPassword(String email) async {
+    await _apiService.forgotPassword(email);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Reset Password
+  // ---------------------------------------------------------------------------
+  Future<void> resetPassword({
+    required String oobCode,
+    required String newPassword,
+  }) async {
+    await _apiService.resetPassword(oobCode: oobCode, newPassword: newPassword);
+  }
 }

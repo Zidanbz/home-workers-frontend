@@ -243,68 +243,76 @@ class _CustomerOrdersPageState extends State<CustomerOrdersPage>
 
   Widget _buildOrderList(List<Order> orders, {required bool isUpcoming}) {
     if (orders.isEmpty) {
-      return Container(
-        width: double.infinity,
-        color: backgroundGray,
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(32),
-                  decoration: BoxDecoration(
-                    color: white,
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: primaryColor.withOpacity(0.1),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
+      return SingleChildScrollView(
+        physics:
+            const AlwaysScrollableScrollPhysics(), // ✅ agar RefreshIndicator tetap bisa dipicu
+        child: Container(
+          height:
+              MediaQuery.of(context).size.height * 0.7, // ✅ agar bisa scroll
+          width: double.infinity,
+          color: backgroundGray,
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(32),
+                    decoration: BoxDecoration(
+                      color: white,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: primaryColor.withOpacity(0.1),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: lightGray.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Icon(
+                            isUpcoming ? Icons.schedule : Icons.history,
+                            size: 48,
+                            color: primaryColor.withOpacity(0.6),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          isUpcoming
+                              ? 'Belum Ada Pesanan'
+                              : 'Belum Ada Riwayat',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            color: primaryColor,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          isUpcoming
+                              ? 'Yuk, cari layanan dan buat pesanan pertamamu!'
+                              : 'Riwayat pesananmu akan tampil di sini setelah selesai.',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: primaryColor.withOpacity(0.7),
+                            height: 1.5,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
                   ),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: lightGray.withOpacity(0.3),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Icon(
-                          isUpcoming ? Icons.schedule : Icons.history,
-                          size: 48,
-                          color: primaryColor.withOpacity(0.6),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        isUpcoming ? 'Belum Ada Pesanan' : 'Belum Ada Riwayat',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: primaryColor,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        isUpcoming
-                            ? 'Yuk, cari layanan dan buat pesanan pertamamu!'
-                            : 'Riwayat pesananmu akan tampil di sini setelah selesai.',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: primaryColor.withOpacity(0.7),
-                          height: 1.5,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -312,7 +320,8 @@ class _CustomerOrdersPageState extends State<CustomerOrdersPage>
     }
 
     return ListView.builder(
-      physics: const AlwaysScrollableScrollPhysics(),
+      physics:
+          const AlwaysScrollableScrollPhysics(), // ✅ agar bisa tarik refresh meskipun sedikit
       padding: const EdgeInsets.all(16.0),
       itemCount: orders.length,
       itemBuilder: (context, index) {

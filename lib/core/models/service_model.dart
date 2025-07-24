@@ -5,7 +5,7 @@ class Service {
   final String id;
   final String namaLayanan;
   final String category;
-  final num harga;
+  final int harga;
   final String fotoUtamaUrl;
   final String statusPersetujuan;
   final DateTime dibuatPada;

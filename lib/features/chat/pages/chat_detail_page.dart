@@ -40,6 +40,27 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     }
   }
 
+  void _showComingSoonDialog({String? featureLabel}) {
+    final label = featureLabel ?? 'Fitur ini';
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Coming Soon'),
+        content: Text(
+          '$label akan segera tersedia. Nantikan update berikutnya!',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+
   void _loadMessages() {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.token != null) {
@@ -167,16 +188,19 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
           ),
         ],
       ),
-      actions: [
+actions: [
         IconButton(
-          onPressed: () {},
+          onPressed: () => _showComingSoonDialog(featureLabel: 'Video call'),
           icon: const Icon(Icons.videocam_outlined, color: Colors.black),
+          tooltip: 'Video call (Coming Soon)',
         ),
         IconButton(
-          onPressed: () {},
+          onPressed: () => _showComingSoonDialog(featureLabel: 'Telepon'),
           icon: const Icon(Icons.call_outlined, color: Colors.black),
+          tooltip: 'Telepon (Coming Soon)',
         ),
       ],
+
     );
   }
 
@@ -224,10 +248,12 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       child: SafeArea(
         child: Row(
           children: [
-            IconButton(
-              onPressed: () {},
+IconButton(
+              onPressed: () => _showComingSoonDialog(featureLabel: 'Lampiran'),
               icon: const Icon(Icons.add, color: Colors.grey),
+              tooltip: 'Tambah Lampiran (Coming Soon)',
             ),
+
             Expanded(
               child: TextField(
                 controller: _messageController,

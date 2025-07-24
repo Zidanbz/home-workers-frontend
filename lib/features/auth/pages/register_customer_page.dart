@@ -1,8 +1,14 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:home_workers_fe/features/auth/pages/login_page.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Import Firebase Auth
 import 'package:provider/provider.dart';
-import '../../../core/state/auth_provider.dart';
+
+// Import AuthProvider kustom Anda dengan alias untuk menghindari konflik
+import '../../../core/state/auth_provider.dart' as AppAuthProvider;
+
+// Import halaman baru untuk verifikasi email
+import 'email_verification_pending_page.dart';
+import 'login_page.dart'; // Sudah ada, pastikan
 
 class RegisterCustomerPage extends StatefulWidget {
   const RegisterCustomerPage({super.key});
@@ -17,7 +23,6 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
-  // 1. State untuk melihat/menyembunyikan password
   bool _isPasswordObscured = true;
 
   @override
@@ -28,114 +33,68 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
     super.dispose();
   }
 
-  // 2. Logika registrasi yang sudah diperbaiki
-  Future<void> _handleRegister() async {
+ Future<void> _handleRegister() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final authProvider = Provider.of<AppAuthProvider.AuthProvider>(
+      context,
+      listen: false,
+    );
 
     setState(() => _isLoading = true);
 
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+    final nama = _namaController.text.trim();
+
     try {
       await authProvider.registerCustomer(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-        nama: _namaController.text.trim(),
+        email: email,
+        password: password,
+        nama: nama,
+        // fcmToken opsional; kalau null nanti provider ambil sendiri
       );
 
-      // Langsung panggil dialog sukses jika berhasil
-      if (mounted) {
-        await _showSuccessDialog();
-      }
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Colors.green,
+          content: Text('Registrasi berhasil! Cek email untuk verifikasi.'),
+        ),
+      );
+
+      // Arahkan ke halaman tunggu verifikasi
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => EmailVerificationPendingPage(email: email),
+        ),
+        (_) => false,
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: Colors.red,
-            content: Text(
-              'Registrasi gagal: ${e.toString().replaceAll("Exception: ", "")}',
-            ),
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.red,
+          content: Text(
+            'Registrasi gagal: ${e.toString().replaceAll("Exception: ", "")}',
           ),
-        );
-      }
+        ),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // 3. Dialog yang sudah diperbaiki untuk menggunakan provider
-  Future<void> _showSuccessDialog() async {
-    return showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext dialogContext) {
-        // Gunakan dialogContext
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20.0),
-          ),
-          elevation: 8,
-          backgroundColor: Colors.white,
-          child: Container(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                const Icon(
-                  Icons.check_circle_outline_rounded,
-                  color: Colors.green,
-                  size: 70,
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  'Registrasi Berhasil!',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Akun Anda telah berhasil dibuat. Silakan login untuk melanjutkan.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, color: Colors.black54),
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueGrey,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'Lanjut ke Login',
-                      style: TextStyle(fontSize: 16),
-                    ),
-                    onPressed: () {
-                      // ✅ Gunakan perintah navigasi langsung
-                      Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(
-                          builder: (context) => const LoginPage(),
-                        ),
-                        (Route<dynamic> route) => false,
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
+
+  // Hapus _showSuccessDialog() atau pastikan tidak dipanggil lagi
+  // karena navigasi ke EmailVerificationPendingPage sudah menggantikannya.
+  // ... (bagian _showSuccessDialog yang lama) ...
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: const Color(0xFFD9D9D9),
       appBar: AppBar(
         title: const Text('Daftar Akun Customer'),
         backgroundColor: Colors.transparent,
@@ -143,7 +102,8 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new),
-          onPressed: () => Provider.of<AuthProvider>(
+          onPressed: () => Provider.of<AppAuthProvider.AuthProvider>(
+            // <--- Ubah di sini
             context,
             listen: false,
           ).showWelcomePage(),
@@ -155,13 +115,12 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Judul Halaman
               const Text(
                 'Buat Akun Anda',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: Colors.blueGrey,
+                  color: Color(0xFF1A374D),
                 ),
               ),
               const SizedBox(height: 8),
@@ -170,7 +129,6 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
                 style: TextStyle(fontSize: 16, color: Colors.black54),
               ),
               const SizedBox(height: 40),
-              // Bungkus Form dengan Card untuk desain lebih baik
               Card(
                 elevation: 4,
                 shadowColor: Colors.grey.withOpacity(0.2),
@@ -214,7 +172,6 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
                           },
                         ),
                         const SizedBox(height: 16),
-                        // 4. TextFormField Password yang sudah diperbarui
                         TextFormField(
                           controller: _passwordController,
                           obscureText: _isPasswordObscured,
@@ -247,7 +204,7 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
                                   padding: const EdgeInsets.symmetric(
                                     vertical: 16,
                                   ),
-                                  backgroundColor: Colors.blueGrey,
+                                  backgroundColor: const Color(0xFF1A374D),
                                   foregroundColor: Colors.white,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
@@ -264,7 +221,6 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
                 ),
               ),
               const SizedBox(height: 24),
-              // 5. Link untuk pindah ke halaman Login
               RichText(
                 text: TextSpan(
                   style: const TextStyle(color: Colors.black54, fontSize: 15),
@@ -278,10 +234,12 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
                       ),
                       recognizer: TapGestureRecognizer()
                         ..onTap = () {
-                          Provider.of<AuthProvider>(
-                            context,
-                            listen: false,
-                          ).showLoginPage();
+                          Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(
+                              builder: (context) => const LoginPage(),
+                            ),
+                            (Route<dynamic> route) => false,
+                          );
                         },
                     ),
                   ],

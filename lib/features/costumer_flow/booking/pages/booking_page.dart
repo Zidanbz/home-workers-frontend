@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:home_workers_fe/core/helper/voucher_helper.dart';
 import 'package:home_workers_fe/core/models/availability_model.dart';
 import 'package:home_workers_fe/features/costumer_flow/booking/pages/snapPayment_page.dart';
 import 'package:home_workers_fe/features/workerprofile/pages/worker_profile_page.dart';
@@ -22,7 +23,17 @@ class _BookingPageState extends State<BookingPage> {
 
   DateTime _selectedDate = DateTime.now();
   String? _selectedTimeSlot;
-  String _selectedFrequency = 'Layanan Sekali Saja';
+
+  String? _selectedVoucher; // kode voucher dipilih user
+  String? _appliedVoucherCode; // voucher yang sudah dicek dan diterapkan
+  int _basePrice = 0; // harga dasar layanan
+  int _discount = 0; // diskon dari voucher
+  int _finalPrice = 0; // harga setelah diskon
+  bool _checkingVoucher = false;
+  String? _voucherMessage;
+
+  List<Map<String, dynamic>> _vouchers = []; // List voucher untuk dropdown
+  List<String> _bookedSlots = [];
 
   List<String> get _availableTimeSlots {
     final weekday = DateFormat(
@@ -36,9 +47,32 @@ class _BookingPageState extends State<BookingPage> {
     return availability.slots;
   }
 
-  Map<String, List<String>> _bookedSlotsByDate = {};
+  @override
+  void initState() {
+    super.initState();
+    _basePrice = widget.service.harga ?? 0;
+    _finalPrice = _basePrice;
+    _loadBookedSlots();
+    _fetchVouchers();
+  }
 
-  List<String> _bookedSlots = [];
+  Future<void> _fetchVouchers() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final token = authProvider.token;
+    if (token == null) return;
+
+    try {
+      final raw = await _apiService.getAvailableVouchers(token: token);
+      final normalized = normalizeVouchers(raw);
+      if (mounted) {
+        setState(() {
+          _vouchers = normalized;
+        });
+      }
+    } catch (e) {
+      debugPrint('Gagal ambil voucher: $e');
+    }
+  }
 
   Future<void> _loadBookedSlots() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -61,6 +95,60 @@ class _BookingPageState extends State<BookingPage> {
       }
     } catch (e) {
       debugPrint('Gagal ambil booked slots: $e');
+    }
+  }
+
+  Future<void> _checkVoucher() async {
+    if (_selectedVoucher == null || _selectedVoucher!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pilih kode voucher terlebih dahulu.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _checkingVoucher = true;
+      _voucherMessage = null;
+    });
+
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final token = authProvider.token;
+
+    try {
+      final result = await _apiService.validateVoucherCode(
+        token: token!,
+        voucherCode: _selectedVoucher!,
+        orderAmount: _basePrice,
+      );
+
+      final discount = (result['discount'] ?? 0) as int;
+      final finalTotal =
+          (result['finalTotal'] ?? (_basePrice - discount)) as int;
+
+      setState(() {
+        _discount = discount;
+        _finalPrice = finalTotal < 0 ? 0 : finalTotal;
+        _appliedVoucherCode = result['voucherCode'] ?? _selectedVoucher;
+        _voucherMessage = result['message'] ?? 'Voucher diterapkan.';
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Voucher diterapkan: -${_formatCurrency(discount)}'),
+        ),
+      );
+    } catch (e) {
+      setState(() {
+        _discount = 0;
+        _finalPrice = _basePrice;
+        _appliedVoucherCode = null;
+        _voucherMessage = e.toString().replaceFirst('Exception: ', 'Gagal: ');
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_voucherMessage!), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _checkingVoucher = false);
     }
   }
 
@@ -100,6 +188,7 @@ class _BookingPageState extends State<BookingPage> {
         serviceId: widget.service.id,
         jadwalPerbaikan: schedule,
         catatan: 'Permintaan survei dulu ya kak!',
+        voucherCode: _appliedVoucherCode,
       );
 
       final snapToken = response['snapToken'];
@@ -126,6 +215,14 @@ class _BookingPageState extends State<BookingPage> {
     }
   }
 
+  String _formatCurrency(int value) {
+    return NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp',
+      decimalDigits: 0,
+    ).format(value);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isSurvey = widget.service.tipeLayanan == 'survey';
@@ -147,8 +244,6 @@ class _BookingPageState extends State<BookingPage> {
           children: [
             _buildWorkerInfo(),
             const SizedBox(height: 24),
-            _buildFrequencySelector(),
-            const SizedBox(height: 24),
             const Text(
               'Kapan Anda menginginkan layanan?',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
@@ -162,6 +257,8 @@ class _BookingPageState extends State<BookingPage> {
             ),
             const SizedBox(height: 16),
             _buildTimeSlotPicker(),
+            const SizedBox(height: 24),
+            if (!isSurvey) _buildVoucherSection(),
           ],
         ),
       ),
@@ -186,70 +283,22 @@ class _BookingPageState extends State<BookingPage> {
           ),
         ),
         TextButton(
-          onPressed: () async {
-            final authProvider = Provider.of<AuthProvider>(
-              context,
-              listen: false,
-            );
-            final token = authProvider.token;
-            final workerId = widget.service.workerInfo['id'];
-
-            if (token == null || workerId == null) return;
-
-            try {
-              final workerData = await _apiService.getWorkerProfile(
-                token: token,
-                workerId: workerId,
-              );
-              if (!mounted) return;
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => WorkerProfilePage(workerInfo: workerData),
-                ),
-              );
-            } catch (e) {
+          onPressed: () {
+            final workerId = widget.service.workerInfo['id'] as String?;
+            if (workerId == null) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Gagal membuka profil: ${e.toString()}'),
-                  backgroundColor: Colors.red,
-                ),
+                const SnackBar(content: Text('ID Worker tidak ditemukan')),
               );
+              return;
             }
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => WorkerProfilePage(workerId: workerId),
+              ),
+            );
           },
           child: const Text('Lihat Profil >'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFrequencySelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Seberapa sering Anda membutuhkan layanan ini?',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          value: _selectedFrequency,
-          items: ['Layanan Sekali Saja', 'Mingguan', 'Bulanan']
-              .map(
-                (label) => DropdownMenuItem(value: label, child: Text(label)),
-              )
-              .toList(),
-          onChanged: (value) {
-            if (value != null) setState(() => _selectedFrequency = value);
-          },
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-          ),
         ),
       ],
     );
@@ -269,9 +318,9 @@ class _BookingPageState extends State<BookingPage> {
             onTap: () {
               setState(() {
                 _selectedDate = date;
-                _selectedTimeSlot = null; // reset pilihan jam
+                _selectedTimeSlot = null;
               });
-              _loadBookedSlots(); // 🚀 ambil slot yang sudah dibooking
+              _loadBookedSlots();
             },
             child: Container(
               width: 60,
@@ -308,8 +357,6 @@ class _BookingPageState extends State<BookingPage> {
     );
   }
 
-  
-
   Widget _buildTimeSlotPicker() {
     final slots = _availableTimeSlots;
     if (slots.isEmpty) {
@@ -321,9 +368,6 @@ class _BookingPageState extends State<BookingPage> {
 
     final now = DateTime.now();
     final isToday = DateUtils.isSameDay(_selectedDate, now);
-    final booked =
-        _bookedSlotsByDate[DateFormat('yyyy-MM-dd').format(_selectedDate)] ??
-        [];
 
     return Wrap(
       spacing: 12.0,
@@ -332,7 +376,6 @@ class _BookingPageState extends State<BookingPage> {
         final isSelected = _selectedTimeSlot == slot;
         final isBooked = _bookedSlots.contains(slot);
 
-        // Parsing slot "08.00" jadi DateTime
         final match = RegExp(r'(\d{2})\.(\d{2})').firstMatch(slot);
         final slotHour = int.parse(match?.group(1) ?? '0');
         final slotMinute = int.parse(match?.group(2) ?? '0');
@@ -376,7 +419,89 @@ class _BookingPageState extends State<BookingPage> {
     );
   }
 
+  Widget _buildVoucherSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Pilih Voucher',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: _selectedVoucher,
+          items: _vouchers.map((v) {
+            final code = v['code'] as String;
+            final discountType = v['discountType'];
+            final value = v['value'];
+            final label = discountType == 'percent'
+                ? '$code • ${value}%'
+                : '$code • ${_formatCurrency(value is int ? value : int.tryParse(value.toString()) ?? 0)}';
+            return DropdownMenuItem<String>(value: code, child: Text(label));
+          }).toList(),
+          onChanged: (value) {
+            setState(() {
+              _selectedVoucher = value;
+              _discount = 0;
+              _finalPrice = _basePrice;
+              _appliedVoucherCode = null;
+              _voucherMessage = null;
+            });
+          },
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            hintText: 'Pilih voucher',
+          ),
+        ),
+        const SizedBox(height: 8),
+        ElevatedButton(
+          onPressed: _checkingVoucher ? null : _checkVoucher,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF1E232C),
+            foregroundColor: Colors.white,
+          ),
+          child: _checkingVoucher
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text('Cek Voucher'),
+        ),
+        if (_appliedVoucherCode != null)
+          TextButton.icon(
+            onPressed: () {
+              setState(() {
+                _appliedVoucherCode = null;
+                _discount = 0;
+                _finalPrice = _basePrice;
+                _voucherMessage = 'Voucher dibatalkan.';
+              });
+            },
+            icon: const Icon(Icons.close),
+            label: const Text('Batalkan Voucher'),
+          ),
+        if (_discount > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Text(
+              'Diskon: ${_formatCurrency(_discount)}',
+              style: const TextStyle(
+                color: Colors.green,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildBottomBar(bool isSurvey) {
+    final totalPrice = isSurvey ? 0 : _finalPrice;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -395,9 +520,7 @@ class _BookingPageState extends State<BookingPage> {
               children: [
                 const Text('Total Biaya', style: TextStyle(color: Colors.grey)),
                 Text(
-                  isSurvey
-                      ? 'Menunggu Penawaran'
-                      : widget.service.formattedPrice,
+                  isSurvey ? 'Menunggu Penawaran' : _formatCurrency(totalPrice),
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,

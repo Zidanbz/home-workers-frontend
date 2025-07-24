@@ -10,6 +10,7 @@ import 'core/state/auth_provider.dart'; // Impor halaman baru
 import 'features/auth/pages/welcome_page.dart';
 import 'features/main_page.dart';
 import 'firebase_options.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

@@ -1,12 +1,17 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:home_workers_fe/features/auth/pages/email_verification_pending_page.dart';
+import 'package:home_workers_fe/features/auth/pages/forgot_password_page.dart';
+import 'package:provider/provider.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+
 import 'package:home_workers_fe/features/auth/pages/select_role_page.dart';
 import 'package:home_workers_fe/features/main_page.dart';
-import 'package:provider/provider.dart';
-import '../../../core/state/auth_provider.dart';
+import 'package:home_workers_fe/core/state/auth_provider.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
+
   @override
   State<LoginPage> createState() => _LoginPageState();
 }
@@ -16,45 +21,87 @@ class _LoginPageState extends State<LoginPage> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _isPasswordObscured = true;
+  String? _fcmToken;
+
+  @override
+  void initState() {
+    super.initState();
+    _initFcm();
+  }
+
+  Future<void> _initFcm() async {
+    try {
+      await FirebaseMessaging.instance.requestPermission();
+      final token = await FirebaseMessaging.instance.getToken();
+      if (mounted) setState(() => _fcmToken = token);
+      debugPrint('FCM token (login_page): $token');
+
+      // Dengarkan token refresh
+      FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
+        debugPrint('FCM token refreshed: $newToken');
+        if (mounted) setState(() => _fcmToken = newToken);
+
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        if (authProvider.isLoggedIn) {
+          await authProvider.syncFcmToken(newToken);
+        }
+      });
+    } catch (e) {
+      debugPrint('Gagal inisialisasi FCM: $e');
+    }
+  }
 
   Future<void> _performLogin() async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
-    // Simpan provider sebelum blok async untuk menghindari warning
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
-      scaffoldMessenger.showSnackBar(
-        const SnackBar(content: Text('Email dan password tidak boleh kosong.')),
-      );
+      /* ... validasi ... */
       return;
     }
 
-    if (!mounted) return;
     setState(() => _isLoading = true);
 
     try {
-      // 1. Lakukan login
-      await authProvider.login(email, password);
+      // 1. Panggil fungsi yang HANYA mengambil data
+      final result = await authProvider.loginAndGetData(
+        email: email,
+        password: password,
+        fcmToken: _fcmToken,
+      );
 
-      // 2. Jika berhasil, dapatkan role dari user yang baru saja login
-      final userRole = authProvider.user?.role;
-
-      // 3. Cek jika role ada, lalu navigasi dengan membawa role tersebut
-      if (userRole != null && mounted) {
+      // 2. Logika pengecekan tetap sama
+      if (result.requireEmailVerification) {
+        // Jika belum verifikasi, langsung arahkan ke halaman tunggu
+        // State global BELUM diubah, jadi AuthWrapper tidak akan mengganggu
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.orange,
+            content: Text('Login berhasil! Silakan verifikasi email Anda.'),
+          ),
+        );
         await navigator.pushAndRemoveUntil(
           MaterialPageRoute(
-            // Berikan userRole ke MainPage
-            builder: (context) => MainPage(userRole: userRole),
+            builder: (context) => EmailVerificationPendingPage(email: email),
           ),
-          (route) => false, // Hapus semua halaman sebelumnya
+          (route) => false,
         );
       } else {
-        // Jika karena suatu alasan role tidak ditemukan setelah login
-        throw Exception("Gagal mendapatkan role pengguna.");
+        // Jika SUDAH verifikasi
+        // 3. BARU kita proses login dan ubah state global
+        await authProvider.processLoginSuccess(result);
+
+        // 4. Setelah state diubah, baru kita navigasi
+        final userRole = result.user.role;
+        if (!mounted) return;
+        await navigator.pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => MainPage(userRole: userRole)),
+          (route) => false,
+        );
       }
     } catch (e) {
       if (!mounted) return;
@@ -67,9 +114,7 @@ class _LoginPageState extends State<LoginPage> {
         ),
       );
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -77,16 +122,7 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        // leading: IconButton(
-        //   icon: const Icon(Icons.arrow_back, color: Color(0xFF1E232C)),
-        //   onPressed: () {
-        //     Provider.of<AuthProvider>(context, listen: false).showWelcomePage();
-        //   },
-        // ),
-      ),
+      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24.0),
         child: Column(
@@ -168,7 +204,13 @@ class _LoginPageState extends State<LoginPage> {
             Align(
               alignment: Alignment.centerRight,
               child: TextButton(
-                onPressed: () {},
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const ForgotPasswordPage(),
+                    ),
+                  );
+                },
                 child: const Text('Forgot password?'),
               ),
             ),
@@ -215,7 +257,6 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       recognizer: TapGestureRecognizer()
                         ..onTap = () {
-                          // Navigasi ke halaman Pilih Peran
                           Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (context) => const SelectRolePage(),

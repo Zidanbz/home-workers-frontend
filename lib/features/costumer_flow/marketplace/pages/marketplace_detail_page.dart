@@ -52,6 +52,7 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
         ),
         backgroundColor: const Color(0xFF1A374D),
         elevation: 0.5,
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: FutureBuilder<Service>(
         future: _serviceDetailFuture,
@@ -158,15 +159,15 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
                 ],
               ),
             ),
-            IconButton(
-              onPressed: () {
-                // TODO: Navigasi ke halaman chat
-              },
-              icon: const Icon(
-                Icons.chat_bubble_outline,
-                color: Color(0xFF1A374D),
-              ),
-            ),
+            // IconButton(
+            //   onPressed: () {
+            //     // TODO: Navigasi ke halaman chat
+            //   },
+            //   icon: const Icon(
+            //     Icons.chat_bubble_outline,
+            //     color: Color(0xFF1A374D),
+            //   ),
+            // ),
           ],
         ),
       ),

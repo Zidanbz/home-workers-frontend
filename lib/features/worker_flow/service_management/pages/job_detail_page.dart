@@ -109,12 +109,12 @@ class _JobDetailPageState extends State<JobDetailPage> {
       appBar: AppBar(
         title: const Text('Detail Pekerjaan'),
         backgroundColor: const Color(0xFF1A374D), // Primary color
-        elevation: 1,
+        elevation: 4,
         iconTheme: const IconThemeData(color: Colors.white),
         titleTextStyle: const TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.bold,
-          fontSize: 18,
+          fontSize: 20,
         ),
       ),
       body: FutureBuilder<Service>(
@@ -141,28 +141,34 @@ class _JobDetailPageState extends State<JobDetailPage> {
                 const SizedBox(height: 24),
                 _buildInfoRow(Icons.category_outlined, service.category),
                 const SizedBox(height: 8),
-                _buildInfoRow(Icons.location_on_outlined, 'Makassar, BTP'),
-                _buildInfoRow(Icons.access_time_outlined, '10:00 WITA'),
                 _buildInfoRow(
                   Icons.payment_outlined,
                   service.metodePembayaran.join(' & '),
                 ),
-                const SizedBox(height: 24),
+                const Divider(height: 32),
                 const Text(
                   'Deskripsi',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Color(0xFF1A374D),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   service.deskripsiLayanan,
                   style: const TextStyle(height: 1.5),
                 ),
-                const SizedBox(height: 24),
+                const Divider(height: 32),
                 const Text(
                   'Foto Layanan',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Color(0xFF1A374D),
+                  ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 _buildPhotoGallery(service.photoUrls),
                 const SizedBox(height: 32),
                 _buildActionButtons(service),
@@ -221,7 +227,7 @@ class _JobDetailPageState extends State<JobDetailPage> {
     final postDate = DateFormat('dd MMM yyyy').format(service.dibuatPada);
     return Card(
       color: Colors.white,
-      elevation: 2,
+      elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -288,10 +294,7 @@ class _JobDetailPageState extends State<JobDetailPage> {
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF1A374D),
-              ), // Primary color
+              style: const TextStyle(fontSize: 14, color: Color(0xFF4B5563)),
             ),
           ),
         ],
@@ -299,11 +302,75 @@ class _JobDetailPageState extends State<JobDetailPage> {
     );
   }
 
+  Widget _buildAvailabilitySection(Map<String, dynamic> availability) {
+    final orderedDays = [
+      'Senin',
+      'Selasa',
+      'Rabu',
+      'Kamis',
+      'Jumat',
+      'Sabtu',
+      'Minggu',
+    ];
+    final availableDays = availability.keys.toList()
+      ..sort(
+        (a, b) => orderedDays.indexOf(a).compareTo(orderedDays.indexOf(b)),
+      );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Jadwal Ketersediaan',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+            color: Color(0xFF1A374D),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: Colors.grey[300]!),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: ExpansionTile(
+            title: const Text('Lihat Jadwal Lengkap'),
+            leading: const Icon(Icons.calendar_today_outlined),
+            children: availableDays.map((day) {
+              final slots = List<String>.from(availability[day]!);
+              if (slots.isEmpty) return const SizedBox.shrink();
+
+              return ListTile(
+                title: Text(
+                  day,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(slots.join(', ')),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildPhotoGallery(List<dynamic> photoUrls) {
     if (photoUrls.isEmpty) {
-      return const Text(
-        'Tidak ada foto tambahan.',
-        style: TextStyle(color: Colors.grey),
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFD9D9D9),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Center(
+          child: Text(
+            'Tidak ada foto tambahan.',
+            style: TextStyle(color: Colors.grey),
+          ),
+        ),
       );
     }
     return SizedBox(

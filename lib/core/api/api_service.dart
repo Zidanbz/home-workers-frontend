@@ -8,6 +8,7 @@ import 'package:home_workers_fe/core/models/notification_model.dart';
 import 'package:home_workers_fe/core/models/order_model.dart';
 import 'package:home_workers_fe/core/models/user_model.dart';
 import 'package:home_workers_fe/core/models/wallet_model.dart';
+import 'package:home_workers_fe/core/models/worker_model.dart';
 import 'package:home_workers_fe/features/notifications/pages/notification_page.dart';
 import 'package:http/http.dart' as http;
 import '../models/service_model.dart'; // Impor model yang baru kita buat
@@ -16,24 +17,77 @@ class ApiService {
   final String _baseUrl = 'https://api-eh5nicgdhq-uc.a.run.app/api';
 
   // Fungsi login (tidak berubah)
-  Future<Map<String, dynamic>> loginUser(String email, String password) async {
+  Future<Map<String, dynamic>> loginUser({
+    required String email,
+    required String password,
+    String? fcmToken,
+  }) async {
     final url = Uri.parse('$_baseUrl/auth/login');
-    try {
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': email, 'password': password}),
-      );
-      final responseBody = jsonDecode(response.body);
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'email': email,
+        'password': password,
+        'fcmToken': fcmToken,
+      }),
+    );
 
-      if (response.statusCode == 200 && responseBody['success'] == true) {
-        return responseBody['data']; // ⬅️ Ambil hanya bagian 'data'
-      } else {
-        throw Exception(responseBody['message'] ?? 'Login failed');
-      }
-    } catch (e) {
-      print("error: $e");
-      throw Exception('Could not connect to the server. Please try again.');
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Gagal login: ${response.body}');
+    }
+  }
+
+  Future<void> resendVerificationEmail({
+    required String email,
+    required String token,
+  }) async {
+    final url = Uri.parse('$_baseUrl/auth/resend-verification');
+    final response = await http.post(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'email': email}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Gagal mengirim ulang email verifikasi: ${response.body}',
+      );
+    }
+  }
+
+  // =============================
+  // UPDATE FCM TOKEN (setelah login)
+  // =============================
+  Future<void> updateFcmToken({
+    required String token, // ini ID token Bearer untuk backend
+    required String fcmToken, // ini FCM token device
+  }) async {
+    final url = Uri.parse('$_baseUrl/auth/user/update-fcm-token');
+
+    final response = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'fcmToken': fcmToken}),
+    );
+
+    if (response.statusCode != 200) {
+      Map<String, dynamic> decoded = {};
+      try {
+        decoded = jsonDecode(response.body) as Map<String, dynamic>;
+      } catch (_) {}
+      final message =
+          decoded['message'] ??
+          'Failed to update FCM token (${response.statusCode})';
+      throw Exception(message);
     }
   }
 
@@ -60,6 +114,55 @@ class ApiService {
       }
     } catch (e) {
       throw Exception('Failed to connect to the server. $e');
+    }
+  }
+
+  Future<void> forgotPassword(String email) async {
+    final url = Uri.parse('$_baseUrl/auth/forgot-password');
+
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email}),
+    );
+
+    Map<String, dynamic> decoded = {};
+    try {
+      decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (_) {}
+
+    if (response.statusCode == 200) {
+      return;
+    } else {
+      final message =
+          decoded['message'] ?? 'Gagal mengirim email reset password.';
+      throw Exception(message);
+    }
+  }
+
+  /// Set password baru memakai oobCode dari email reset Firebase.
+  Future<void> resetPassword({
+    required String oobCode,
+    required String newPassword,
+  }) async {
+    final url = Uri.parse('$_baseUrl/auth/reset-password');
+
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'oobCode': oobCode, 'newPassword': newPassword}),
+    );
+
+    Map<String, dynamic> decoded = {};
+    try {
+      decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (_) {}
+
+    if (response.statusCode == 200) {
+      return;
+    } else {
+      final message = decoded['message'] ?? 'Gagal mereset password.';
+      throw Exception(message);
     }
   }
 
@@ -347,7 +450,7 @@ class ApiService {
 
       final responseBody = jsonDecode(response.body);
 
-      print("response body: ${response.body}");
+      print("response DIJASDOSAASDMLADSDASML: ${response.body}");
       if (response.statusCode == 200 && responseBody['success'] == true) {
         return Service.fromJson(responseBody['data']);
       } else {
@@ -511,14 +614,22 @@ class ApiService {
       );
 
       final responseBody = jsonDecode(response.body);
+      print('URL: $url');
+      print('Token: $token');
+      print('Status code: ${response.statusCode}');
+      print('Body: ${response.body}');
 
       if (response.statusCode == 200 && responseBody['success'] == true) {
-        return responseBody['data'];
+        return Map<String, dynamic>.from(responseBody['data'] ?? {});
       } else {
-        throw Exception(responseBody['message'] ?? 'Failed to load summary');
+        throw Exception(
+          responseBody['message'] ??
+              'Server returned status ${response.statusCode}',
+        );
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server.');
+      print('Error: $e');
+      throw Exception('Network error: $e');
     }
   }
 
@@ -772,83 +883,59 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> registerCustomer({
+  Future<void> registerCustomer({
     required String email,
     required String password,
     required String nama,
+    String? fcmToken,
   }) async {
     final url = Uri.parse('$_baseUrl/auth/register/customer');
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'email': email,
+        'password': password,
+        'nama': nama,
+        'fcmToken': fcmToken,
+      }),
+    );
 
-    try {
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': email, 'password': password, 'nama': nama}),
-      );
-
-      final responseBody = jsonDecode(response.body);
-      print('response body: ${response.body}');
-      if (response.statusCode == 201 && responseBody['success'] == true) {
-        return responseBody; // <- yang akan dikembalikan ke AuthProvider
-      } else {
-        throw Exception(responseBody['message'] ?? 'Registrasi gagal');
-      }
-    } catch (e) {
-      print('Error: $e');
-      throw Exception('Gagal menghubungi server.');
+    if (response.statusCode != 201) {
+      throw Exception('Gagal registrasi customer: ${response.body}');
     }
   }
 
-  // Ganti fungsi registerWorker yang lama dengan yang ini
-  Future<Map<String, dynamic>> registerWorker({
+  Future<void> registerWorker({
     required String email,
     required String password,
     required String nama,
     required List<String> keahlian,
     required String deskripsi,
-    required String noKtp, // <-- 1. TAMBAHKAN PARAMETER INI
     required File ktpFile,
     required File fotoDiriFile,
     String? portfolioLink,
+    String? noKtp,
+    String? fcmToken,
   }) async {
-    var uri = Uri.parse('$_baseUrl/auth/register/worker');
-    var request = http.MultipartRequest('POST', uri);
+    final url = Uri.parse('$_baseUrl/auth/register/worker');
+    final request = http.MultipartRequest('POST', url)
+      ..fields['email'] = email
+      ..fields['password'] = password
+      ..fields['nama'] = nama
+      ..fields['deskripsi'] = deskripsi
+      ..fields['keahlian'] = jsonEncode(keahlian)
+      ..fields['linkPortofolio'] = portfolioLink ?? ''
+      ..fields['noKtp'] = noKtp ?? ''
+      ..fields['fcmToken'] = fcmToken ?? ''
+      ..files.add(await http.MultipartFile.fromPath('ktp', ktpFile.path))
+      ..files.add(
+        await http.MultipartFile.fromPath('fotoDiri', fotoDiriFile.path),
+      );
 
-    // Tambahkan semua fields teks ke request
-    request.fields['email'] = email;
-    request.fields['password'] = password;
-    request.fields['nama'] = nama;
-    request.fields['deskripsi'] = deskripsi;
-    request.fields['keahlian'] = jsonEncode(keahlian);
-    request.fields['noktp'] = noKtp; // <-- 2. TAMBAHKAN FIELD INI
-
-    if (portfolioLink != null && portfolioLink.isNotEmpty) {
-      request.fields['linkPortofolio'] = portfolioLink;
-    }
-
-    // Tambahkan file ke request
-    request.files.add(await http.MultipartFile.fromPath('ktp', ktpFile.path));
-    request.files.add(
-      await http.MultipartFile.fromPath('fotoDiri', fotoDiriFile.path),
-    );
-
-    try {
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-      final decoded = jsonDecode(response.body);
-
-      if (response.statusCode == 201 && decoded['success'] == true) {
-        print('Registrasi berhasil: ${response.body}');
-        return decoded['data'] ?? {};
-      } else {
-        print('Registrasi gagal: ${response.body}');
-        throw Exception(
-          decoded['message'] ?? 'Terjadi kesalahan saat registrasi',
-        );
-      }
-    } catch (e) {
-      print('Error saat mengirim request: $e');
-      throw Exception('Tidak dapat terhubung ke server.');
+    final response = await request.send();
+    if (response.statusCode != 201) {
+      throw Exception('Gagal registrasi worker: ${response.statusCode}');
     }
   }
 
@@ -951,6 +1038,7 @@ class ApiService {
     required String serviceId,
     required DateTime jadwalPerbaikan,
     required String catatan,
+    String? voucherCode,
   }) async {
     final url = Uri.parse('$_baseUrl/payments/initiate');
     final response = await http.post(
@@ -1150,5 +1238,163 @@ class ApiService {
       final data = jsonDecode(response.body);
       throw Exception(data['message'] ?? 'Gagal mengirim ulasan');
     }
+  }
+
+  Future<Worker> getWorkerById(String workerId) async {
+    final url = Uri.parse('$_baseUrl/workers/$workerId');
+    final response = await http.get(url);
+
+    final body = jsonDecode(response.body);
+    if (response.statusCode == 200 && body['success'] == true) {
+      return Worker.fromJson(body['data']);
+    } else {
+      throw Exception(body['message'] ?? 'Gagal ambil data worker');
+    }
+  }
+
+  Future<void> updateAvatar({
+    required String token,
+    required String avatarUrl,
+  }) async {
+    final url = Uri.parse('$_baseUrl/users/me/avatar');
+    try {
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'avatarUrl': avatarUrl}),
+      );
+
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode != 200 || responseBody['success'] != true) {
+        throw Exception(responseBody['message'] ?? 'Gagal update avatar');
+      }
+    } catch (e) {
+      throw Exception('Terjadi kesalahan: $e');
+    }
+  }
+
+  /// Validasi voucher sebelum membuat order
+  /// Mengembalikan: { voucherCode, discount, finalTotal, message }
+  Future<Map<String, dynamic>> validateVoucherCode({
+    required String token,
+    required String voucherCode,
+    required int orderAmount,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/vouchers/validate');
+
+    final resp = await http.post(
+      uri,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'voucherCode': voucherCode.trim(),
+        'orderAmount': orderAmount,
+      }),
+    );
+
+    Map<String, dynamic> body;
+    try {
+      body = jsonDecode(resp.body) as Map<String, dynamic>;
+    } catch (_) {
+      throw Exception(
+        'Format respons tidak valid dari server (kode: ${resp.statusCode}).',
+      );
+    }
+
+    // Struktur backend versi helper menggunakan sendSuccess/sendError:
+    // success: bool, message: string, data: {...}
+    final success = body['success'] == true;
+
+    if (!success) {
+      // Ambil pesan error spesifik
+      final msg = body['message'] ?? 'Validasi voucher gagal.';
+      throw Exception(msg);
+    }
+
+    final data = (body['data'] ?? {}) as Map<String, dynamic>;
+
+    return {
+      'voucherCode': data['voucherCode'],
+      'discount': data['discount'] ?? 0,
+      'finalTotal': data['finalTotal'],
+      'message': data['message'] ?? body['message'],
+    };
+  }
+
+  Future<Map<String, dynamic>> claimVoucher({
+    required String token,
+    required String voucherCode,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/vouchers/claim');
+
+    final resp = await http.post(
+      uri,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'voucherCode': voucherCode.trim()}),
+    );
+
+    Map<String, dynamic> body;
+    try {
+      body = jsonDecode(resp.body) as Map<String, dynamic>;
+    } catch (_) {
+      throw Exception(
+        'Format respons tidak valid dari server (kode: ${resp.statusCode}).',
+      );
+    }
+
+    if (body['success'] != true) {
+      throw Exception(body['message'] ?? 'Gagal klaim voucher.');
+    }
+
+    return body['data'] ?? {};
+  }
+
+  Future<Map<String, dynamic>> getAvailableVouchers({
+    required String token,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/vouchers/');
+
+    final resp = await http.get(
+      uri,
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+
+    Map<String, dynamic> decoded;
+    try {
+      decoded = jsonDecode(resp.body) as Map<String, dynamic>;
+    } catch (_) {
+      throw Exception(
+        'Gagal parsing respons server (status: ${resp.statusCode}).',
+      );
+    }
+
+    final success = decoded['success'] == true;
+    if (!success) {
+      throw Exception(decoded['message'] ?? 'Gagal mengambil voucher.');
+    }
+
+    final data = decoded['data'] as Map<String, dynamic>? ?? {};
+    // Pastikan selalu ada struktur minimal
+    final global =
+        (data['global'] as List?)
+            ?.map((e) => Map<String, dynamic>.from(e as Map))
+            .toList() ??
+        <Map<String, dynamic>>[];
+    final user =
+        (data['user'] as List?)
+            ?.map((e) => Map<String, dynamic>.from(e as Map))
+            .toList() ??
+        <Map<String, dynamic>>[];
+
+    return {'global': global, 'user': user};
   }
 }

@@ -1,8 +1,16 @@
+import 'dart:io';
+
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:home_workers_fe/core/models/user_model.dart';
 import 'package:home_workers_fe/features/auth/pages/login_page.dart';
+import 'package:home_workers_fe/features/costumer_flow/vouchers/pages/claim_voucher_page.dart';
 import 'package:home_workers_fe/features/notifications/pages/notification_page.dart';
 import 'package:home_workers_fe/features/profile/pages/address_management_page.dart';
 import 'package:home_workers_fe/features/profile/pages/edit_profile_page.dart';
+import 'package:home_workers_fe/features/profile/pages/faq_page.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import '../../../core/state/auth_provider.dart';
 
@@ -18,6 +26,7 @@ class _ProfilePageState extends State<ProfilePage>
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+  bool _uploading = false; // show progress overlay
 
   @override
   void initState() {
@@ -48,76 +57,166 @@ class _ProfilePageState extends State<ProfilePage>
     super.dispose();
   }
 
+  Future<void> _changeAvatar() async {
+    final auth = context.read<AuthProvider>();
+    final picker = ImagePicker();
+
+    // 1. Let user pick (show sheet: camera / gallery)
+    final source = await _pickSource();
+    if (source == null) return; // cancelled
+
+    final XFile? picked = await picker.pickImage(
+      source: source,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 85,
+    );
+    if (picked == null) return; // cancelled
+
+    setState(() => _uploading = true);
+    try {
+      // 2. Upload to Firebase Storage
+      final downloadUrl = await _uploadAvatarToStorage(
+        File(picked.path),
+        auth.user!.uid,
+      );
+
+      // 3. Call provider (which calls backend + updates state)
+      await auth.changeAvatar(downloadUrl);
+
+      if (mounted) {
+        _showSnack('Foto profil berhasil diperbarui.');
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnack('Gagal memperbarui foto: $e', isError: true);
+      }
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  Future<ImageSource?> _pickSource() async {
+    return await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) {
+        return SafeArea(
+          child: Wrap(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Pilih dari Galeri'),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Ambil Foto'),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Uploads avatar file under /avatars/{uid}/{timestamp}_{filename}
+  Future<String> _uploadAvatarToStorage(File file, String uid) async {
+    final storage = FirebaseStorage.instance;
+    final fileName = p.basename(file.path);
+    final path =
+        'avatars/$uid/${DateTime.now().millisecondsSinceEpoch}_$fileName';
+    final ref = storage.ref().child(path);
+
+    final uploadTask = ref.putFile(
+      file,
+      SettableMetadata(contentType: 'image/jpeg'),
+    );
+    final snapshot = await uploadTask.whenComplete(() {});
+    final url = await snapshot.ref.getDownloadURL();
+    return url;
+  }
+
+  void _showSnack(String msg, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: isError ? Colors.red : Colors.green,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<AuthProvider>(
       builder: (context, authProvider, child) {
         final user = authProvider.user;
-
         if (user == null) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
-
         final bool hasAvatar =
             user.avatarUrl != null && user.avatarUrl!.isNotEmpty;
 
-        return Scaffold(
-          body: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF1A374D), Color(0xffffffff)],
-                stops: [0.0, 1.0],
-              ),
-            ),
-            child: SafeArea(
-              child: Column(
-                children: [
-                  // Custom App Bar
-                  _buildCustomAppBar(),
-
-                  // Profile Content
-                  Expanded(
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFF8F9FA),
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(30),
-                          topRight: Radius.circular(30),
-                        ),
-                      ),
-                      child: FadeTransition(
-                        opacity: _fadeAnimation,
-                        child: SlideTransition(
-                          position: _slideAnimation,
-                          child: ListView(
-                            padding: const EdgeInsets.all(20),
-                            children: [
-                              // Profile Header Card
-                              _buildProfileHeader(user, hasAvatar),
-
-                              const SizedBox(height: 30),
-
-                              // Stats Cards
-                              _buildStatsSection(),
-
-                              const SizedBox(height: 30),
-
-                              // Menu Section
-                              _buildMenuSection(user),
-                            ],
+        return Stack(
+          children: [
+            Scaffold(
+              body: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0xFF1A374D), Color(0xffffffff)],
+                    stops: [0.0, 1.0],
+                  ),
+                ),
+                child: SafeArea(
+                  child: Column(
+                    children: [
+                      _buildCustomAppBar(),
+                      Expanded(
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFF8F9FA),
+                            borderRadius: BorderRadius.only(
+                              topLeft: Radius.circular(30),
+                              topRight: Radius.circular(30),
+                            ),
+                          ),
+                          child: FadeTransition(
+                            opacity: _fadeAnimation,
+                            child: SlideTransition(
+                              position: _slideAnimation,
+                              child: ListView(
+                                padding: const EdgeInsets.all(20),
+                                children: [
+                                  _buildProfileHeader(user, hasAvatar),
+                                  const SizedBox(height: 30),
+                                  _buildStatsSection(),
+                                  const SizedBox(height: 30),
+                                  _buildMenuSection(user),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
-          ),
+            if (_uploading)
+              Container(
+                color: Colors.black45,
+                child: const Center(child: CircularProgressIndicator()),
+              ),
+          ],
         );
       },
     );
@@ -161,7 +260,7 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  Widget _buildProfileHeader(user, bool hasAvatar) {
+  Widget _buildProfileHeader(User user, bool hasAvatar) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -205,9 +304,7 @@ class _ProfilePageState extends State<ProfilePage>
                 bottom: 4,
                 right: 4,
                 child: GestureDetector(
-                  onTap: () {
-                    // TODO: Navigasi ke halaman ganti foto profil
-                  },
+                  onTap: _changeAvatar, // <-- wire up here
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -244,7 +341,7 @@ class _ProfilePageState extends State<ProfilePage>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: const Color(0xFF6C63FF).withOpacity(0.1),
+              color: Color(0xFF6C63FF).withOpacity(0.1),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
@@ -377,12 +474,30 @@ class _ProfilePageState extends State<ProfilePage>
           );
         },
       ),
+      if (user.role.toLowerCase() == 'customer')
+        MenuItemData(
+          icon: Icons.card_giftcard_outlined,
+          title: 'Vouchers',
+          subtitle: 'Claim Vouchers',
+          color: const Color.fromARGB(255, 51, 208, 23),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ClaimVoucherPage()),
+            );
+          },
+        ),
       MenuItemData(
         icon: Icons.help_outline,
         title: 'Pusat Bantuan',
         subtitle: 'FAQ dan dukungan',
         color: const Color(0xFF00BCD4),
-        onTap: () {},
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const FAQPage()),
+          );
+        },
       ),
       MenuItemData(
         icon: Icons.logout,
@@ -491,37 +606,60 @@ class _ProfilePageState extends State<ProfilePage>
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
+        return Dialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          title: const Text(
-            'Konfirmasi Logout',
-            style: TextStyle(fontWeight: FontWeight.bold),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            height: 250,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text(
+                  'Konfirmasi Logout',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Apakah Anda yakin ingin keluar dari akun?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16),
+                ),
+                const SizedBox(height: 30),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text(
+                        'Batal',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                    ElevatedButton(
+                      onPressed: () async {
+                        Navigator.of(context).pop();
+                        await Provider.of<AuthProvider>(
+                          context,
+                          listen: false,
+                        ).logout();
+                        if (context.mounted) {
+                          Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(
+                              builder: (_) => const LoginPage(),
+                            ),
+                            (route) => false,
+                          );
+                        }
+                      },
+                      child: const Text('Logout'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-          content: const Text('Apakah Anda yakin ingin keluar dari akun?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Batal', style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.of(context).pop();
-                await Provider.of<AuthProvider>(
-                  context,
-                  listen: false,
-                ).logout();
-                if (context.mounted) {
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const LoginPage()),
-                    (route) => false,
-                  );
-                }
-              },
-              child: const Text('Logout'),
-            ),
-          ],
         );
       },
     );
