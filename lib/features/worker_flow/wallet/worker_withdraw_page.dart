@@ -63,8 +63,8 @@ class _WorkerWithdrawPageState extends State<WorkerWithdrawPage> {
       await ApiService().requestWithdraw(
         token: token!,
         amount: int.parse(_amountController.text),
-        destinationType: _selectedType!,
-        destinationValue: _destinationController.text,
+        bankAccount: _destinationController.text,
+        bankName: _selectedType == 'bank' ? 'Bank Transfer' : 'E-Wallet',
       );
 
       if (mounted) {

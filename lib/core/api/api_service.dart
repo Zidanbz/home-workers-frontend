@@ -10,6 +10,7 @@ import 'package:home_workers_fe/core/models/user_model.dart';
 import 'package:home_workers_fe/core/models/wallet_model.dart';
 import 'package:home_workers_fe/core/models/worker_model.dart';
 import 'package:home_workers_fe/features/notifications/pages/notification_page.dart';
+import 'package:home_workers_fe/core/services/encryption_service.dart';
 import 'package:http/http.dart' as http;
 import '../models/service_model.dart'; // Impor model yang baru kita buat
 
@@ -22,7 +23,10 @@ class ApiService {
     required String password,
     String? fcmToken,
   }) async {
+    print('🔐 [loginUser] Starting login for email: $email');
     final url = Uri.parse('$_baseUrl/auth/login');
+    print('🌐 [loginUser] URL: $url');
+
     final response = await http.post(
       url,
       headers: {'Content-Type': 'application/json'},
@@ -33,9 +37,14 @@ class ApiService {
       }),
     );
 
+    print('📊 [loginUser] Response Status: ${response.statusCode}');
+    print('📝 [loginUser] Response Body: ${response.body}');
+
     if (response.statusCode == 200) {
+      print('✅ [loginUser] Login successful');
       return jsonDecode(response.body);
     } else {
+      print('❌ [loginUser] Login failed');
       throw Exception('Gagal login: ${response.body}');
     }
   }
@@ -44,7 +53,10 @@ class ApiService {
     required String email,
     required String token,
   }) async {
+    print('📧 [resendVerificationEmail] Starting for email: $email');
     final url = Uri.parse('$_baseUrl/auth/resend-verification');
+    print('🌐 [resendVerificationEmail] URL: $url');
+
     final response = await http.post(
       url,
       headers: {
@@ -54,11 +66,18 @@ class ApiService {
       body: jsonEncode({'email': email}),
     );
 
+    print(
+      '📊 [resendVerificationEmail] Response Status: ${response.statusCode}',
+    );
+    print('📝 [resendVerificationEmail] Response Body: ${response.body}');
+
     if (response.statusCode != 200) {
+      print('❌ [resendVerificationEmail] Failed to resend verification email');
       throw Exception(
         'Gagal mengirim ulang email verifikasi: ${response.body}',
       );
     }
+    print('✅ [resendVerificationEmail] Verification email sent successfully');
   }
 
   // =============================
@@ -68,7 +87,9 @@ class ApiService {
     required String token, // ini ID token Bearer untuk backend
     required String fcmToken, // ini FCM token device
   }) async {
-    final url = Uri.parse('$_baseUrl/auth/user/update-fcm-token');
+    print('🔔 [updateFcmToken] Starting FCM token update');
+    final url = Uri.parse('$_baseUrl/auth/update-fcm-token');
+    print('🌐 [updateFcmToken] URL: $url');
 
     final response = await http.post(
       url,
@@ -79,22 +100,25 @@ class ApiService {
       body: jsonEncode({'fcmToken': fcmToken}),
     );
 
-    if (response.statusCode != 200) {
-      Map<String, dynamic> decoded = {};
-      try {
-        decoded = jsonDecode(response.body) as Map<String, dynamic>;
-      } catch (_) {}
-      final message =
-          decoded['message'] ??
-          'Failed to update FCM token (${response.statusCode})';
+    print('📊 [updateFcmToken] Response Status: ${response.statusCode}');
+    print('📝 [updateFcmToken] Response Body: ${response.body}');
+
+    final responseBody = jsonDecode(response.body);
+    if (response.statusCode != 200 || responseBody['success'] != true) {
+      final message = responseBody['message'] ?? 'Failed to update FCM token';
+      print('❌ [updateFcmToken] Failed: $message');
       throw Exception(message);
     }
+    print('✅ [updateFcmToken] FCM token updated successfully');
   }
 
   // --- FUNGSI BARU ---
   // Mengambil daftar layanan milik worker yang sedang login
   Future<List<Service>> getMyServices(String token) async {
+    print('🔧 [getMyServices] Starting to fetch worker services');
     final url = Uri.parse('$_baseUrl/services/my-services');
+    print('🌐 [getMyServices] URL: $url');
+
     try {
       final response = await http.get(
         url,
@@ -104,15 +128,21 @@ class ApiService {
         },
       );
 
+      print('📊 [getMyServices] Response Status: ${response.statusCode}');
+      print('📝 [getMyServices] Response Body: ${response.body}');
+
       final responseBody = jsonDecode(response.body);
 
       if (response.statusCode == 200 && responseBody['success'] == true) {
         final List<dynamic> data = responseBody['data'];
+        print('✅ [getMyServices] Found ${data.length} services');
         return data.map((json) => Service.fromJson(json)).toList();
       } else {
+        print('❌ [getMyServices] Failed to load services');
         throw Exception(responseBody['message'] ?? 'Failed to load services');
       }
     } catch (e) {
+      print('❌ [getMyServices] Exception: $e');
       throw Exception('Failed to connect to the server. $e');
     }
   }
@@ -178,7 +208,8 @@ class ApiService {
       );
 
       final responseBody = jsonDecode(response.body);
-
+      print('📊 [getMyProfile] Response Status: ${response.statusCode}');
+      print('📝 [getMyProfile] Response Body: ${response.body}');
       if (response.statusCode == 200 && responseBody['success'] == true) {
         return User.fromJson(responseBody['data']); // ✅ Ambil dari 'data'
       } else {
@@ -243,13 +274,24 @@ class ApiService {
   Future<void> sendMessage(String token, String chatId, String text) async {
     final url = Uri.parse('$_baseUrl/chats/$chatId/messages');
     try {
+      // Create message object with encryption
+      final message = Message(
+        id: '', // Will be set by backend
+        text: text,
+        senderId: '', // Will be set by backend
+        timestamp: DateTime.now(),
+      );
+
+      // Convert to JSON with encryption
+      final messageData = message.toJson(encrypt: true);
+
       final response = await http.post(
         url,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-        body: jsonEncode({'text': text}),
+        body: jsonEncode(messageData),
       );
 
       final responseBody = jsonDecode(response.body);
@@ -446,21 +488,75 @@ class ApiService {
   Future<Service> getServiceById(String serviceId) async {
     final url = Uri.parse('$_baseUrl/services/$serviceId');
     try {
-      final response = await http.get(url);
+      print('🔍 Fetching service details for ID: $serviceId');
+      print('🌐 URL: $url');
 
-      final responseBody = jsonDecode(response.body);
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      );
 
-      print("response DIJASDOSAASDMLADSDASML: ${response.body}");
+      print('📊 Response Status: ${response.statusCode}');
+      print('📄 Response Headers: ${response.headers}');
+      print('📝 Response Body: ${response.body}');
+
+      // Handle server errors (5xx status codes)
+      if (response.statusCode >= 500) {
+        throw Exception(
+          'The service is temporarily unavailable. Please try again later.',
+        );
+      }
+
+      // Handle client errors (4xx status codes)
+      if (response.statusCode >= 400) {
+        throw Exception('This service is no longer available.');
+      }
+
+      // Check if response is HTML (error page) instead of JSON
+      if (response.headers['content-type']?.contains('text/html') == true) {
+        throw Exception('Server error occurred. Please try again later.');
+      }
+
+      // Check for empty response
+      if (response.body.isEmpty) {
+        throw Exception('Server returned empty response');
+      }
+
+      Map<String, dynamic> responseBody;
+      try {
+        responseBody = jsonDecode(response.body);
+      } catch (e) {
+        // If JSON parsing fails and it's a server error, provide user-friendly message
+        throw Exception(
+          'Service temporarily unavailable. Please try again later.',
+        );
+      }
+
       if (response.statusCode == 200 && responseBody['success'] == true) {
         return Service.fromJson(responseBody['data']);
       } else {
         throw Exception(
-          responseBody['message'] ?? 'Failed to load service details',
+          responseBody['message'] ??
+              'Failed to load service details (Status: ${response.statusCode})',
         );
       }
     } catch (e) {
-      print("error: $e");
-      throw Exception('Failed to connect to the server.');
+      print('❌ Error in getServiceById: $e');
+      // Provide more user-friendly error messages
+      if (e.toString().contains('temporarily unavailable')) {
+        throw Exception(
+          'The service is temporarily unavailable. Please try again later.',
+        );
+      } else if (e.toString().contains('no longer available')) {
+        throw Exception('This service is no longer available.');
+      } else {
+        throw Exception(
+          'Unable to load service details. Please check your connection and try again.',
+        );
+      }
     }
   }
 
@@ -676,22 +772,33 @@ class ApiService {
   }
 
   Future<List<Service>> getAllApprovedServices({String? category}) async {
+    print('📋 [getAllApprovedServices] Starting to fetch approved services');
     final url = Uri.parse('$_baseUrl/services');
+    print('🌐 [getAllApprovedServices] URL: $url');
 
     try {
       final response = await http.get(url);
+      print(
+        '📊 [getAllApprovedServices] Response Status: ${response.statusCode}',
+      );
+      print('📝 [getAllApprovedServices] Response Body: ${response.body}');
+
       final responseBody = jsonDecode(response.body);
 
-      print("response body: ${response.body}");
       if (response.statusCode == 200 && responseBody['success'] == true) {
-        return (responseBody['data'] as List)
+        final services = (responseBody['data'] as List)
             .map((json) => Service.fromJson(json))
             .toList();
+        print(
+          '✅ [getAllApprovedServices] Found ${services.length} approved services',
+        );
+        return services;
       } else {
+        print('❌ [getAllApprovedServices] Failed to load services');
         throw Exception(responseBody['message'] ?? 'Failed to load services');
       }
     } catch (e) {
-      print("error: $e");
+      print('❌ [getAllApprovedServices] Exception: $e');
       throw Exception('Failed to connect to the server.');
     }
   }
@@ -722,6 +829,9 @@ class ApiService {
     final url = Uri.parse('$_baseUrl/orders/my-orders');
 
     try {
+      print('🔍 Fetching orders for ${asWorker ? 'worker' : 'customer'}');
+      print('🌐 URL: $url');
+
       final response = await http.get(
         url,
         headers: {
@@ -730,42 +840,81 @@ class ApiService {
         },
       );
 
+      print('📊 Response Status: ${response.statusCode}');
+      print('📄 Response Headers: ${response.headers}');
+      print('📝 Response Body: ${response.body}');
+
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseBody = jsonDecode(response.body);
+
+        if (responseBody['success'] != true) {
+          throw Exception(
+            responseBody['message'] ?? 'API returned success=false',
+          );
+        }
 
         // ✅ Akses ke dalam key "data" dulu
         final ordersJson =
             responseBody['data'][asWorker ? 'asWorker' : 'asCustomer'] ?? [];
 
         print("✅ Jumlah pesanan: ${ordersJson.length}");
-        print("ordersJson: ${jsonEncode(ordersJson)}");
-        print("responseBody: ${jsonEncode(responseBody)}");
+
+        // Debug each order to see what data is missing
+        for (int i = 0; i < ordersJson.length; i++) {
+          final orderData = ordersJson[i];
+          print("📋 Order $i data:");
+          print("  - serviceName: ${orderData['serviceName']}");
+          print("  - category: ${orderData['category']}");
+          print("  - status: ${orderData['status']}");
+          print("  - id: ${orderData['id']}");
+        }
+
         return ordersJson.map<Order>((json) => Order.fromJson(json)).toList();
       } else {
         final errorBody = jsonDecode(response.body);
-        throw Exception(errorBody['message'] ?? 'Failed to load orders');
+        throw Exception(
+          errorBody['message'] ??
+              'Failed to load orders (Status: ${response.statusCode})',
+        );
       }
     } catch (e) {
-      print("error: $e");
-      throw Exception('Failed to connect to the server.');
+      print("❌ Error in getMyOrdersCustomer: $e");
+      throw Exception('Failed to connect to the server. $e');
     }
   }
 
   Future<List<NotificationItem>> getMyNotifications(String token) async {
+    print('🔔 [getMyNotifications] Starting to fetch notifications');
     final url = Uri.parse('$_baseUrl/users/me/notifications');
+    print('🌐 [getMyNotifications] URL: $url');
+
     try {
       final response = await http.get(
         url,
-        headers: {'Authorization': 'Bearer $token'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
       );
-      if (response.statusCode == 200) {
-        final List<dynamic> body = jsonDecode(response.body);
-        return body.map((json) => NotificationItem.fromJson(json)).toList();
+
+      print('📊 [getMyNotifications] Response Status: ${response.statusCode}');
+      print('📝 [getMyNotifications] Response Body: ${response.body}');
+
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        final List<dynamic> data = responseBody['data'];
+        print('✅ [getMyNotifications] Found ${data.length} notifications');
+        return data.map((json) => NotificationItem.fromJson(json)).toList();
       } else {
-        throw Exception(jsonDecode(response.body)['message']);
+        print('❌ [getMyNotifications] Failed to fetch notifications');
+        throw Exception(
+          responseBody['message'] ?? 'Failed to fetch notifications',
+        );
       }
     } catch (e) {
-      throw Exception('Failed to fetch notifications.');
+      print('❌ [getMyNotifications] Exception: $e');
+      throw Exception('Failed to connect to the server. $e');
     }
   }
 
@@ -919,23 +1068,74 @@ class ApiService {
     String? fcmToken,
   }) async {
     final url = Uri.parse('$_baseUrl/auth/register/worker');
-    final request = http.MultipartRequest('POST', url)
-      ..fields['email'] = email
-      ..fields['password'] = password
-      ..fields['nama'] = nama
-      ..fields['deskripsi'] = deskripsi
-      ..fields['keahlian'] = jsonEncode(keahlian)
-      ..fields['linkPortofolio'] = portfolioLink ?? ''
-      ..fields['noKtp'] = noKtp ?? ''
-      ..fields['fcmToken'] = fcmToken ?? ''
-      ..files.add(await http.MultipartFile.fromPath('ktp', ktpFile.path))
-      ..files.add(
-        await http.MultipartFile.fromPath('fotoDiri', fotoDiriFile.path),
+    final encryptionService = EncryptionService();
+
+    try {
+      // Encrypt KTP file
+      final ktpBytes = await ktpFile.readAsBytes();
+      final encryptedKtpBytes = encryptionService.encryptFileData(ktpBytes);
+      final secureKtpFilename = encryptionService.generateSecureFilename(
+        ktpFile.path,
       );
 
-    final response = await request.send();
-    if (response.statusCode != 201) {
-      throw Exception('Gagal registrasi worker: ${response.statusCode}');
+      // Encrypt foto diri file
+      final fotoDiriBytes = await fotoDiriFile.readAsBytes();
+      final encryptedFotoDiriBytes = encryptionService.encryptFileData(
+        fotoDiriBytes,
+      );
+      final secureFotoDiriFilename = encryptionService.generateSecureFilename(
+        fotoDiriFile.path,
+      );
+
+      // Hash sensitive data
+      final hashedNoKtp = noKtp != null
+          ? encryptionService.hashSensitiveData(noKtp)
+          : '';
+
+      final request = http.MultipartRequest('POST', url)
+        ..fields['email'] = email
+        ..fields['password'] = password
+        ..fields['nama'] = nama
+        ..fields['deskripsi'] = deskripsi
+        ..fields['keahlian'] = jsonEncode(keahlian)
+        ..fields['linkPortofolio'] = portfolioLink ?? ''
+        ..fields['noKtp'] = hashedNoKtp
+        ..fields['fcmToken'] = fcmToken ?? ''
+        ..fields['isEncrypted'] =
+            'true' // Flag to indicate encrypted files
+        ..files.add(
+          http.MultipartFile.fromBytes(
+            'ktp',
+            encryptedKtpBytes,
+            filename: secureKtpFilename,
+          ),
+        )
+        ..files.add(
+          http.MultipartFile.fromBytes(
+            'fotoDiri',
+            encryptedFotoDiriBytes,
+            filename: secureFotoDiriFilename,
+          ),
+        );
+
+      print('🔐 [registerWorker] Uploading encrypted files');
+      print('🔐 [registerWorker] KTP filename: $secureKtpFilename');
+      print('🔐 [registerWorker] Foto diri filename: $secureFotoDiriFilename');
+
+      final response = await request.send();
+      if (response.statusCode != 201) {
+        final responseBody = await response.stream.bytesToString();
+        throw Exception(
+          'Gagal registrasi worker: ${response.statusCode} - $responseBody',
+        );
+      }
+
+      print(
+        '✅ [registerWorker] Worker registered successfully with encrypted files',
+      );
+    } catch (e) {
+      print('❌ [registerWorker] Failed to register worker: $e');
+      rethrow;
     }
   }
 
@@ -1040,27 +1240,97 @@ class ApiService {
     required String catatan,
     String? voucherCode,
   }) async {
-    final url = Uri.parse('$_baseUrl/payments/initiate');
-    final response = await http.post(
-      url,
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({
-        'serviceId': serviceId,
-        'jadwalPerbaikan': jadwalPerbaikan.toIso8601String(),
-        'catatan': catatan ?? '',
-      }),
+    print('🚀 [createOrderWithPayment] Starting payment process');
+    print('🔗 [createOrderWithPayment] Service ID: $serviceId');
+    print('📅 [createOrderWithPayment] Schedule: $jadwalPerbaikan');
+    print('📝 [createOrderWithPayment] Notes: $catatan');
+    print('🎫 [createOrderWithPayment] Voucher: $voucherCode');
+
+    final url = Uri.parse('$_baseUrl/payments/with-order');
+    print('🌐 [createOrderWithPayment] URL: $url');
+
+    final requestBody = {
+      'serviceId': serviceId,
+      'jadwalPerbaikan': jadwalPerbaikan.toIso8601String(),
+      'catatan': catatan ?? '',
+      if (voucherCode != null) 'voucherCode': voucherCode,
+    };
+
+    print(
+      '📦 [createOrderWithPayment] Request Body: ${jsonEncode(requestBody)}',
     );
 
-    if (response.statusCode == 201) {
-      final data = jsonDecode(response.body)['data'];
-      print('✅ Order & Snap token: $data');
-      return data;
-    } else {
-      final json = jsonDecode(response.body);
-      throw Exception(json['message'] ?? 'Terjadi kesalahan');
+    try {
+      final response = await http.post(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(requestBody),
+      );
+
+      print(
+        '📊 [createOrderWithPayment] Response Status: ${response.statusCode}',
+      );
+      print(
+        '📄 [createOrderWithPayment] Response Headers: ${response.headers}',
+      );
+      print('📝 [createOrderWithPayment] Response Body: ${response.body}');
+
+      // Check if response body is empty
+      if (response.body.isEmpty) {
+        print('❌ [createOrderWithPayment] Empty response body');
+        throw Exception('Server returned empty response');
+      }
+
+      // Check if response is HTML (error page)
+      if (response.headers['content-type']?.contains('text/html') == true) {
+        print('❌ [createOrderWithPayment] Received HTML instead of JSON');
+        throw Exception('Server error - received HTML response');
+      }
+
+      Map<String, dynamic> responseBody;
+      try {
+        responseBody = jsonDecode(response.body);
+        print('✅ [createOrderWithPayment] Successfully parsed JSON response');
+      } catch (e) {
+        print('❌ [createOrderWithPayment] Failed to parse JSON: $e');
+        print('📝 [createOrderWithPayment] Raw response: ${response.body}');
+        throw Exception('Invalid JSON response from server');
+      }
+
+      if (response.statusCode == 201 && responseBody['success'] == true) {
+        final data = responseBody['data'];
+        print('✅ [createOrderWithPayment] Success! Data: $data');
+
+        // Ensure data is not null and is a Map
+        if (data == null) {
+          print('❌ [createOrderWithPayment] Data is null');
+          throw Exception('Server returned null data');
+        }
+
+        if (data is! Map<String, dynamic>) {
+          print(
+            '❌ [createOrderWithPayment] Data is not a Map: ${data.runtimeType}',
+          );
+          throw Exception('Server returned invalid data format');
+        }
+
+        return data;
+      } else {
+        final message = responseBody['message'] ?? 'Terjadi kesalahan';
+        print('❌ [createOrderWithPayment] API Error: $message');
+        print('❌ [createOrderWithPayment] Status Code: ${response.statusCode}');
+        print(
+          '❌ [createOrderWithPayment] Success Flag: ${responseBody['success']}',
+        );
+        throw Exception(message);
+      }
+    } catch (e) {
+      print('❌ [createOrderWithPayment] Exception caught: $e');
+      print('❌ [createOrderWithPayment] Exception type: ${e.runtimeType}');
+      rethrow;
     }
   }
 
@@ -1068,7 +1338,7 @@ class ApiService {
     required String token,
     required String orderId,
   }) async {
-    final url = Uri.parse('$_baseUrl/api/payments/status/$orderId');
+    final url = Uri.parse('$_baseUrl/payments/status/$orderId');
     final response = await http.get(
       url,
       headers: {'Authorization': 'Bearer $token'},
@@ -1110,26 +1380,125 @@ class ApiService {
     }
   }
 
+  /// Request withdrawal (Worker Only) - Fixed according to documentation
   Future<void> requestWithdraw({
     required String token,
     required int amount,
-    required String destinationType,
-    required String destinationValue,
+    required String bankAccount,
+    required String bankName,
   }) async {
-    final response = await http.post(
-      Uri.parse('$_baseUrl/wallet/me/withdraw'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({
-        'amount': amount,
-        'destination': {'type': destinationType, 'value': destinationValue},
-      }),
-    );
+    final url = Uri.parse('$_baseUrl/wallet/me/withdraw');
 
-    if (response.statusCode != 200) {
-      throw Exception(jsonDecode(response.body)['message']);
+    try {
+      final response = await http.post(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'amount': amount,
+          'destination': {
+            'type': 'bank',
+            'bankName': bankName,
+            'bankAccount': bankAccount,
+          },
+        }),
+      );
+
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode != 200 || responseBody['success'] != true) {
+        throw Exception(
+          responseBody['message'] ?? 'Failed to request withdrawal',
+        );
+      }
+    } catch (e) {
+      throw Exception('Failed to connect to the server. $e');
+    }
+  }
+
+  // =============================
+  // MISSING ORDER ENDPOINTS
+  // =============================
+
+  /// Complete order (Worker Only)
+  Future<void> completeOrder({
+    required String token,
+    required String orderId,
+  }) async {
+    final url = Uri.parse('$_baseUrl/orders/$orderId/complete');
+    try {
+      final response = await http.put(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode != 200 || responseBody['success'] != true) {
+        throw Exception(responseBody['message'] ?? 'Failed to complete order');
+      }
+    } catch (e) {
+      throw Exception('Failed to connect to the server. $e');
+    }
+  }
+
+  /// Cancel order (Customer Only)
+  Future<void> cancelOrder({
+    required String token,
+    required String orderId,
+  }) async {
+    final url = Uri.parse('$_baseUrl/orders/$orderId/cancel');
+    try {
+      final response = await http.put(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode != 200 || responseBody['success'] != true) {
+        throw Exception(responseBody['message'] ?? 'Failed to cancel order');
+      }
+    } catch (e) {
+      throw Exception('Failed to connect to the server. $e');
+    }
+  }
+
+  /// Get worker availability
+  Future<Map<String, dynamic>> getWorkerAvailability({
+    required String token,
+    required String workerId,
+    required String date, // Format: YYYY-MM-DD
+  }) async {
+    final url = Uri.parse('$_baseUrl/orders/availability/$workerId?date=$date');
+    try {
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        return responseBody['data'];
+      } else {
+        throw Exception(
+          responseBody['message'] ?? 'Failed to get availability',
+        );
+      }
+    } catch (e) {
+      throw Exception('Failed to connect to the server. $e');
     }
   }
 
@@ -1177,6 +1546,7 @@ class ApiService {
     required String token,
     required String orderId,
     required String decision,
+    String? voucherCode,
   }) async {
     final url = Uri.parse('$_baseUrl/orders/$orderId/quote/respond');
     final response = await http.put(
@@ -1197,25 +1567,78 @@ class ApiService {
     required String token,
     required String orderId,
   }) async {
+    print('💳 [startPaymentForQuote] Starting payment for quote');
+    print('💳 [startPaymentForQuote] Order ID: $orderId');
+
     final url = Uri.parse('$_baseUrl/payments/start/$orderId');
+    print('💳 [startPaymentForQuote] URL: $url');
 
-    final response = await http.post(
-      url,
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
+    try {
+      final response = await http.post(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
 
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      if (data['success'] == true) {
-        return data['data']; // { orderId, snapToken }
-      } else {
-        throw Exception(data['message']);
+      print(
+        '💳 [startPaymentForQuote] Response Status: ${response.statusCode}',
+      );
+      print('💳 [startPaymentForQuote] Response Headers: ${response.headers}');
+      print('💳 [startPaymentForQuote] Response Body: ${response.body}');
+
+      // Check if response body is empty
+      if (response.body.isEmpty) {
+        print('❌ [startPaymentForQuote] Empty response body');
+        throw Exception('Server returned empty response');
       }
-    } else {
-      throw Exception('Gagal memulai pembayaran: ${response.body}');
+
+      // Check if response is HTML (error page)
+      if (response.headers['content-type']?.contains('text/html') == true) {
+        print('❌ [startPaymentForQuote] Received HTML instead of JSON');
+        throw Exception('Server error - received HTML response');
+      }
+
+      Map<String, dynamic> data;
+      try {
+        data = jsonDecode(response.body);
+        print('✅ [startPaymentForQuote] Successfully parsed JSON response');
+      } catch (e) {
+        print('❌ [startPaymentForQuote] Failed to parse JSON: $e');
+        print('📝 [startPaymentForQuote] Raw response: ${response.body}');
+        throw Exception('Invalid JSON response from server');
+      }
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        final responseData = data['data'];
+        print('✅ [startPaymentForQuote] Success! Data: $responseData');
+
+        // Ensure data is not null and is a Map
+        if (responseData == null) {
+          print('❌ [startPaymentForQuote] Data is null');
+          throw Exception('Server returned null data');
+        }
+
+        if (responseData is! Map<String, dynamic>) {
+          print(
+            '❌ [startPaymentForQuote] Data is not a Map: ${responseData.runtimeType}',
+          );
+          throw Exception('Server returned invalid data format');
+        }
+
+        return responseData; // { orderId, snapToken }
+      } else {
+        final message = data['message'] ?? 'Gagal memulai pembayaran';
+        print('❌ [startPaymentForQuote] API Error: $message');
+        print('❌ [startPaymentForQuote] Status Code: ${response.statusCode}');
+        print('❌ [startPaymentForQuote] Success Flag: ${data['success']}');
+        throw Exception(message);
+      }
+    } catch (e) {
+      print('❌ [startPaymentForQuote] Exception caught: $e');
+      print('❌ [startPaymentForQuote] Exception type: ${e.runtimeType}');
+      rethrow;
     }
   }
 
@@ -1252,6 +1675,149 @@ class ApiService {
     }
   }
 
+  // =============================
+  // MISSING WORKER ENDPOINTS
+  // =============================
+
+  /// Get my worker profile (Worker Only)
+  Future<Map<String, dynamic>> getMyWorkerProfile(String token) async {
+    final url = Uri.parse('$_baseUrl/workers/profile/me');
+    try {
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        return responseBody['data'];
+      } else {
+        throw Exception(
+          responseBody['message'] ?? 'Failed to fetch worker profile',
+        );
+      }
+    } catch (e) {
+      throw Exception('Failed to connect to the server. $e');
+    }
+  }
+
+  /// Update my worker profile (Worker Only)
+  Future<void> updateMyWorkerProfile({
+    required String token,
+    required Map<String, dynamic> dataToUpdate,
+  }) async {
+    final url = Uri.parse('$_baseUrl/workers/profile/me');
+    try {
+      final response = await http.put(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(dataToUpdate),
+      );
+
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode != 200 || responseBody['success'] != true) {
+        throw Exception(
+          responseBody['message'] ?? 'Failed to update worker profile',
+        );
+      }
+    } catch (e) {
+      throw Exception('Failed to connect to the server. $e');
+    }
+  }
+
+  /// Get all workers (Public)
+  Future<List<Worker>> getAllWorkers() async {
+    final url = Uri.parse('$_baseUrl/workers');
+    try {
+      final response = await http.get(url);
+
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        final List<dynamic> data = responseBody['data'];
+        return data.map((json) => Worker.fromJson(json)).toList();
+      } else {
+        throw Exception(responseBody['message'] ?? 'Failed to load workers');
+      }
+    } catch (e) {
+      throw Exception('Failed to connect to the server. $e');
+    }
+  }
+
+  // =============================
+  // USER MANAGEMENT ENDPOINTS
+  // =============================
+
+  /// Update avatar with file upload (multipart/form-data)
+  Future<String> updateAvatarWithFile({
+    required String token,
+    required File avatarFile,
+  }) async {
+    final url = Uri.parse('$_baseUrl/users/me/avatar');
+    try {
+      final request = http.MultipartRequest('POST', url)
+        ..headers['Authorization'] = 'Bearer $token'
+        ..files.add(
+          await http.MultipartFile.fromPath('avatar', avatarFile.path),
+        );
+
+      final response = await request.send();
+      final responseBody = await response.stream.bytesToString();
+      final decoded = jsonDecode(responseBody);
+
+      if (response.statusCode == 200 && decoded['success'] == true) {
+        return decoded['data']['avatarUrl'];
+      } else {
+        throw Exception(decoded['message'] ?? 'Failed to update avatar');
+      }
+    } catch (e) {
+      throw Exception('Failed to connect to the server. $e');
+    }
+  }
+
+  /// Get user avatar
+  Future<String?> getAvatar(String token) async {
+    print('🖼️ [getAvatar] Starting to fetch user avatar');
+    final url = Uri.parse('$_baseUrl/users/me/avatar');
+    print('🌐 [getAvatar] URL: $url');
+
+    try {
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      print('📊 [getAvatar] Response Status: ${response.statusCode}');
+      print('📝 [getAvatar] Response Body: ${response.body}');
+
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        final avatarUrl = responseBody['data']['avatarUrl'];
+        print('✅ [getAvatar] Avatar fetched successfully: $avatarUrl');
+        return avatarUrl;
+      } else {
+        print('❌ [getAvatar] Failed to fetch avatar');
+        throw Exception(responseBody['message'] ?? 'Failed to fetch avatar');
+      }
+    } catch (e) {
+      print('❌ [getAvatar] Exception: $e');
+      throw Exception('Failed to connect to the server. $e');
+    }
+  }
+
+  /// Update avatar with URL (for backward compatibility)
   Future<void> updateAvatar({
     required String token,
     required String avatarUrl,
@@ -1274,6 +1840,40 @@ class ApiService {
       }
     } catch (e) {
       throw Exception('Terjadi kesalahan: $e');
+    }
+  }
+
+  /// Upload documents (Worker Only)
+  Future<void> uploadDocuments({
+    required String token,
+    File? ktpFile,
+    File? portfolioFile,
+  }) async {
+    final url = Uri.parse('$_baseUrl/users/me/documents');
+    try {
+      final request = http.MultipartRequest('POST', url)
+        ..headers['Authorization'] = 'Bearer $token';
+
+      if (ktpFile != null) {
+        request.files.add(
+          await http.MultipartFile.fromPath('ktp', ktpFile.path),
+        );
+      }
+      if (portfolioFile != null) {
+        request.files.add(
+          await http.MultipartFile.fromPath('portfolio', portfolioFile.path),
+        );
+      }
+
+      final response = await request.send();
+      final responseBody = await response.stream.bytesToString();
+      final decoded = jsonDecode(responseBody);
+
+      if (response.statusCode != 200 || decoded['success'] != true) {
+        throw Exception(decoded['message'] ?? 'Failed to upload documents');
+      }
+    } catch (e) {
+      throw Exception('Failed to connect to the server. $e');
     }
   }
 

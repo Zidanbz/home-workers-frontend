@@ -197,8 +197,6 @@ class _ProfilePageState extends State<ProfilePage>
                                 children: [
                                   _buildProfileHeader(user, hasAvatar),
                                   const SizedBox(height: 30),
-                                  _buildStatsSection(),
-                                  const SizedBox(height: 30),
                                   _buildMenuSection(user),
                                 ],
                               ),
@@ -353,83 +351,6 @@ class _ProfilePageState extends State<ProfilePage>
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatsSection() {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildStatCard(
-            icon: Icons.star,
-            title: 'Rating',
-            value: '4.8',
-            color: const Color(0xFFFFB800),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildStatCard(
-            icon: Icons.shopping_bag,
-            title: 'Orders',
-            value: '12',
-            color: const Color(0xFF4CAF50),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildStatCard(
-            icon: Icons.favorite,
-            title: 'Saved',
-            value: '8',
-            color: const Color(0xFFFF6B6B),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatCard({
-    required IconData icon,
-    required String title,
-    required String value,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF2D3748),
-            ),
-          ),
-          Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
         ],
       ),
     );

@@ -168,6 +168,11 @@ class _BookingPageState extends State<BookingPage> {
       final token = authProvider.token;
       if (token == null) throw Exception('Anda belum login.');
 
+      print('🎯 [BookingPage] Starting order creation process');
+      print('🎯 [BookingPage] Service ID: ${widget.service.id}');
+      print('🎯 [BookingPage] Service Type: ${widget.service.tipeLayanan}');
+      print('🎯 [BookingPage] Token available: ${token.isNotEmpty}');
+
       final regex = RegExp(r'(\d{2})\.(\d{2})');
       final match = regex.firstMatch(_selectedTimeSlot!);
       if (match == null) throw Exception('Format jam tidak valid');
@@ -183,6 +188,10 @@ class _BookingPageState extends State<BookingPage> {
         minute,
       );
 
+      print('🎯 [BookingPage] Schedule: $schedule');
+      print('🎯 [BookingPage] Applied voucher: $_appliedVoucherCode');
+
+      print('🎯 [BookingPage] Calling createOrderWithPayment...');
       final response = await _apiService.createOrderWithPayment(
         token: token,
         serviceId: widget.service.id,
@@ -191,9 +200,36 @@ class _BookingPageState extends State<BookingPage> {
         voucherCode: _appliedVoucherCode,
       );
 
+      print('🎯 [BookingPage] API Response received: $response');
+      print('🎯 [BookingPage] Response type: ${response.runtimeType}');
+
+      // Check if response is null
+      if (response == null) {
+        print('❌ [BookingPage] Response is null!');
+        throw Exception('Server returned null response');
+      }
+
+      // Check if response is a Map
+      if (response is! Map<String, dynamic>) {
+        print('❌ [BookingPage] Response is not a Map: ${response.runtimeType}');
+        throw Exception('Invalid response format from server');
+      }
+
+      print('🎯 [BookingPage] Response keys: ${response.keys.toList()}');
+
       final snapToken = response['snapToken'];
+      print('🎯 [BookingPage] Snap Token: $snapToken');
+
+      if (snapToken == null) {
+        print('❌ [BookingPage] Snap token is null!');
+        throw Exception('Payment token not received from server');
+      }
+
       final snapRedirectUrl =
           "https://app.sandbox.midtrans.com/snap/v2/vtweb/$snapToken";
+
+      print('🎯 [BookingPage] Redirect URL: $snapRedirectUrl');
+      print('🎯 [BookingPage] Navigating to payment page...');
 
       Navigator.push(
         context,
@@ -202,6 +238,10 @@ class _BookingPageState extends State<BookingPage> {
         ),
       );
     } catch (e) {
+      print('❌ [BookingPage] Exception caught: $e');
+      print('❌ [BookingPage] Exception type: ${e.runtimeType}');
+      print('❌ [BookingPage] Stack trace: ${StackTrace.current}');
+
       scaffoldMessenger.showSnackBar(
         SnackBar(
           backgroundColor: Colors.red,

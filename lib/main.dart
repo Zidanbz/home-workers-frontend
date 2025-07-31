@@ -7,6 +7,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/state/auth_provider.dart'; // Impor halaman baru
+import 'core/services/encryption_service.dart';
 import 'features/auth/pages/welcome_page.dart';
 import 'features/main_page.dart';
 import 'firebase_options.dart';
@@ -15,8 +16,12 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('id_ID');
-    await dotenv.load(fileName: ".env");
+  await dotenv.load(fileName: ".env");
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Initialize encryption service
+  EncryptionService().initialize();
+  print('🔐 [main] EncryptionService initialized successfully');
 
   runApp(const MyApp());
 }

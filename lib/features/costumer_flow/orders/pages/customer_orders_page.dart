@@ -214,6 +214,7 @@ class _CustomerOrdersPageState extends State<CustomerOrdersPage>
                     'pending',
                     'accepted',
                     'quote_proposed',
+                    'quote_accepted',
                     'work_in_progress',
                   ].contains(o.status),
                 )
@@ -349,6 +350,8 @@ class _OrderCard extends StatelessWidget {
       case 'accepted':
       case 'quote_proposed':
         return const Color(0xFF2196F3);
+      case 'quote_accepted':
+        return const Color(0xFF4CAF50);
       case 'work_in_progress':
         return const Color(0xFF9C27B0);
       case 'completed':
@@ -369,6 +372,8 @@ class _OrderCard extends StatelessWidget {
         return Icons.check_circle_rounded;
       case 'quote_proposed':
         return Icons.request_quote_rounded;
+      case 'quote_accepted':
+        return Icons.payment_rounded;
       case 'work_in_progress':
         return Icons.build_circle_rounded;
       case 'completed':
@@ -389,6 +394,8 @@ class _OrderCard extends StatelessWidget {
         return 'Disetujui';
       case 'quote_proposed':
         return 'Penawaran Diajukan';
+      case 'quote_accepted':
+        return 'Siap Bayar';
       case 'work_in_progress':
         return 'Dalam Pengerjaan';
       case 'completed':
@@ -491,11 +498,14 @@ class _OrderCard extends StatelessWidget {
         context,
       ).showSnackBar(const SnackBar(content: Text('Ulasan berhasil dikirim!')));
 
-      // ✅ Refresh halaman agar tombol hilang
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const CustomerOrdersPage()),
-      );
+      // ✅ Refresh data orders dengan memanggil _loadOrders dari parent
+      if (context.mounted) {
+        final parentState = context
+            .findAncestorStateOfType<_CustomerOrdersPageState>();
+        if (parentState != null) {
+          parentState._loadOrders();
+        }
+      }
     } catch (e) {
       ScaffoldMessenger.of(
         context,

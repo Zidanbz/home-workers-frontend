@@ -79,8 +79,12 @@ class AuthProvider with ChangeNotifier {
     if (storedToken != null && !JwtDecoder.isExpired(storedToken)) {
       try {
         final userProfile = await _apiService.getMyProfile(storedToken);
+        print(userProfile);
         _user = userProfile;
         _token = storedToken;
+
+        // Fetch avatar after getting user profile
+        await getAvatar();
       } catch (_) {
         await logout();
       }
@@ -98,6 +102,9 @@ class AuthProvider with ChangeNotifier {
         final userProfile = await _apiService.getMyProfile(storedToken);
         _user = userProfile;
         _token = storedToken;
+
+        // Fetch avatar after getting user profile
+        await getAvatar();
       } catch (_) {
         await logout();
       }
@@ -329,6 +336,9 @@ class AuthProvider with ChangeNotifier {
     await _signInFirebaseWithCustomTokenIfNeeded(loginResult.customToken);
     await _storageService.saveTokenAndRole(token: _token!, role: _user!.role);
 
+    // Fetch avatar after successful login
+    await getAvatar();
+
     // Sekarang, baru kita beritahu seluruh aplikasi bahwa login benar-benar selesai
     notifyListeners();
   }
@@ -381,8 +391,30 @@ class AuthProvider with ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------------
-  // Change Avatar
+  // Avatar Management
   // ---------------------------------------------------------------------------
+
+  /// Get user avatar from backend
+  Future<String?> getAvatar() async {
+    final tkn = _token;
+    if (tkn == null) {
+      throw Exception('No user logged in.');
+    }
+    try {
+      final avatarUrl = await _apiService.getAvatar(tkn);
+      // Update user state if avatar is different
+      if (_user != null && _user!.avatarUrl != avatarUrl) {
+        _user = _user!.copyWith(avatarUrl: avatarUrl);
+        notifyListeners();
+      }
+      return avatarUrl;
+    } catch (e) {
+      debugPrint('Failed to get avatar: $e');
+      return null;
+    }
+  }
+
+  /// Change/Update user avatar
   Future<void> changeAvatar(String storageDownloadUrl) async {
     final tkn = _token;
     if (_user == null || tkn == null) {

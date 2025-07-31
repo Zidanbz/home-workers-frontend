@@ -205,50 +205,69 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
   // ----------------------------------------------------
 
   Widget _buildHeader(BuildContext context, {required String userName}) {
-    return Row(
-      children: [
-        const CircleAvatar(
-          radius: 20,
-          backgroundImage: NetworkImage('https://i.pravatar.cc/150?img=49'),
-        ),
-        const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Consumer<AuthProvider>(
+      builder: (context, authProvider, child) {
+        final user = authProvider.user;
+        final bool hasAvatar =
+            user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty;
+
+        return Row(
           children: [
-            const Text(
-              'Halo,',
-              style: TextStyle(color: Colors.white70, fontSize: 12),
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: Colors.white.withOpacity(0.2),
+              backgroundImage: hasAvatar
+                  ? NetworkImage(user!.avatarUrl!)
+                  : null,
+              child: !hasAvatar
+                  ? const Icon(Icons.person, size: 24, color: Colors.white)
+                  : null,
             ),
-            Text(
-              userName,
-              style: const TextStyle(
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Halo,',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+                Text(
+                  userName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+            const Spacer(),
+            IconButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const NotificationPage(),
+                  ),
+                );
+              },
+              icon: const Icon(
+                Icons.notifications_outlined,
                 color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
               ),
+            ),
+            IconButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const CustomerChatListPage(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
             ),
           ],
-        ),
-        const Spacer(),
-        IconButton(
-          onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => const NotificationPage()),
-            );
-          },
-          icon: const Icon(Icons.notifications_outlined, color: Colors.white),
-        ),
-        IconButton(
-          onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => const CustomerChatListPage(),
-              ),
-            );
-          },
-          icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
-        ),
-      ],
+        );
+      },
     );
   }
 
