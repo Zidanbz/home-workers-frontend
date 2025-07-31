@@ -231,8 +231,8 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
               _buildServiceInfo(),
               const SizedBox(height: 20),
               _buildScheduleCard(formattedDate),
-              const SizedBox(height: 20),
-              _buildDescriptionCard(),
+              // const SizedBox(height: 20),
+              // _buildDescriptionCard(),
               const SizedBox(height: 20),
               _buildWorkerCard(),
               const SizedBox(height: 32),
@@ -332,31 +332,31 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
   Widget _buildScheduleCard(String formattedDate) {
     return _buildInfoCard(
       icon: Icons.schedule_rounded,
-      title: 'Jadwal & Lokasi',
+      title: 'Jadwal Perbaikan',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(formattedDate),
           Padding(
             padding: const EdgeInsets.only(top: 8.0),
-            child: Text(_order.customerAddress),
+            // child: Text(_order.customerAddress),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDescriptionCard() {
-    // Asumsi: Model Order memiliki field `description` untuk deskripsi masalah.
-    // Ganti `_order.description` jika nama fieldnya berbeda.
-    return _buildInfoCard(
-      icon: Icons.description_rounded,
-      title: 'Deskripsi Masalah',
-      child: Text(
-        _order.workerDescription ?? 'Tidak ada deskripsi dari customer.',
-      ),
-    );
-  }
+  // Widget _buildDescriptionCard() {
+  //   // Asumsi: Model Order memiliki field `description` untuk deskripsi masalah.
+  //   // Ganti `_order.description` jika nama fieldnya berbeda.
+  //   return _buildInfoCard(
+  //     icon: Icons.description_rounded,
+  //     title: 'Deskripsi Masalah',
+  //     child: Text(
+  //       _order.workerDescription ?? 'Tidak ada deskripsi dari customer.',
+  //     ),
+  //   );
+  // }
 
   Widget _buildWorkerCard() {
     return _buildInfoCard(
