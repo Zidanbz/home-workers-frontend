@@ -8,6 +8,8 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/state/auth_provider.dart'; // Impor halaman baru
 import 'core/services/encryption_service.dart';
+import 'core/services/realtime_notification_service.dart';
+import 'core/services/chat_service.dart';
 import 'features/auth/pages/welcome_page.dart';
 import 'features/main_page.dart';
 import 'firebase_options.dart';
@@ -19,9 +21,12 @@ void main() async {
   await dotenv.load(fileName: ".env");
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // Initialize encryption service
+  // Initialize services
   EncryptionService().initialize();
   print('🔐 [main] EncryptionService initialized successfully');
+
+  await RealtimeNotificationService.initialize();
+  await ChatService.initialize();
 
   runApp(const MyApp());
 }
@@ -31,11 +36,16 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => AuthProvider(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => AuthProvider()),
+        ChangeNotifierProvider(
+          create: (context) => RealtimeNotificationService(),
+        ),
+        ChangeNotifierProvider(create: (context) => ChatService()),
+      ],
       child: MaterialApp(
         locale: const Locale('id', 'ID'),
-
         title: 'Home Workers',
         theme: ThemeData(/* ... */ fontFamily: 'OpenSans'),
         // Gunakan AuthWrapper sebagai home, ia akan menangani semua logika

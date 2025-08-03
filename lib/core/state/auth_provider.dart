@@ -11,6 +11,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import '../api/api_service.dart';
 import '../models/user_model.dart';
 import '../services/secure_storage_service.dart';
+import '../services/realtime_notification_service.dart';
 
 /// Layar auth apa yang ingin ditampilkan root widget.
 enum AuthScreen { welcome, login, register }
@@ -339,8 +340,45 @@ class AuthProvider with ChangeNotifier {
     // Fetch avatar after successful login
     await getAvatar();
 
+    // ✅ TAMBAHAN: Start real-time notification listener (dengan error handling yang lebih baik)
+    _startRealtimeNotifications();
+
     // Sekarang, baru kita beritahu seluruh aplikasi bahwa login benar-benar selesai
     notifyListeners();
+  }
+
+  /// Start real-time notifications (non-blocking)
+  void _startRealtimeNotifications() {
+    // Jalankan secara asynchronous tanpa menunggu hasil
+    // Agar tidak memblokir proses login
+    Future.microtask(() async {
+      try {
+        // Pastikan service sudah diinisialisasi
+        if (!RealtimeNotificationService().isInitialized) {
+          await RealtimeNotificationService.initialize();
+        }
+
+        final notificationService = RealtimeNotificationService();
+        await notificationService.startListening(_user!.uid, _token);
+
+        // Subscribe to topics based on user role
+        await notificationService.subscribeToTopic(
+          _user!.role.toLowerCase(),
+        ); // 'customer', 'worker'
+        await notificationService.subscribeToTopic(
+          'all',
+        ); // For broadcast notifications
+
+        debugPrint(
+          '✅ [_startRealtimeNotifications] Real-time notifications started successfully',
+        );
+      } catch (e) {
+        debugPrint(
+          '❌ [_startRealtimeNotifications] Failed to start real-time notifications: $e',
+        );
+        // Tidak throw error agar tidak mengganggu login
+      }
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -444,6 +482,15 @@ class AuthProvider with ChangeNotifier {
   // Logout
   // ---------------------------------------------------------------------------
   Future<void> logout() async {
+    // ✅ TAMBAHAN: Stop real-time notification listener
+    try {
+      final notificationService = RealtimeNotificationService();
+      await notificationService.stopListening();
+      debugPrint('✅ [logout] Real-time notifications stopped successfully');
+    } catch (e) {
+      debugPrint('❌ [logout] Failed to stop real-time notifications: $e');
+    }
+
     try {
       await fba.FirebaseAuth.instance.signOut();
       debugPrint('Firebase signOut success.');

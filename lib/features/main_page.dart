@@ -1,15 +1,22 @@
 // lib/features/main_page.dart - VERSI FIXED OVERFLOW
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:home_workers_fe/features/costumer_flow/dashboard/pages/costumer_dashboard_page.dart';
 import 'package:home_workers_fe/features/costumer_flow/marketplace/pages/marketplace_page.dart';
 import 'package:home_workers_fe/features/costumer_flow/orders/pages/customer_orders_page.dart';
 import 'package:home_workers_fe/features/profile/pages/profile_page.dart';
 import 'package:home_workers_fe/features/worker_flow/order_management/pages/worker_orders_page.dart';
+import '../core/services/realtime_notification_service.dart';
+import '../core/services/chat_service.dart';
+import '../core/state/auth_provider.dart';
+import '../shared_widgets/badge_widget.dart';
 
 // Impor halaman-halaman asli Anda
 import 'worker_flow/dashboard/pages/worker_dashboard_page.dart';
 import 'worker_flow/service_management/pages/my_jobs_page.dart';
+import 'chat/pages/chat_list_page.dart';
+import 'notifications/pages/notification_page.dart';
 
 class OrdersPage extends StatelessWidget {
   const OrdersPage({super.key});
@@ -179,6 +186,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       ),
     );
   }
+
 
   Widget _buildNavItem(int index, NavItem item) {
     final isSelected = _currentIndex == index;

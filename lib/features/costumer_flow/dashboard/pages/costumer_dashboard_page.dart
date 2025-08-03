@@ -10,6 +10,8 @@ import 'package:provider/provider.dart';
 
 import '../../../../core/api/api_service.dart';
 import '../../../../core/state/auth_provider.dart';
+import '../../../../core/services/realtime_notification_service.dart';
+import '../../../../core/services/chat_service.dart';
 
 class CustomerDashboardPage extends StatefulWidget {
   // Callback ke MainPage untuk pindah ke tab Orders

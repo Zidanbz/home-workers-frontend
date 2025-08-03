@@ -274,24 +274,13 @@ class ApiService {
   Future<void> sendMessage(String token, String chatId, String text) async {
     final url = Uri.parse('$_baseUrl/chats/$chatId/messages');
     try {
-      // Create message object with encryption
-      final message = Message(
-        id: '', // Will be set by backend
-        text: text,
-        senderId: '', // Will be set by backend
-        timestamp: DateTime.now(),
-      );
-
-      // Convert to JSON with encryption
-      final messageData = message.toJson(encrypt: true);
-
       final response = await http.post(
         url,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-        body: jsonEncode(messageData),
+        body: jsonEncode({'text': text}),
       );
 
       final responseBody = jsonDecode(response.body);

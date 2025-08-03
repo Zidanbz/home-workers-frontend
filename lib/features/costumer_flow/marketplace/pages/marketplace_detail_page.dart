@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:home_workers_fe/features/costumer_flow/booking/pages/booking_page.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../../../core/api/api_service.dart';
 import '../../../../core/models/service_model.dart';
+import '../../../../core/state/auth_provider.dart';
+import '../../../chat/pages/chat_detail_page.dart';
 
 class CustomerServiceDetailPage extends StatefulWidget {
   final String serviceId;
@@ -128,7 +131,6 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
   }
 
   Widget _buildWorkerHeader(Map<String, dynamic> workerInfo) {
-    // ... (Tidak ada perubahan di sini, biarkan seperti semula)
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       color: const Color(0xFFD9D9D9),
@@ -156,22 +158,88 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
                       color: Color(0xFF1A374D),
                     ),
                   ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Tap untuk chat dengan worker',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
                 ],
               ),
             ),
-            // IconButton(
-            //   onPressed: () {
-            //     // TODO: Navigasi ke halaman chat
-            //   },
-            //   icon: const Icon(
-            //     Icons.chat_bubble_outline,
-            //     color: Color(0xFF1A374D),
-            //   ),
-            // ),
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A374D),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: IconButton(
+                onPressed: () => _openChatWithWorker(workerInfo),
+                icon: const Icon(
+                  Icons.chat_bubble_outline,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                tooltip: 'Chat dengan Worker',
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _openChatWithWorker(Map<String, dynamic> workerInfo) async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final token = authProvider.token;
+
+    if (token == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Anda harus login terlebih dahulu')),
+      );
+      return;
+    }
+
+    // Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      // Create or get existing chat with worker
+      final chatId = await _apiService.createChat(
+        token: token,
+        recipientId: workerInfo['id'],
+      );
+
+      // Close loading dialog
+      if (mounted) Navigator.of(context).pop();
+
+      // Navigate to chat detail page
+      if (mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => ChatDetailPage(
+              chatId: chatId,
+              name: workerInfo['nama'] ?? 'Worker',
+              avatarUrl:
+                  workerInfo['avatarUrl'] ??
+                  'https://i.pravatar.cc/150?u=${workerInfo['id']}',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      // Close loading dialog
+      if (mounted) Navigator.of(context).pop();
+
+      // Show error message
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Gagal membuka chat: $e')));
+      }
+    }
   }
 
   Widget _buildServiceHeader(Service service) {

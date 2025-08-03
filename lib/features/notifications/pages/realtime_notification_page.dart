@@ -2,21 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/api/api_service.dart';
 import '../../../core/models/notification_model.dart';
 import '../../../core/state/auth_provider.dart';
 import '../../../core/services/realtime_notification_service.dart';
 
-class NotificationPage extends StatefulWidget {
-  const NotificationPage({super.key});
+class RealtimeNotificationPage extends StatefulWidget {
+  const RealtimeNotificationPage({super.key});
 
   @override
-  State<NotificationPage> createState() => _NotificationPageState();
+  State<RealtimeNotificationPage> createState() => _RealtimeNotificationPageState();
 }
 
-class _NotificationPageState extends State<NotificationPage> {
-  final ApiService _apiService = ApiService();
-  late Future<List<NotificationItem>> _notificationsFuture;
+class _RealtimeNotificationPageState extends State<RealtimeNotificationPage> {
+  late RealtimeNotificationService _notificationService;
 
   // Color Palette
   static const Color primaryColor = Color(0xFF1A374D);
@@ -27,39 +25,69 @@ class _NotificationPageState extends State<NotificationPage> {
   @override
   void initState() {
     super.initState();
-    _loadNotifications();
+    _notificationService = RealtimeNotificationService();
+    _initializeRealtimeNotifications();
   }
 
-  Future<void> _loadNotifications() async {
+  Future<void> _initializeRealtimeNotifications() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    if (authProvider.token != null) {
-      setState(() {
-        _notificationsFuture = _apiService.getMyNotifications(
-          authProvider.token!,
-        );
-      });
+    if (authProvider.isLoggedIn && authProvider.user?.uid != null) {
+      // Start listening to real-time notifications
+      await _notificationService.startListening(
+        authProvider.user!.uid,
+        authProvider.token,
+      );
     }
   }
 
-  Future<void> _markAsRead(String id) async {
+  @override
+  void dispose() {
+    _notificationService.stopListening();
+    super.dispose();
+  }
+
+  Future<void> _markAsRead(String notificationId) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    await _apiService.markNotificationAsRead(
-      token: authProvider.token!,
-      notificationId: id,
-    );
+    await _notificationService.markAsRead(notificationId, authProvider.token);
+  }
+
+  Future<void> _markAllAsRead() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    await _notificationService.markAllAsRead(authProvider.token);
   }
 
   void _handleNotificationTap(NotificationItem notif) async {
     if (!notif.isRead) await _markAsRead(notif.id);
 
-    if (notif.type == 'service_approved') {
-      Navigator.pushNamed(context, '/my-jobs');
-    } else if (notif.type == 'order_update') {
-      Navigator.pushNamed(context, '/order-detail', arguments: notif.relatedId);
+    // Navigate based on notification type
+    switch (notif.type) {
+      case 'service_approved':
+      case 'service_rejected':
+        Navigator.pushNamed(context, '/my-jobs');
+        break;
+      case 'new_order':
+      case 'order_update':
+        if (notif.relatedId != null) {
+          Navigator.pushNamed(context, '/order-detail', arguments: notif.relatedId);
+        } else {
+          Navigator.pushNamed(context, '/orders');
+        }
+        break;
+      case 'chat':
+        if (notif.relatedId != null) {
+          Navigator.pushNamed(context, '/chat', arguments: notif.relatedId);
+        } else {
+          Navigator.pushNamed(context, '/chat-list');
+        }
+        break;
+      case 'promo':
+      case 'broadcast':
+        Navigator.pushNamed(context, '/marketplace');
+        break;
+      default:
+        // Stay on notifications page
+        break;
     }
-
-    // Refresh notifikasi setelah kembali
-    _loadNotifications();
   }
 
   @override
@@ -68,7 +96,7 @@ class _NotificationPageState extends State<NotificationPage> {
       backgroundColor: backgroundGray,
       appBar: AppBar(
         title: const Text(
-          'Notifikasi',
+          'Notifikasi Real-time',
           style: TextStyle(fontWeight: FontWeight.w700, color: primaryColor),
         ),
         backgroundColor: white,
@@ -92,86 +120,30 @@ class _NotificationPageState extends State<NotificationPage> {
               color: backgroundGray,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: IconButton(
-              onPressed: () {
-                // TODO: Mark all as read
+            child: Consumer<RealtimeNotificationService>(
+              builder: (context, service, child) {
+                return IconButton(
+                  onPressed: service.unreadCount > 0 ? _markAllAsRead : null,
+                  icon: Icon(
+                    Icons.done_all_rounded,
+                    color: service.unreadCount > 0 ? primaryColor : Colors.grey,
+                    size: 22,
+                  ),
+                  tooltip: 'Tandai semua sudah dibaca',
+                );
               },
-              icon: const Icon(
-                Icons.done_all_rounded,
-                color: primaryColor,
-                size: 22,
-              ),
-              tooltip: 'Tandai semua sudah dibaca',
             ),
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadNotifications,
-        color: primaryColor,
-        backgroundColor: white,
-        child: FutureBuilder<List<NotificationItem>>(
-          future: _notificationsFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: CircularProgressIndicator(
-                  color: primaryColor,
-                  strokeWidth: 3,
-                ),
-              );
-            }
-            if (snapshot.hasError) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: white,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: primaryColor.withOpacity(0.1),
-                            blurRadius: 20,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.error_outline_rounded,
-                            size: 64,
-                            color: Colors.red.shade300,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Terjadi kesalahan',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.red.shade400,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Error: ${snapshot.error}',
-                            style: const TextStyle(
-                              color: Colors.grey,
-                              fontSize: 14,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }
-            if (!snapshot.hasData || snapshot.data!.isEmpty) {
+      body: ChangeNotifierProvider.value(
+        value: _notificationService,
+        child: Consumer<RealtimeNotificationService>(
+          builder: (context, service, child) {
+            final notifications = service.notifications;
+            final unreadCount = service.unreadCount;
+
+            if (notifications.isEmpty) {
               return Center(
                 child: Container(
                   margin: const EdgeInsets.all(32),
@@ -213,7 +185,7 @@ class _NotificationPageState extends State<NotificationPage> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Notifikasi terbaru akan muncul di sini',
+                        'Notifikasi real-time akan muncul di sini',
                         style: TextStyle(
                           fontSize: 14,
                           color: primaryColor.withOpacity(0.7),
@@ -221,95 +193,138 @@ class _NotificationPageState extends State<NotificationPage> {
                         ),
                         textAlign: TextAlign.center,
                       ),
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.green.shade200,
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.wifi_rounded,
+                              size: 16,
+                              color: Colors.green.shade600,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Real-time Active',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.green.shade600,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
               );
             }
 
-            final notifications = snapshot.data!;
-            final unreadCount = notifications.where((n) => !n.isRead).length;
-
             return Column(
               children: [
-                // Header dengan statistik
-                if (notifications.isNotEmpty)
-                  Container(
-                    margin: const EdgeInsets.all(16),
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: white,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: primaryColor.withOpacity(0.08),
-                          blurRadius: 16,
-                          offset: const Offset(0, 4),
+                // Header dengan statistik real-time
+                Container(
+                  margin: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: primaryColor.withOpacity(0.08),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: primaryColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: primaryColor.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: const Icon(
-                            Icons.notifications_active_rounded,
-                            color: primaryColor,
-                            size: 24,
-                          ),
+                        child: const Icon(
+                          Icons.notifications_active_rounded,
+                          color: primaryColor,
+                          size: 24,
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${notifications.length} Notifikasi',
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                  color: primaryColor,
-                                ),
-                              ),
-                              if (unreadCount > 0)
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
                                 Text(
-                                  '$unreadCount belum dibaca',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: primaryColor.withOpacity(0.7),
+                                  '${notifications.length} Notifikasi',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                    color: primaryColor,
                                   ),
                                 ),
-                            ],
+                                const SizedBox(width: 8),
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.shade400,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (unreadCount > 0)
+                              Text(
+                                '$unreadCount belum dibaca',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: primaryColor.withOpacity(0.7),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      if (unreadCount > 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '$unreadCount',
+                            style: TextStyle(
+                              color: Colors.red.shade600,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
-                        if (unreadCount > 0)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.red.shade50,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              '$unreadCount',
-                              style: TextStyle(
-                                color: Colors.red.shade600,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
+                    ],
                   ),
+                ),
 
-                // List notifikasi
+                // List notifikasi real-time
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 16),

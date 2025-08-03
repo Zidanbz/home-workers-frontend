@@ -60,7 +60,6 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     );
   }
 
-
   void _loadMessages() {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.token != null) {
@@ -73,7 +72,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     }
     if (authProvider.token != null) {
       print("Chat ID: ${widget.chatId}");
-      
+
       return;
     }
   }
@@ -188,7 +187,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
           ),
         ],
       ),
-actions: [
+      actions: [
         IconButton(
           onPressed: () => _showComingSoonDialog(featureLabel: 'Video call'),
           icon: const Icon(Icons.videocam_outlined, color: Colors.black),
@@ -200,12 +199,10 @@ actions: [
           tooltip: 'Telepon (Coming Soon)',
         ),
       ],
-
     );
   }
 
   Widget _buildMessageBubble(Message message, bool isSentByMe) {
-    // --- PERBAIKAN: Gunakan parameter 'isSentByMe' bukan 'message.isSentByMe' ---
     final color = isSentByMe ? const Color(0xFF1E232C) : Colors.white;
     final textColor = isSentByMe ? Colors.white : Colors.black;
     final bubbleAlignment = isSentByMe
@@ -248,7 +245,7 @@ actions: [
       child: SafeArea(
         child: Row(
           children: [
-IconButton(
+            IconButton(
               onPressed: () => _showComingSoonDialog(featureLabel: 'Lampiran'),
               icon: const Icon(Icons.add, color: Colors.grey),
               tooltip: 'Tambah Lampiran (Coming Soon)',
