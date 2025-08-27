@@ -12,6 +12,7 @@ import '../../../../core/api/api_service.dart';
 import '../../../../core/state/auth_provider.dart';
 import '../../../../core/services/realtime_notification_service.dart';
 import '../../../../core/services/chat_service.dart';
+import '../../../../shared_widgets/feature_showcase.dart';
 
 class CustomerDashboardPage extends StatefulWidget {
   // Callback ke MainPage untuk pindah ke tab Orders
@@ -27,10 +28,73 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
   final ApiService _apiService = ApiService();
   late Future<Map<String, dynamic>> _dashboardFuture;
 
+  // Global keys for feature showcase
+  final GlobalKey _notificationKey = GlobalKey();
+  final GlobalKey _chatKey = GlobalKey();
+  final GlobalKey _marketplaceKey = GlobalKey();
+  final GlobalKey _ordersKey = GlobalKey();
+  final GlobalKey _searchKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
     _dashboardFuture = _apiService.getCustomerDashboardSummary();
+
+    // Show feature showcase after a delay to ensure UI is ready
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showDashboardFeatureShowcase();
+    });
+  }
+
+  Future<void> _showDashboardFeatureShowcase() async {
+    // Wait a bit for UI to settle
+    await Future.delayed(const Duration(milliseconds: 1000));
+
+    if (!mounted) return;
+
+    // Show feature sequence for dashboard
+    final steps = [
+      FeatureStep(
+        featureId: FeatureShowcase.featureNotification,
+        title: FeatureDescriptions.getTitle(
+          FeatureShowcase.featureNotification,
+        ),
+        description: FeatureDescriptions.getDescription(
+          FeatureShowcase.featureNotification,
+        ),
+        targetKey: _notificationKey,
+        position: TooltipPosition.bottom,
+      ),
+      FeatureStep(
+        featureId: FeatureShowcase.featureChat,
+        title: FeatureDescriptions.getTitle(FeatureShowcase.featureChat),
+        description: FeatureDescriptions.getDescription(
+          FeatureShowcase.featureChat,
+        ),
+        targetKey: _chatKey,
+        position: TooltipPosition.bottom,
+      ),
+      FeatureStep(
+        featureId: FeatureShowcase.featureSearch,
+        title: FeatureDescriptions.getTitle(FeatureShowcase.featureSearch),
+        description: FeatureDescriptions.getDescription(
+          FeatureShowcase.featureSearch,
+        ),
+        targetKey: _marketplaceKey,
+        position: TooltipPosition.bottom,
+      ),
+      FeatureStep(
+        featureId: FeatureShowcase.featureOrders,
+        title: FeatureDescriptions.getTitle(FeatureShowcase.featureOrders),
+        description: FeatureDescriptions.getDescription(
+          FeatureShowcase.featureOrders,
+        ),
+        targetKey: _ordersKey,
+        position: TooltipPosition.top,
+      ),
+    ];
+
+    await FeatureShowcase.showFeatureSequence(context: context, steps: steps);
   }
 
   Future<void> _refreshDashboard() async {
@@ -245,6 +309,7 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
             ),
             const Spacer(),
             IconButton(
+              key: _notificationKey,
               onPressed: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
@@ -258,6 +323,7 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
               ),
             ),
             IconButton(
+              key: _chatKey,
               onPressed: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
@@ -280,6 +346,7 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
         children: [
           // Penyedia Jasa
           _ActionCard(
+            key: _marketplaceKey,
             title: 'Penyedia Jasa',
             color: const Color(0xFFFFD465),
             icon: Icons.person_search_outlined,
@@ -298,6 +365,7 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
             children: [
               Expanded(
                 child: _ActionCard(
+                  key: _ordersKey,
                   title: 'Riwayat Pesanan',
                   color: const Color(0xFF3A3F51),
                   icon: Icons.work_history_outlined,
@@ -543,6 +611,7 @@ class _ActionCard extends StatelessWidget {
   final VoidCallback onTap;
 
   const _ActionCard({
+    super.key,
     required this.title,
     required this.color,
     required this.icon,

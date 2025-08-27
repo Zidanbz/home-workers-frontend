@@ -263,6 +263,10 @@ class _BookingPageState extends State<BookingPage> {
     ).format(value);
   }
 
+  Future<void> _refreshBookingData() async {
+    await Future.wait([_loadBookedSlots(), _fetchVouchers()]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isSurvey = widget.service.tipeLayanan == 'survey';
@@ -277,29 +281,33 @@ class _BookingPageState extends State<BookingPage> {
         backgroundColor: Colors.white,
         elevation: 0.5,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildWorkerInfo(),
-            const SizedBox(height: 24),
-            const Text(
-              'Kapan Anda menginginkan layanan?',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            const SizedBox(height: 16),
-            _buildDatePicker(),
-            const SizedBox(height: 24),
-            const Text(
-              'Jam berapa Anda ingin layanan dimulai?',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            const SizedBox(height: 16),
-            _buildTimeSlotPicker(),
-            const SizedBox(height: 24),
-            if (!isSurvey) _buildVoucherSection(),
-          ],
+      body: RefreshIndicator(
+        onRefresh: _refreshBookingData,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildWorkerInfo(),
+              const SizedBox(height: 24),
+              const Text(
+                'Kapan Anda menginginkan layanan?',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              _buildDatePicker(),
+              const SizedBox(height: 24),
+              const Text(
+                'Jam berapa Anda ingin layanan dimulai?',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              _buildTimeSlotPicker(),
+              const SizedBox(height: 24),
+              if (!isSurvey) _buildVoucherSection(),
+            ],
+          ),
         ),
       ),
       bottomNavigationBar: _buildBottomBar(isSurvey),

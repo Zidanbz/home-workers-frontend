@@ -19,8 +19,18 @@ class _WorkerProfilePageState extends State<WorkerProfilePage>
   @override
   void initState() {
     super.initState();
-    _workerFuture = ApiService().getWorkerById(widget.workerId);
+    _loadWorkerData();
     _tabController = TabController(length: 2, vsync: this);
+  }
+
+  void _loadWorkerData() {
+    _workerFuture = ApiService().getWorkerById(widget.workerId);
+  }
+
+  Future<void> _refreshWorkerData() async {
+    setState(() {
+      _loadWorkerData();
+    });
   }
 
   @override
@@ -51,27 +61,39 @@ class _WorkerProfilePageState extends State<WorkerProfilePage>
 
           final worker = snapshot.data!;
 
-          return Column(
-            children: [
-              _buildHeader(worker),
-              _buildInfoCards(worker),
-              const SizedBox(height: 10),
-              TabBar(
-                controller: _tabController,
-                labelColor: Colors.black,
-                indicatorColor: Colors.blue,
-                tabs: const [
-                  Tab(text: "Profil"),
-                  Tab(text: "Ulasan"),
-                ],
-              ),
-              Expanded(
-                child: TabBarView(
+          return RefreshIndicator(
+            onRefresh: _refreshWorkerData,
+            child: Column(
+              children: [
+                _buildHeader(worker),
+                _buildInfoCards(worker),
+                const SizedBox(height: 10),
+                TabBar(
                   controller: _tabController,
-                  children: [_buildProfileTab(worker), _buildReviewTab()],
+                  labelColor: Colors.black,
+                  indicatorColor: Colors.blue,
+                  tabs: const [
+                    Tab(text: "Profil"),
+                    Tab(text: "Ulasan"),
+                  ],
                 ),
-              ),
-            ],
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      RefreshIndicator(
+                        onRefresh: _refreshWorkerData,
+                        child: _buildProfileTab(worker),
+                      ),
+                      RefreshIndicator(
+                        onRefresh: _refreshWorkerData,
+                        child: _buildReviewTab(),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           );
         },
       ),

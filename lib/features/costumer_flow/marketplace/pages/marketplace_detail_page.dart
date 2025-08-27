@@ -131,57 +131,114 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
   }
 
   Widget _buildWorkerHeader(Map<String, dynamic> workerInfo) {
+    final avatarUrl = workerInfo['avatarUrl'] as String?;
+    final hasValidAvatar =
+        avatarUrl != null && avatarUrl.isNotEmpty && avatarUrl != 'null';
+
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      color: const Color(0xFFD9D9D9),
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 25,
-              backgroundImage: NetworkImage(
-                workerInfo['avatarUrl'] ??
-                    'https://i.pravatar.cc/150?u=${workerInfo['id']}',
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    workerInfo['nama'] ?? 'Nama Worker',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Color(0xFF1A374D),
+      elevation: 4,
+      shadowColor: Colors.black.withOpacity(0.1),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Colors.white, const Color(0xFFF8F9FA)],
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Tap untuk chat dengan worker',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A374D),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: IconButton(
-                onPressed: () => _openChatWithWorker(workerInfo),
-                icon: const Icon(
-                  Icons.chat_bubble_outline,
-                  color: Colors.white,
-                  size: 20,
+                  ],
                 ),
-                tooltip: 'Chat dengan Worker',
+                child: CircleAvatar(
+                  radius: 28,
+                  backgroundColor: Colors.grey[200],
+                  backgroundImage: hasValidAvatar
+                      ? NetworkImage(avatarUrl!)
+                      : null,
+                  child: !hasValidAvatar
+                      ? Icon(Icons.person, size: 32, color: Colors.grey[600])
+                      : null,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      workerInfo['nama'] ?? 'Nama Worker',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        color: Color(0xFF1A374D),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(Icons.star, size: 16, color: Colors.amber[600]),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${workerInfo['rating']?.toStringAsFixed(1) ?? '0.0'} • ${workerInfo['totalReviews'] ?? 0} ulasan',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Tap untuk chat dengan worker',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[500],
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [const Color(0xFF1A374D), const Color(0xFF2A4A5D)],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF1A374D).withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: IconButton(
+                  onPressed: () => _openChatWithWorker(workerInfo),
+                  icon: const Icon(
+                    Icons.chat_bubble_outline,
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                  tooltip: 'Chat dengan Worker',
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

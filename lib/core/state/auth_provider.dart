@@ -12,6 +12,7 @@ import '../api/api_service.dart';
 import '../models/user_model.dart';
 import '../services/secure_storage_service.dart';
 import '../services/realtime_notification_service.dart';
+import '../../shared_widgets/hint_system.dart';
 
 /// Layar auth apa yang ingin ditampilkan root widget.
 enum AuthScreen { welcome, login, register }
@@ -345,6 +346,40 @@ class AuthProvider with ChangeNotifier {
 
     // Sekarang, baru kita beritahu seluruh aplikasi bahwa login benar-benar selesai
     notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Hint System Integration
+  // ---------------------------------------------------------------------------
+
+  /// Show first login hint if needed (call this from UI after successful login)
+  Future<void> showFirstLoginHintIfNeeded(BuildContext context) async {
+    try {
+      if (await HintSystem.shouldShowFirstLoginHint()) {
+        // Add a small delay to ensure UI is ready
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (context.mounted) {
+          await HintSystem.showFirstLoginHint(context);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error showing first login hint: $e');
+    }
+  }
+
+  /// Show address hint if needed (call this from dashboard or profile)
+  Future<void> showAddressHintIfNeeded(BuildContext context) async {
+    try {
+      if (await HintSystem.shouldShowAddressHint()) {
+        // Add a small delay to ensure UI is ready
+        await Future.delayed(const Duration(milliseconds: 300));
+        if (context.mounted) {
+          await HintSystem.showAddressHint(context);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error showing address hint: $e');
+    }
   }
 
   /// Start real-time notifications (non-blocking)

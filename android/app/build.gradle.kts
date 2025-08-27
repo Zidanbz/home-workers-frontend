@@ -15,9 +15,16 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
+// ⬇️ Load dari local.properties (MAPS_API_KEY)
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(FileInputStream(localPropertiesFile))
+}
+
 android {
     namespace = "com.example.home_workers_fe"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = "27.0.12077973"
 
     compileOptions {
@@ -38,25 +45,45 @@ android {
     defaultConfig {
         applicationId = "com.example.home_workers_fe"
         minSdk = 26
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // Inject Google Maps API Key dari local.properties (jangan commit ke repo)
+        manifestPlaceholders += mapOf(
+            "MAPS_API_KEY" to (localProperties.getProperty("MAPS_API_KEY") ?: "")
+        )
     }
 
     signingConfigs {
-        create("release") {
-            storeFile = file(keystoreProperties["storeFile"] as String)
-            storePassword = keystoreProperties["storePassword"] as String
-            keyAlias = keystoreProperties["keyAlias"] as String
-            keyPassword = keystoreProperties["keyPassword"] as String
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+            }
+        } else {
+            println("Warning: key.properties tidak ditemukan. Release build tidak akan tersign otomatis.")
         }
     }
 
     buildTypes {
         getByName("release") {
+            // TEMP: Nonaktifkan R8 sementara karena error R8 di JDK/desugaring.
+            // Nanti bisa diaktifkan kembali setelah perbaikan (update desugar libs / rules).
             isMinifyEnabled = false
             isShrinkResources = false
-            signingConfig = signingConfigs.getByName("release")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            } else {
+                println("Warning: Release build belum tersign. Siapkan keystore & key.properties.")
+            }
         }
     }
 }

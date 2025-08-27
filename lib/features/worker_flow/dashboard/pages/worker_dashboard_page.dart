@@ -144,120 +144,136 @@ class _WorkerDashboardPageState extends State<WorkerDashboardPage>
   }
 
   Widget _buildModernHeader(BuildContext context, {required String userName}) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Consumer<AuthProvider>(
+      builder: (context, authProvider, child) {
+        final user = authProvider.user;
+        final bool hasAvatar =
+            user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty;
+
+        return Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
             children: [
-              Expanded(
-                child: Row(
-                  children: [
-                    Hero(
-                      tag: 'profile_avatar',
-                      child: Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.3),
-                              blurRadius: 15,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: const CircleAvatar(
-                          radius: 28,
-                          backgroundImage: NetworkImage(
-                            'https://i.pravatar.cc/150?img=32',
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Selamat datang! 👋',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.9),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            userName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.location_on,
-                                size: 14,
-                                color: Colors.white.withOpacity(0.8),
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Makassar',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.8),
-                                  fontSize: 12,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Hero(
+                          tag: 'profile_avatar',
+                          child: Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.3),
+                                  blurRadius: 15,
+                                  offset: const Offset(0, 8),
                                 ),
+                              ],
+                            ),
+                            child: CircleAvatar(
+                              radius: 28,
+                              backgroundColor: Colors.grey[200],
+                              backgroundImage: hasAvatar
+                                  ? NetworkImage(user!.avatarUrl!)
+                                  : null,
+                              child: !hasAvatar
+                                  ? Icon(
+                                      Icons.person,
+                                      size: 32,
+                                      color: Colors.grey[600],
+                                    )
+                                  : null,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Selamat datang! 👋',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.9),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                userName,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.location_on,
+                                    size: 14,
+                                    color: Colors.white.withOpacity(0.8),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Makassar',
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.8),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Row(
-                children: [
-                  _buildHeaderIconButton(
-                    Icons.account_balance_wallet_rounded,
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const WorkerWalletPage(),
-                      ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  _buildHeaderIconButton(
-                    Icons.notifications_rounded,
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const NotificationPage(),
+                  Row(
+                    children: [
+                      _buildHeaderIconButton(
+                        Icons.account_balance_wallet_rounded,
+                        () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const WorkerWalletPage(),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildHeaderIconButton(
-                    Icons.chat_bubble_rounded,
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ChatListPage(),
+                      const SizedBox(width: 8),
+                      _buildHeaderIconButton(
+                        Icons.notifications_rounded,
+                        () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const NotificationPage(),
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      _buildHeaderIconButton(
+                        Icons.chat_bubble_rounded,
+                        () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ChatListPage(),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -629,138 +645,446 @@ class _WorkerDashboardPageState extends State<WorkerDashboardPage>
 
   Widget _buildModernReviewList(List<dynamic> reviews) {
     if (reviews.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Text('Belum ada ulasan untuk Anda saat ini.'),
+      return Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              const Color(0xFF1A374D).withOpacity(0.05),
+              const Color(0xFF2A4A5F).withOpacity(0.1),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: const Color(0xFF1A374D).withOpacity(0.1),
+            width: 1,
+          ),
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A374D).withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.star_outline,
+                size: 32,
+                color: Color(0xFF1A374D),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Belum Ada Ulasan',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1A374D),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Ulasan dari pelanggan akan muncul di sini setelah Anda menyelesaikan pesanan',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey, fontSize: 14),
+            ),
+          ],
         ),
       );
     }
 
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: reviews.length,
-      itemBuilder: (context, index) {
-        final review = reviews[index];
-        final String customerName = review['customerName'] ?? 'Pelanggan';
-        final String comment = review['comment'] ?? 'Tidak ada komentar.';
-        final double rating = (review['rating'] ?? 0).toDouble();
-        final String createdAt = review['createdAt'] != null
-            ? (review['createdAt'] is String
-                  ? _formatDate(review['createdAt'])
-                  : _formatDateFromDateTime(review['createdAt']))
-            : 'Tanggal tidak diketahui';
-        final String customerAvatarUrl =
-            review['customerAvatarUrl'] ?? 'https://i.pravatar.cc/150?img=32';
-        final bool verified = review['verified'] ?? false;
-
-        return Card(
-          elevation: 2,
-          margin: const EdgeInsets.only(bottom: 16.0),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+    return Column(
+      children: [
+        // Summary Card
+        Container(
+          padding: const EdgeInsets.all(20),
+          margin: const EdgeInsets.only(bottom: 20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFFFFC107).withOpacity(0.1),
+                const Color(0xFFFF9800).withOpacity(0.15),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: const Color(0xFFFFC107).withOpacity(0.3),
+              width: 1,
+            ),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFC107).withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.star,
+                  color: Color(0xFFFFC107),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    CircleAvatar(
-                      backgroundImage: NetworkImage(customerAvatarUrl),
+                    Text(
+                      '${reviews.length} Ulasan Terbaru',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1A374D),
+                      ),
                     ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    const SizedBox(height: 4),
+                    Row(
                       children: [
+                        ...List.generate(5, (index) {
+                          final avgRating =
+                              reviews.fold<double>(
+                                0.0,
+                                (sum, review) =>
+                                    sum + ((review['rating'] ?? 0).toDouble()),
+                              ) /
+                              reviews.length;
+                          return Icon(
+                            index < avgRating.floor()
+                                ? Icons.star
+                                : (index < avgRating
+                                      ? Icons.star_half
+                                      : Icons.star_border),
+                            color: const Color(0xFFFFC107),
+                            size: 16,
+                          );
+                        }),
+                        const SizedBox(width: 8),
                         Text(
-                          customerName,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        Text(
-                          createdAt,
+                          '${(reviews.fold<double>(0.0, (sum, review) => sum + ((review['rating'] ?? 0).toDouble())) / reviews.length).toStringAsFixed(1)}',
                           style: const TextStyle(
-                            color: Colors.grey,
-                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1A374D),
                           ),
                         ),
                       ],
                     ),
-                    const Spacer(),
-                    if (verified)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Text(
-                          'Verified',
-                          style: TextStyle(
-                            color: Colors.green,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  children: List.generate(
-                    5,
-                    (idx) => Icon(
-                      idx < rating.floor()
-                          ? Icons.star
-                          : (idx < rating
-                                ? Icons.star_half
-                                : Icons.star_border),
-                      color: Colors.amber,
-                      size: 20,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  comment,
-                  maxLines: 4,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.grey),
-                ),
-                if (comment.length > 100)
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () {
-                        showDialog(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: Text('Ulasan dari $customerName'),
-                            content: SingleChildScrollView(
-                              child: Text(comment),
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: const Text('Tutup'),
-                              ),
-                            ],
+              ),
+            ],
+          ),
+        ),
+
+        // Reviews List
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: reviews.length > 3
+              ? 3
+              : reviews.length, // Show max 3 reviews
+          itemBuilder: (context, index) {
+            final review = reviews[index];
+            final String customerName = review['customerName'] ?? 'Pelanggan';
+            final String comment = review['comment'] ?? 'Tidak ada komentar.';
+            final double rating = (review['rating'] ?? 0).toDouble();
+            final String createdAt = review['createdAt'] != null
+                ? (review['createdAt'] is String
+                      ? _formatDate(review['createdAt'])
+                      : _formatDateFromDateTime(review['createdAt']))
+                : 'Tanggal tidak diketahui';
+            final String customerAvatarUrl =
+                review['customerAvatarUrl'] ??
+                'https://i.pravatar.cc/150?img=${32 + index}';
+            final bool verified = review['verified'] ?? false;
+
+            return TweenAnimationBuilder<double>(
+              duration: Duration(milliseconds: 300 + (index * 100)),
+              tween: Tween(begin: 0.0, end: 1.0),
+              builder: (context, value, child) {
+                return Transform.translate(
+                  offset: Offset(30 * (1 - value), 0),
+                  child: Opacity(
+                    opacity: value,
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 16.0),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
                           ),
-                        );
-                      },
-                      child: const Text('Baca Selengkapnya'),
+                        ],
+                        border: Border.all(
+                          color: Colors.grey.withOpacity(0.1),
+                          width: 1,
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(20.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: const Color(
+                                        0xFF1A374D,
+                                      ).withOpacity(0.2),
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: CircleAvatar(
+                                    radius: 22,
+                                    backgroundImage: NetworkImage(
+                                      customerAvatarUrl,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            customerName,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
+                                              color: Color(0xFF1A374D),
+                                            ),
+                                          ),
+                                          if (verified) ...[
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.green.withOpacity(
+                                                  0.1,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                              ),
+                                              child: const Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    Icons.verified,
+                                                    color: Colors.green,
+                                                    size: 12,
+                                                  ),
+                                                  SizedBox(width: 2),
+                                                  Text(
+                                                    'Verified',
+                                                    style: TextStyle(
+                                                      color: Colors.green,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      fontSize: 10,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          ...List.generate(5, (idx) {
+                                            return Icon(
+                                              idx < rating.floor()
+                                                  ? Icons.star
+                                                  : (idx < rating
+                                                        ? Icons.star_half
+                                                        : Icons.star_border),
+                                              color: const Color(0xFFFFC107),
+                                              size: 16,
+                                            );
+                                          }),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            createdAt,
+                                            style: const TextStyle(
+                                              color: Colors.grey,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: const Color(
+                                  0xFF1A374D,
+                                ).withOpacity(0.03),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: const Color(
+                                    0xFF1A374D,
+                                  ).withOpacity(0.1),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.format_quote,
+                                        color: const Color(
+                                          0xFF1A374D,
+                                        ).withOpacity(0.6),
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      const Text(
+                                        'Ulasan',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF1A374D),
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    comment,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.black87,
+                                      fontSize: 14,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                  if (comment.length > 100)
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: TextButton(
+                                        onPressed: () {
+                                          showDialog(
+                                            context: context,
+                                            builder: (context) => AlertDialog(
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(20),
+                                              ),
+                                              title: Row(
+                                                children: [
+                                                  CircleAvatar(
+                                                    radius: 16,
+                                                    backgroundImage:
+                                                        NetworkImage(
+                                                          customerAvatarUrl,
+                                                        ),
+                                                  ),
+                                                  const SizedBox(width: 12),
+                                                  Text(
+                                                    'Ulasan dari $customerName',
+                                                  ),
+                                                ],
+                                              ),
+                                              content: SingleChildScrollView(
+                                                child: Text(
+                                                  comment,
+                                                  style: const TextStyle(
+                                                    height: 1.5,
+                                                  ),
+                                                ),
+                                              ),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () =>
+                                                      Navigator.pop(context),
+                                                  child: const Text('Tutup'),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        },
+                                        style: TextButton.styleFrom(
+                                          foregroundColor: const Color(
+                                            0xFF1A374D,
+                                          ),
+                                        ),
+                                        child: const Text(
+                                          'Baca Selengkapnya',
+                                          style: TextStyle(fontSize: 12),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-              ],
+                );
+              },
+            );
+          },
+        ),
+
+        // Show More Button if there are more than 3 reviews
+        if (reviews.length > 3)
+          Container(
+            margin: const EdgeInsets.only(top: 16),
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                // TODO: Navigate to full reviews page
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Fitur lihat semua ulasan akan segera hadir!',
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.visibility),
+              label: Text('Lihat Semua ${reviews.length} Ulasan'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF1A374D),
+                side: const BorderSide(color: Color(0xFF1A374D)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
             ),
           ),
-        );
-      },
+      ],
     );
   }
 

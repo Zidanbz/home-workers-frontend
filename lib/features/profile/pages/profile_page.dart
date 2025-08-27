@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:home_workers_fe/core/models/user_model.dart';
 import 'package:home_workers_fe/features/auth/pages/login_page.dart';
 import 'package:home_workers_fe/features/costumer_flow/vouchers/pages/claim_voucher_page.dart';
+import 'package:home_workers_fe/features/costumer_flow/vouchers/pages/voucher_list_page.dart';
 import 'package:home_workers_fe/features/notifications/pages/notification_page.dart';
 import 'package:home_workers_fe/features/profile/pages/address_management_page.dart';
 import 'package:home_workers_fe/features/profile/pages/edit_profile_page.dart';
 import 'package:home_workers_fe/features/profile/pages/faq_page.dart';
+import 'package:home_workers_fe/features/profile/pages/bookmarked_services_page.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
@@ -55,6 +57,11 @@ class _ProfilePageState extends State<ProfilePage>
   void dispose() {
     _animationController.dispose();
     super.dispose();
+  }
+
+  Future<void> _refreshProfile() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    await authProvider.refreshUserData();
   }
 
   Future<void> _changeAvatar() async {
@@ -192,13 +199,16 @@ class _ProfilePageState extends State<ProfilePage>
                             opacity: _fadeAnimation,
                             child: SlideTransition(
                               position: _slideAnimation,
-                              child: ListView(
-                                padding: const EdgeInsets.all(20),
-                                children: [
-                                  _buildProfileHeader(user, hasAvatar),
-                                  const SizedBox(height: 30),
-                                  _buildMenuSection(user),
-                                ],
+                              child: RefreshIndicator(
+                                onRefresh: _refreshProfile,
+                                child: ListView(
+                                  padding: const EdgeInsets.all(20),
+                                  children: [
+                                    _buildProfileHeader(user, hasAvatar),
+                                    const SizedBox(height: 30),
+                                    _buildMenuSection(user),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -302,7 +312,7 @@ class _ProfilePageState extends State<ProfilePage>
                 bottom: 4,
                 right: 4,
                 child: GestureDetector(
-                  onTap: _changeAvatar, // <-- wire up here
+                  onTap: _changeAvatar,
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -399,12 +409,25 @@ class _ProfilePageState extends State<ProfilePage>
         MenuItemData(
           icon: Icons.card_giftcard_outlined,
           title: 'Vouchers',
-          subtitle: 'Claim Vouchers',
+          subtitle: 'Lihat dan klaim voucher',
           color: const Color.fromARGB(255, 51, 208, 23),
           onTap: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const ClaimVoucherPage()),
+              MaterialPageRoute(builder: (_) => const VoucherListPage()),
+            );
+          },
+        ),
+      if (user.role.toLowerCase() == 'customer')
+        MenuItemData(
+          icon: Icons.bookmark_outline,
+          title: 'Layanan Tersimpan',
+          subtitle: 'Bookmark layanan favorit',
+          color: const Color(0xFFFF9800),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const BookmarkedServicesPage()),
             );
           },
         ),
@@ -526,55 +549,111 @@ class _ProfilePageState extends State<ProfilePage>
   void _showLogoutDialog() {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (BuildContext context) {
         return Dialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(24),
           ),
+          elevation: 16,
           child: Container(
-            padding: const EdgeInsets.all(20),
-            height: 250,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Colors.white, Colors.grey.shade50],
+              ),
+            ),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'Konfirmasi Logout',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF6B6B).withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.logout,
+                    size: 32,
+                    color: Color(0xFFFF6B6B),
+                  ),
                 ),
                 const SizedBox(height: 20),
                 const Text(
-                  'Apakah Anda yakin ingin keluar dari akun?',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16),
+                  'Konfirmasi Logout',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                    color: Color(0xFF2D3748),
+                  ),
                 ),
-                const SizedBox(height: 30),
+                const SizedBox(height: 12),
+                const Text(
+                  'Apakah Anda yakin ingin keluar dari akun? Anda perlu login kembali untuk mengakses aplikasi.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 24),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text(
-                        'Batal',
-                        style: TextStyle(color: Colors.grey),
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(color: Colors.grey.shade300),
+                          ),
+                        ),
+                        child: const Text(
+                          'Batal',
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ),
-                    ElevatedButton(
-                      onPressed: () async {
-                        Navigator.of(context).pop();
-                        await Provider.of<AuthProvider>(
-                          context,
-                          listen: false,
-                        ).logout();
-                        if (context.mounted) {
-                          Navigator.of(context).pushAndRemoveUntil(
-                            MaterialPageRoute(
-                              builder: (_) => const LoginPage(),
-                            ),
-                            (route) => false,
-                          );
-                        }
-                      },
-                      child: const Text('Logout'),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          Navigator.of(context).pop();
+                          await Provider.of<AuthProvider>(
+                            context,
+                            listen: false,
+                          ).logout();
+                          if (context.mounted) {
+                            Navigator.of(context).pushAndRemoveUntil(
+                              MaterialPageRoute(
+                                builder: (_) => const LoginPage(),
+                              ),
+                              (route) => false,
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFF6B6B),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 2,
+                        ),
+                        child: const Text(
+                          'Logout',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
                     ),
                   ],
                 ),

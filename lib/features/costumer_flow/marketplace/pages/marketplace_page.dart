@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/api/api_service.dart';
 import '../../../../core/models/service_model.dart';
+import '../../../../core/models/category_model.dart';
 import '../../../../core/state/auth_provider.dart';
 
 class MarketplacePage extends StatefulWidget {
@@ -158,14 +159,27 @@ class _MarketplacePageState extends State<MarketplacePage> {
                   value: _selectedCategory.isEmpty ? null : _selectedCategory,
                   hint: const Text('Kategori', style: TextStyle(fontSize: 12)),
                   style: const TextStyle(fontSize: 12, color: Colors.black),
-                  items: ['Kebersihan', 'Perbaikan', 'Home Improvement']
+                  items: CategoryData.getCategoryNames()
                       .map(
                         (cat) => DropdownMenuItem(
                           value: cat,
-                          child: Text(
-                            cat,
-                            style: const TextStyle(fontSize: 12),
-                            overflow: TextOverflow.ellipsis,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                CategoryData.getIconForCategory(cat),
+                                size: 16,
+                                color: Colors.grey[600],
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  cat,
+                                  style: const TextStyle(fontSize: 12),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       )
@@ -275,16 +289,7 @@ class _ServiceCard extends StatelessWidget {
   }
 
   IconData _getIconForCategory(String category) {
-    switch (category.toLowerCase()) {
-      case 'kebersihan':
-        return Icons.cleaning_services_outlined;
-      case 'perbaikan':
-        return Icons.build_outlined;
-      case 'home improvement':
-        return Icons.cottage_outlined;
-      default:
-        return Icons.work_outline;
-    }
+    return Category.getIconForCategoryString(category);
   }
 
   Color _getPriceColor() {
