@@ -762,11 +762,19 @@ class ApiService {
 
   Future<List<Service>> getAllApprovedServices({String? category}) async {
     print('📋 [getAllApprovedServices] Starting to fetch approved services');
-    final url = Uri.parse('$_baseUrl/services');
-    print('🌐 [getAllApprovedServices] URL: $url');
+    print('📋 [getAllApprovedServices] Category filter: $category');
+
+    // Build URL with category query parameter if provided
+    final uri = Uri.parse('$_baseUrl/services').replace(
+      queryParameters: category != null && category.isNotEmpty
+          ? {'category': category}
+          : null,
+    );
+
+    print('🌐 [getAllApprovedServices] URL: $uri');
 
     try {
-      final response = await http.get(url);
+      final response = await http.get(uri);
       print(
         '📊 [getAllApprovedServices] Response Status: ${response.statusCode}',
       );

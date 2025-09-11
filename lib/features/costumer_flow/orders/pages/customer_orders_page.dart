@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/api/api_service.dart';
 import '../../../../core/models/order_model.dart';
 import '../../../../core/state/auth_provider.dart';
+import '../../../../core/services/realtime_notification_service.dart';
 
 class CustomerOrdersPage extends StatefulWidget {
   const CustomerOrdersPage({super.key});
@@ -27,10 +28,28 @@ class _CustomerOrdersPageState extends State<CustomerOrdersPage>
   static const Color white = Color(0xFFFFFFFF);
   static const Color backgroundGray = Color(0xFFF8F9FA);
 
+  late final RealtimeNotificationService _notificationService;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _loadOrders();
+
+    _notificationService = RealtimeNotificationService();
+    _notificationService.addListener(_onNotificationUpdate);
+
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (authProvider.token != null && authProvider.user != null) {
+      _notificationService.startListening(
+        authProvider.user!.uid,
+        authProvider.token,
+      );
+    }
+  }
+
+  void _onNotificationUpdate() {
+    // When notifications update, refresh orders to reflect any changes
     _loadOrders();
   }
 
@@ -51,6 +70,7 @@ class _CustomerOrdersPageState extends State<CustomerOrdersPage>
   @override
   void dispose() {
     _tabController.dispose();
+    _notificationService.removeListener(_onNotificationUpdate);
     super.dispose();
   }
 

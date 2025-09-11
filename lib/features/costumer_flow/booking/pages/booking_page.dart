@@ -476,31 +476,45 @@ class _BookingPageState extends State<BookingPage> {
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
         const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          value: _selectedVoucher,
-          items: _vouchers.map((v) {
-            final code = v['code'] as String;
-            final discountType = v['discountType'];
-            final value = v['value'];
-            final label = discountType == 'percent'
-                ? '$code • ${value}%'
-                : '$code • ${_formatCurrency(value is int ? value : int.tryParse(value.toString()) ?? 0)}';
-            return DropdownMenuItem<String>(value: code, child: Text(label));
-          }).toList(),
-          onChanged: (value) {
-            setState(() {
-              _selectedVoucher = value;
-              _discount = 0;
-              _finalPrice = _basePrice;
-              _appliedVoucherCode = null;
-              _voucherMessage = null;
-            });
-          },
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
-            hintText: 'Pilih voucher',
+        if (_vouchers.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade400),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Text(
+              'Tidak ada voucher yang tersedia',
+              style: TextStyle(color: Colors.grey),
+            ),
+          )
+        else
+          DropdownButtonFormField<String>(
+            value: _selectedVoucher,
+            items: _vouchers.map((v) {
+              final code = v['code'] as String;
+              final discountType = v['discountType'];
+              final value = v['value'];
+              final label = discountType == 'percent'
+                  ? '$code • ${value}%'
+                  : '$code • ${_formatCurrency(value is int ? value : int.tryParse(value.toString()) ?? 0)}';
+              return DropdownMenuItem<String>(value: code, child: Text(label));
+            }).toList(),
+            onChanged: (value) {
+              setState(() {
+                _selectedVoucher = value;
+                _discount = 0;
+                _finalPrice = _basePrice;
+                _appliedVoucherCode = null;
+                _voucherMessage = null;
+              });
+            },
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              hintText: 'Pilih voucher',
+            ),
           ),
-        ),
         const SizedBox(height: 8),
         ElevatedButton(
           onPressed: _checkingVoucher ? null : _checkVoucher,

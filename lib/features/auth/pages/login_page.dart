@@ -104,6 +104,11 @@ class _LoginPageState extends State<LoginPage> {
           MaterialPageRoute(builder: (context) => MainPage(userRole: userRole)),
           (route) => false,
         );
+
+        // 5. Show first login hint after navigation
+        if (mounted) {
+          await authProvider.showFirstLoginHintIfNeeded(context);
+        }
       }
     } catch (e) {
       if (!mounted) return;
@@ -119,6 +124,13 @@ class _LoginPageState extends State<LoginPage> {
           final decoded = jsonDecode(jsonPart);
           if (decoded['message'] != null) {
             errorMessage = decoded['message'];
+
+            // Custom handling for password or email errors
+            if (errorMessage.toLowerCase().contains('password')) {
+              errorMessage = 'Password yang Anda masukkan tidak sesuai.';
+            } else if (errorMessage.toLowerCase().contains('email')) {
+              errorMessage = 'Email yang Anda masukkan tidak ditemukan.';
+            }
           }
         }
       } catch (parseError) {

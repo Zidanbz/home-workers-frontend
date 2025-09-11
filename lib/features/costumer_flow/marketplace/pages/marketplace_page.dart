@@ -105,12 +105,23 @@ class _MarketplacePageState extends State<MarketplacePage> {
                     filteredServices.sort((a, b) => a.harga.compareTo(b.harga));
                   } else if (_selectedSort == 'harga-desc') {
                     filteredServices.sort((a, b) => b.harga.compareTo(a.harga));
-                  } else if (_selectedSort == 'rating-desc') {
-                    filteredServices.sort((a, b) {
-                      final ratingA = a.workerInfo['rating'] ?? 0;
-                      final ratingB = b.workerInfo['rating'] ?? 0;
-                      return ratingB.compareTo(ratingA);
-                    });
+                  }
+
+                  if (filteredServices.isEmpty) {
+                    // Check if it's due to category filter or search filter
+                    if (_selectedCategory.isNotEmpty && _searchQuery.isEmpty) {
+                      return const Center(
+                        child: Text(
+                          'Layanan belum tersedia untuk kategori ini.',
+                        ),
+                      );
+                    } else {
+                      return const Center(
+                        child: Text(
+                          'Tidak ada layanan yang sesuai dengan filter.',
+                        ),
+                      );
+                    }
                   }
 
                   return ListView.builder(
@@ -217,10 +228,6 @@ class _MarketplacePageState extends State<MarketplacePage> {
                     DropdownMenuItem(
                       value: 'harga-desc',
                       child: Text('Termahal', style: TextStyle(fontSize: 12)),
-                    ),
-                    DropdownMenuItem(
-                      value: 'rating-desc',
-                      child: Text('Rating ⭐', style: TextStyle(fontSize: 12)),
                     ),
                   ],
                   onChanged: (value) {

@@ -36,7 +36,7 @@ class HintSystem {
 
     await showDialog(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: true,
       builder: (BuildContext context) {
         return const FirstLoginHintDialog();
       },
@@ -82,8 +82,8 @@ class _FirstLoginHintDialogState extends State<FirstLoginHintDialog>
       vsync: this,
     );
 
-    _scaleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.elasticOut),
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
     );
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
@@ -243,8 +243,8 @@ class _AddressHintDialogState extends State<AddressHintDialog>
       vsync: this,
     );
 
-    _scaleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.elasticOut),
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
     );
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(

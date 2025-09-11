@@ -506,6 +506,8 @@ class AuthProvider with ChangeNotifier {
     try {
       final updatedUser = await _apiService.getMyProfile(_token!);
       _user = updatedUser;
+      // Fetch avatar after refreshing user profile to ensure avatar URL is up to date
+      await getAvatar();
       notifyListeners();
     } catch (e) {
       debugPrint('Gagal refresh user: $e');

@@ -43,7 +43,18 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
     // Show feature showcase after a delay to ensure UI is ready
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _showDashboardFeatureShowcase();
+      _showAddressHintIfNeeded();
     });
+  }
+
+  Future<void> _showAddressHintIfNeeded() async {
+    // Wait a bit more for UI to be fully ready
+    await Future.delayed(const Duration(milliseconds: 1500));
+
+    if (!mounted) return;
+
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    await authProvider.showAddressHintIfNeeded(context);
   }
 
   Future<void> _showDashboardFeatureShowcase() async {

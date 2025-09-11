@@ -64,7 +64,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '891691718664',
     projectId: 'home-workers-fa5cd',
     storageBucket: 'home-workers-fa5cd.firebasestorage.app',
-    iosBundleId: 'com.example.homeWorkersFe',
+    iosBundleId: 'com.homeworkers.app',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
@@ -73,7 +73,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '891691718664',
     projectId: 'home-workers-fa5cd',
     storageBucket: 'home-workers-fa5cd.firebasestorage.app',
-    iosBundleId: 'com.example.homeWorkersFe',
+    iosBundleId: 'com.homeworkers.app',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(

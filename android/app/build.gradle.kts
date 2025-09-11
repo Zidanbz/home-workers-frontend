@@ -23,7 +23,7 @@ if (localPropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.example.home_workers_fe"
+    namespace = "com.homeworkers.app"
     compileSdk = 36
     ndkVersion = "27.0.12077973"
 
@@ -43,7 +43,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.home_workers_fe"
+        applicationId = "com.homeworkers.app"
         minSdk = 26
         targetSdk = 34
         versionCode = flutter.versionCode
