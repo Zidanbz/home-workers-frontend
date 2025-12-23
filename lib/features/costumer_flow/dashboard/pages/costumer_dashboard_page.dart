@@ -35,6 +35,30 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
   final GlobalKey _ordersKey = GlobalKey();
   final GlobalKey _searchKey = GlobalKey();
 
+  // Helper method untuk responsive font size
+  double _getResponsiveFontSize(BuildContext context, double baseSize) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    if (screenWidth < 360) {
+      return baseSize * 0.85; // Layar kecil
+    } else if (screenWidth < 400) {
+      return baseSize * 0.9; // Layar medium-small
+    } else if (screenWidth > 600) {
+      return baseSize * 1.1; // Layar besar
+    }
+    return baseSize; // Layar normal
+  }
+
+  // Helper method untuk responsive spacing
+  double _getResponsiveSpacing(BuildContext context, double baseSpacing) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    if (screenWidth < 360) {
+      return baseSpacing * 0.8;
+    } else if (screenWidth > 600) {
+      return baseSpacing * 1.2;
+    }
+    return baseSpacing;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -202,10 +226,17 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
                           (summaryData['topCategories'] as List)
                               .map((c) => Category.fromJson(c))
                               .toList();
-                      final List<Performer> bestPerformers =
+                      final List<Performer> allPerformers =
                           (summaryData['bestPerformers'] as List)
                               .map((p) => Performer.fromJson(p))
                               .toList();
+                      // Filter rating 4.5–5.0, sort descending, take max 5
+                      final List<Performer> filteredAndSorted = allPerformers
+                          .where((p) => p.rating >= 4.5 && p.rating <= 5.0)
+                          .toList()
+                        ..sort((a, b) => b.rating.compareTo(a.rating));
+                      final List<Performer> bestPerformers =
+                          filteredAndSorted.take(5).toList();
 
                       return _buildScrollableContent(
                         context,
@@ -291,34 +322,44 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
         return Row(
           children: [
             CircleAvatar(
-              radius: 20,
+              radius: _getResponsiveSpacing(context, 20),
               backgroundColor: Colors.white.withOpacity(0.2),
               backgroundImage: hasAvatar
                   ? NetworkImage(user!.avatarUrl!)
                   : null,
               child: !hasAvatar
-                  ? const Icon(Icons.person, size: 24, color: Colors.white)
+                  ? Icon(
+                      Icons.person,
+                      size: _getResponsiveSpacing(context, 24),
+                      color: Colors.white,
+                    )
                   : null,
             ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Halo,',
-                  style: TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-                Text(
-                  userName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
+            SizedBox(width: _getResponsiveSpacing(context, 12)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Halo,',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: _getResponsiveFontSize(context, 12),
+                    ),
                   ),
-                ),
-              ],
+                  Text(
+                    userName,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: _getResponsiveFontSize(context, 14),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ],
+              ),
             ),
-            const Spacer(),
             IconButton(
               key: _notificationKey,
               onPressed: () {
@@ -328,9 +369,10 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
                   ),
                 );
               },
-              icon: const Icon(
+              icon: Icon(
                 Icons.notifications_outlined,
                 color: Colors.white,
+                size: _getResponsiveSpacing(context, 24),
               ),
             ),
             IconButton(
@@ -342,7 +384,11 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
                   ),
                 );
               },
-              icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
+              icon: Icon(
+                Icons.chat_bubble_outline,
+                color: Colors.white,
+                size: _getResponsiveSpacing(context, 24),
+              ),
             ),
           ],
         );
@@ -352,7 +398,9 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
 
   Widget _buildActionCards() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0),
+      padding: EdgeInsets.symmetric(
+        horizontal: _getResponsiveSpacing(context, 20.0),
+      ),
       child: Column(
         children: [
           // Penyedia Jasa
@@ -368,8 +416,10 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
                 ),
               );
             },
+            fontSize: _getResponsiveFontSize(context, 18),
+            iconSize: _getResponsiveSpacing(context, 30),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: _getResponsiveSpacing(context, 16)),
 
           // Row 2
           Row(
@@ -382,9 +432,11 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
                   icon: Icons.work_history_outlined,
                   textColor: Colors.white,
                   onTap: widget.onNavigateToOrders, // callback ke MainPage
+                  fontSize: _getResponsiveFontSize(context, 16),
+                  iconSize: _getResponsiveSpacing(context, 28),
                 ),
               ),
-              const SizedBox(width: 16),
+              SizedBox(width: _getResponsiveSpacing(context, 16)),
               Expanded(
                 child: _ActionCard(
                   title: 'Cari Disekitar',
@@ -394,6 +446,8 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
                   onTap: () {
                     _showComingSoonDialog(context);
                   },
+                  fontSize: _getResponsiveFontSize(context, 16),
+                  iconSize: _getResponsiveSpacing(context, 28),
                 ),
               ),
             ],
@@ -405,13 +459,18 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
 
   Widget _buildSectionHeader(String title, VoidCallback onViewMore) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0),
+      padding: EdgeInsets.symmetric(
+        horizontal: _getResponsiveSpacing(context, 20.0),
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             title,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: _getResponsiveFontSize(context, 18),
+              fontWeight: FontWeight.bold,
+            ),
           ),
           // IconButton(
           //   onPressed: onViewMore,
@@ -424,23 +483,34 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
 
   Widget _buildCategoryList(List<Category> categories) {
     if (categories.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 20.0),
+      return Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: _getResponsiveSpacing(context, 20.0),
+        ),
         child: Text(
           'Belum ada kategori.',
-          style: TextStyle(color: Colors.grey),
+          style: TextStyle(
+            color: Colors.grey,
+            fontSize: _getResponsiveFontSize(context, 14),
+          ),
         ),
       );
     }
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final cardWidth = screenWidth < 360 ? 130.0 : 150.0;
+
     return SizedBox(
-      height: 130,
+      height: _getResponsiveSpacing(context, 130),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.only(left: 20.0),
+        padding: EdgeInsets.only(
+          left: _getResponsiveSpacing(context, 20.0),
+        ),
         itemCount: categories.length,
         itemBuilder: (context, index) {
           final category = categories[index];
+
           return InkWell(
             onTap: () {
               Navigator.of(context).push(
@@ -451,9 +521,11 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
               );
             },
             child: Container(
-              width: 150,
-              margin: const EdgeInsets.only(right: 16),
-              padding: const EdgeInsets.all(16),
+              width: cardWidth,
+              margin: EdgeInsets.only(
+                right: _getResponsiveSpacing(context, 16),
+              ),
+              padding: EdgeInsets.all(_getResponsiveSpacing(context, 16)),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
@@ -463,15 +535,20 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(category.icon, color: Colors.deepPurple, size: 30),
-                  const SizedBox(height: 8),
+                  Icon(
+                    category.icon,
+                    color: Colors.deepPurple,
+                    size: _getResponsiveSpacing(context, 30),
+                  ),
+                  SizedBox(height: _getResponsiveSpacing(context, 8)),
                   Text(
                     category.name,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    category.workerCount,
-                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: _getResponsiveFontSize(context, 14),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
@@ -484,26 +561,36 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
 
   Widget _buildPerformerList(List<Performer> performers) {
     if (performers.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 20.0),
+      return Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: _getResponsiveSpacing(context, 20.0),
+        ),
         child: Text(
           'Belum ada performer.',
-          style: TextStyle(color: Colors.grey),
+          style: TextStyle(
+            color: Colors.grey,
+            fontSize: _getResponsiveFontSize(context, 14),
+          ),
         ),
       );
     }
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final cardWidth = screenWidth < 360 ? 130.0 : (screenWidth < 400 ? 140.0 : 150.0);
+
     return SizedBox(
-      height: 200,
+      height: _getResponsiveSpacing(context, 200),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.only(left: 20.0),
+        padding: EdgeInsets.only(left: _getResponsiveSpacing(context, 20.0)),
         itemCount: performers.length,
         itemBuilder: (context, index) {
           final performer = performers[index];
           return Container(
-            width: 150,
-            margin: const EdgeInsets.only(right: 16),
+            width: cardWidth,
+            margin: EdgeInsets.only(
+              right: _getResponsiveSpacing(context, 16),
+            ),
             child: Column(
               children: [
                 Expanded(
@@ -516,30 +603,40 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
                       errorBuilder: (_, __, ___) => Container(
                         color: Colors.grey.shade200,
                         alignment: Alignment.center,
-                        child: const Icon(
+                        child: Icon(
                           Icons.person,
-                          size: 40,
+                          size: _getResponsiveSpacing(context, 40),
                           color: Colors.grey,
                         ),
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: _getResponsiveSpacing(context, 8)),
                 Text(
                   performer.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: _getResponsiveFontSize(context, 14),
+                  ),
                 ),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.star, color: Colors.amber, size: 16),
-                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.star,
+                      color: Colors.amber,
+                      size: _getResponsiveSpacing(context, 16),
+                    ),
+                    SizedBox(width: _getResponsiveSpacing(context, 4)),
                     Text(
                       performer.rating.toString(),
-                      style: const TextStyle(color: Colors.grey),
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: _getResponsiveFontSize(context, 12),
+                      ),
                     ),
                   ],
                 ),
@@ -620,6 +717,8 @@ class _ActionCard extends StatelessWidget {
   final IconData icon;
   final Color textColor;
   final VoidCallback onTap;
+  final double? fontSize;
+  final double? iconSize;
 
   const _ActionCard({
     super.key,
@@ -628,6 +727,8 @@ class _ActionCard extends StatelessWidget {
     required this.icon,
     required this.onTap,
     this.textColor = Colors.black,
+    this.fontSize,
+    this.iconSize,
   });
 
   @override
@@ -646,7 +747,7 @@ class _ActionCard extends StatelessWidget {
                 child: Text(
                   title,
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: fontSize ?? 18,
                     fontWeight: FontWeight.bold,
                     color: textColor,
                   ),
@@ -658,7 +759,7 @@ class _ActionCard extends StatelessWidget {
                   color: Colors.black.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, size: 30, color: textColor),
+                child: Icon(icon, size: iconSize ?? 30, color: textColor),
               ),
             ],
           ),

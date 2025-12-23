@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import 'package:home_workers_fe/features/main_page.dart';
+import 'package:home_workers_fe/core/state/auth_provider.dart';
 
 class PaymentSuccessPage extends StatelessWidget {
   final String paymentMethod;
@@ -22,9 +25,19 @@ class PaymentSuccessPage extends StatelessWidget {
     final formatDate = DateFormat('dd MMM yyyy');
     final formatTime = DateFormat('HH:mm');
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
-      body: Center(
+    return WillPopScope(
+      onWillPop: () async {
+        final auth = Provider.of<AuthProvider>(context, listen: false);
+        final role = (auth.user?.role ?? 'CUSTOMER').toUpperCase();
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => MainPage(userRole: role)),
+          (route) => false,
+        );
+        return false;
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F5F5),
+        body: Center(
         child: Padding(
           padding: const EdgeInsets.all(32.0),
           child: Column(
@@ -55,8 +68,12 @@ class PaymentSuccessPage extends StatelessWidget {
               const SizedBox(height: 32),
               ElevatedButton(
                 onPressed: () {
-                  // TODO: Navigasi ke halaman utama atau halaman riwayat pesanan
-                  Navigator.of(context).popUntil((route) => route.isFirst);
+                  final auth = Provider.of<AuthProvider>(context, listen: false);
+                  final role = (auth.user?.role ?? 'CUSTOMER').toUpperCase();
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => MainPage(userRole: role)),
+                    (route) => false,
+                  );
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF1E232C),
@@ -69,7 +86,8 @@ class PaymentSuccessPage extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildSummaryCard(

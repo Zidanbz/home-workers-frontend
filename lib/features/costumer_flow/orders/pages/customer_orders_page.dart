@@ -64,6 +64,12 @@ class _CustomerOrdersPageState extends State<CustomerOrdersPage>
       setState(() {
         _ordersFuture = future;
       });
+
+      // Tunggu hingga data selesai diambil agar RefreshIndicator berhenti di waktu yang tepat
+      await _ordersFuture;
+    } else {
+      // Fallback singkat agar indikator refresh tetap menutup dengan rapi
+      await Future.delayed(const Duration(milliseconds: 300));
     }
   }
 
@@ -181,158 +187,158 @@ class _CustomerOrdersPageState extends State<CustomerOrdersPage>
           ),
         ),
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadOrders,
-        color: primaryColor,
-        backgroundColor: white,
-        child: FutureBuilder<List<Order>>(
-          future: _ordersFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: CircularProgressIndicator(
-                  color: primaryColor,
-                  strokeWidth: 3,
-                ),
-              );
-            }
-            if (snapshot.hasError) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.error_outline,
-                      size: 64,
-                      color: Colors.red.shade300,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Terjadi kesalahan',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.red.shade400,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Error: ${snapshot.error}',
-                      style: const TextStyle(color: Colors.grey, fontSize: 14),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              );
-            }
-
-            final allOrders = snapshot.data ?? [];
-
-            final ongoingOrders = allOrders
-                .where(
-                  (o) => [
-                    'pending',
-                    'accepted',
-                    'quote_proposed',
-                    'quote_accepted',
-                    'work_in_progress',
-                  ].contains(o.status),
-                )
-                .toList();
-            final historyOrders = allOrders
-                .where(
-                  (o) => [
-                    'completed',
-                    'cancelled',
-                    'quote_rejected',
-                  ].contains(o.status),
-                )
-                .toList();
-
-            return TabBarView(
-              controller: _tabController,
-              children: [
-                _buildOrderList(ongoingOrders, isUpcoming: true),
-                _buildOrderList(historyOrders, isUpcoming: false),
-              ],
+      body: FutureBuilder<List<Order>>(
+        future: _ordersFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(
+                color: primaryColor,
+                strokeWidth: 3,
+              ),
             );
-          },
-        ),
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    size: 64,
+                    color: Colors.red.shade300,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Terjadi kesalahan',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.red.shade400,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Error: ${snapshot.error}',
+                    style: const TextStyle(color: Colors.grey, fontSize: 14),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final allOrders = snapshot.data ?? [];
+
+          final ongoingOrders = allOrders
+              .where(
+                (o) => [
+                  'pending',
+                  'accepted',
+                  'quote_proposed',
+                  'quote_accepted',
+                  'work_in_progress',
+                ].contains(o.status),
+              )
+              .toList();
+          final historyOrders = allOrders
+              .where(
+                (o) => [
+                  'completed',
+                  'cancelled',
+                  'quote_rejected',
+                ].contains(o.status),
+              )
+              .toList();
+
+          return TabBarView(
+            controller: _tabController,
+            children: [
+              _buildOrderList(ongoingOrders, isUpcoming: true),
+              _buildOrderList(historyOrders, isUpcoming: false),
+            ],
+          );
+        },
       ),
     );
   }
 
   Widget _buildOrderList(List<Order> orders, {required bool isUpcoming}) {
     if (orders.isEmpty) {
-      return SingleChildScrollView(
-        physics:
-            const AlwaysScrollableScrollPhysics(), // ✅ agar RefreshIndicator tetap bisa dipicu
-        child: Container(
-          height:
-              MediaQuery.of(context).size.height * 0.7, // ✅ agar bisa scroll
-          width: double.infinity,
-          color: backgroundGray,
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(32),
-                    decoration: BoxDecoration(
-                      color: white,
-                      borderRadius: BorderRadius.circular(24),
-                      boxShadow: [
-                        BoxShadow(
-                          color: primaryColor.withOpacity(0.1),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
+      return RefreshIndicator(
+        onRefresh: _loadOrders,
+        color: primaryColor,
+        backgroundColor: white,
+        child: SingleChildScrollView(
+          physics:
+              const AlwaysScrollableScrollPhysics(), // ✅ agar RefreshIndicator tetap bisa dipicu
+          child: Container(
+            height:
+                MediaQuery.of(context).size.height * 0.7, // ✅ agar bisa scroll
+            width: double.infinity,
+            color: backgroundGray,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(32),
+                      decoration: BoxDecoration(
+                        color: white,
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: primaryColor.withOpacity(0.1),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: lightGray.withOpacity(0.3),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Icon(
+                              isUpcoming ? Icons.schedule : Icons.history,
+                              size: 48,
+                              color: primaryColor.withOpacity(0.6),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          Text(
+                            isUpcoming
+                                ? 'Belum Ada Pesanan'
+                                : 'Belum Ada Riwayat',
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              color: primaryColor,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            isUpcoming
+                                ? 'Yuk, cari layanan dan buat pesanan pertamamu!'
+                                : 'Riwayat pesananmu akan tampil di sini setelah selesai.',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: primaryColor.withOpacity(0.7),
+                              height: 1.5,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
                     ),
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: lightGray.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Icon(
-                            isUpcoming ? Icons.schedule : Icons.history,
-                            size: 48,
-                            color: primaryColor.withOpacity(0.6),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        Text(
-                          isUpcoming
-                              ? 'Belum Ada Pesanan'
-                              : 'Belum Ada Riwayat',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: primaryColor,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          isUpcoming
-                              ? 'Yuk, cari layanan dan buat pesanan pertamamu!'
-                              : 'Riwayat pesananmu akan tampil di sini setelah selesai.',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: primaryColor.withOpacity(0.7),
-                            height: 1.5,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -340,14 +346,19 @@ class _CustomerOrdersPageState extends State<CustomerOrdersPage>
       );
     }
 
-    return ListView.builder(
-      physics:
-          const AlwaysScrollableScrollPhysics(), // ✅ agar bisa tarik refresh meskipun sedikit
-      padding: const EdgeInsets.all(16.0),
-      itemCount: orders.length,
-      itemBuilder: (context, index) {
-        return _OrderCard(order: orders[index]);
-      },
+    return RefreshIndicator(
+      onRefresh: _loadOrders,
+      color: primaryColor,
+      backgroundColor: white,
+      child: ListView.builder(
+        physics:
+            const AlwaysScrollableScrollPhysics(), // ✅ agar bisa tarik refresh meskipun sedikit
+        padding: const EdgeInsets.all(16.0),
+        itemCount: orders.length,
+        itemBuilder: (context, index) {
+          return _OrderCard(order: orders[index]);
+        },
+      ),
     );
   }
 }
@@ -662,6 +673,25 @@ class _OrderCard extends StatelessWidget {
                       style: const TextStyle(
                         color: Colors.black54,
                         fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.attach_money,
+                      size: 16,
+                      color: primaryColor,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Harga: ${order.quotedPrice != null ? NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(order.quotedPrice) : 'Belum ditentukan'}',
+                      style: const TextStyle(
+                        color: Colors.black87,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],

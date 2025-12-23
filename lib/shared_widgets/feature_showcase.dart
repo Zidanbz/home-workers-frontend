@@ -47,7 +47,7 @@ class FeatureShowcase {
       await showDialog(
         context: context,
         barrierColor: Colors.black54,
-        barrierDismissible: false,
+        barrierDismissible: true,
         builder: (context) => FeatureTooltipOverlay(
           targetKey: targetKey,
           title: title,
@@ -144,48 +144,54 @@ class _FeatureTooltipOverlayState extends State<FeatureTooltipOverlay>
   void initState() {
     super.initState();
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 300),
       vsync: this,
     );
 
-    _scaleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.elasticOut),
-    );
+    // Smooth fade in without bounce
+// _scaleAnimation = Tween<double>(begin: 1.0, end: 1.0).animate(
+//   CurvedAnimation(parent: _animationController, curve: Curves.linear),
+// );
+
+
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeIn),
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
     );
 
-    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.2).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    // No pulse animation - keep it static
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.linear),
     );
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _getTargetRect();
-      _animationController.forward();
-      _startPulseAnimation();
-    });
-  }
+WidgetsBinding.instance.addPostFrameCallback((_) {
+  Future.delayed(const Duration(milliseconds: 50), () {
+    _getTargetRect();
+    _animationController.forward();
+    setState(() {});
+  });
+});
+}
 
   void _getTargetRect() {
     final RenderBox? renderBox =
         widget.targetKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox != null) {
       final position = renderBox.localToGlobal(Offset.zero);
-      setState(() {
+
         _targetRect = Rect.fromLTWH(
           position.dx,
           position.dy,
           renderBox.size.width,
           renderBox.size.height,
         );
-      });
+
     }
   }
 
-  void _startPulseAnimation() {
-    _animationController.repeat(reverse: true);
-  }
+  // void _startPulseAnimation() {
+  //   _animationController.repeat(reverse: true);
+  // }
 
   @override
   void dispose() {
@@ -215,24 +221,21 @@ class _FeatureTooltipOverlayState extends State<FeatureTooltipOverlay>
               // Highlight circle around target
               if (_targetRect != null)
                 Positioned(
-                  left: _targetRect!.left - 20,
-                  top: _targetRect!.top - 20,
-                  child: ScaleTransition(
-                    scale: _pulseAnimation,
-                    child: Container(
-                      width: _targetRect!.width + 40,
-                      height: _targetRect!.height + 40,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 3),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.white.withOpacity(0.3),
-                            blurRadius: 20,
-                            spreadRadius: 5,
-                          ),
-                        ],
-                      ),
+                  left: _targetRect!.left - 8,
+                  top: _targetRect!.top - 8,
+                  child: Container(
+                    width: _targetRect!.width + 16,
+                    height: _targetRect!.height + 16,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.white.withOpacity(0.3),
+                          blurRadius: 10,
+                          spreadRadius: 2,
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -242,10 +245,10 @@ class _FeatureTooltipOverlayState extends State<FeatureTooltipOverlay>
                 Positioned(
                   left: _getTooltipLeft(),
                   top: _getTooltipTop(),
-                  child: ScaleTransition(
-                    scale: _scaleAnimation,
-                    child: _buildTooltip(),
-                  ),
+                  child: FadeTransition(
+  opacity: _fadeAnimation,
+  child: _buildTooltip(),
+),
                 ),
             ],
           ),
@@ -257,29 +260,51 @@ class _FeatureTooltipOverlayState extends State<FeatureTooltipOverlay>
   double _getTooltipLeft() {
     if (_targetRect == null) return 0;
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    double left;
+
     switch (widget.position) {
       case TooltipPosition.left:
-        return _targetRect!.left - 320;
+        left = _targetRect!.left - 320;
+        break;
       case TooltipPosition.right:
-        return _targetRect!.right + 20;
+        left = _targetRect!.right + 20;
+        break;
       case TooltipPosition.top:
       case TooltipPosition.bottom:
-        return (_targetRect!.left + _targetRect!.width / 2) - 150;
+        left = (_targetRect!.left + _targetRect!.width / 2) - 150;
+        break;
     }
+
+    // Clamp left to keep tooltip fully visible within screen
+    left = left.clamp(16.0, screenWidth - 300 - 16.0);
+
+    return left;
   }
 
   double _getTooltipTop() {
     if (_targetRect == null) return 0;
 
+    final screenHeight = MediaQuery.of(context).size.height;
+    double top;
+
     switch (widget.position) {
       case TooltipPosition.top:
-        return _targetRect!.top - 180;
+        top = _targetRect!.top - 180;
+        break;
       case TooltipPosition.bottom:
-        return _targetRect!.bottom + 20;
+        top = _targetRect!.bottom + 20;
+        break;
       case TooltipPosition.left:
       case TooltipPosition.right:
-        return (_targetRect!.top + _targetRect!.height / 2) - 90;
+        top = (_targetRect!.top + _targetRect!.height / 2) - 90;
+        break;
     }
+
+    // Clamp top to keep tooltip fully visible within screen
+    top = top.clamp(16.0, screenHeight - 180 - 16.0);
+
+    return top;
   }
 
   Widget _buildTooltip() {
@@ -327,6 +352,12 @@ class _FeatureTooltipOverlayState extends State<FeatureTooltipOverlay>
                     color: Color(0xFF2D3748),
                   ),
                 ),
+              ),
+              IconButton(
+                onPressed: widget.onSkip,
+                icon: const Icon(Icons.close, color: Colors.grey),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
               ),
             ],
           ),

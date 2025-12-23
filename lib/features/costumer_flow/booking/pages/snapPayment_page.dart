@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:provider/provider.dart';
 import 'package:home_workers_fe/features/costumer_flow/booking/pages/payment_success_page.dart';
+import 'package:home_workers_fe/features/main_page.dart';
+import 'package:home_workers_fe/core/state/auth_provider.dart';
 
 class SnapPaymentPage extends StatefulWidget {
   final String redirectUrl;
@@ -13,6 +16,16 @@ class SnapPaymentPage extends StatefulWidget {
 
 class _SnapPaymentPageState extends State<SnapPaymentPage> {
   late final WebViewController _controller;
+  bool _transactionFinished = false;
+
+  void _navigateToDashboard(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final role = (authProvider.user?.role ?? 'CUSTOMER').toUpperCase();
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => MainPage(userRole: role)),
+      (route) => false,
+    );
+  }
 
   @override
   void initState() {
@@ -32,6 +45,9 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
                 url.contains('status_code=200') ||
                 url.contains('payment_type=') ||
                 url.contains('finish')) {
+              setState(() {
+                _transactionFinished = true;
+              });
               Future.delayed(Duration.zero, () {
                 Navigator.pushReplacement(
                   context,
@@ -51,6 +67,9 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
                 url.contains('transaction_status=deny') ||
                 url.contains('transaction_status=expire') ||
                 url.contains('transaction_status=cancel')) {
+              setState(() {
+                _transactionFinished = true;
+              });
               Future.delayed(Duration.zero, () {
                 _showPaymentFailureDialog(context);
               });
@@ -88,14 +107,14 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop(); // Tutup dialog
-                Navigator.of(context).pop(); // Kembali ke halaman sebelumnya
+                _navigateToDashboard(context);
               },
               child: const Text('Coba Lagi'),
             ),
             ElevatedButton(
               onPressed: () {
                 Navigator.of(context).pop(); // Tutup dialog
-                Navigator.of(context).pop(); // Kembali ke halaman sebelumnya
+                _navigateToDashboard(context);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,
@@ -111,9 +130,30 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Pembayaran')),
-      body: WebViewWidget(controller: _controller),
+    return WillPopScope(
+      onWillPop: () async {
+        if (_transactionFinished) {
+          _navigateToDashboard(context);
+          return false;
+        }
+        return true;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Pembayaran'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              if (_transactionFinished) {
+                _navigateToDashboard(context);
+              } else {
+                Navigator.of(context).pop();
+              }
+            },
+          ),
+        ),
+        body: WebViewWidget(controller: _controller),
+      ),
     );
   }
 }

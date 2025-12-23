@@ -165,54 +165,6 @@ class _MarketplacePageState extends State<MarketplacePage> {
           Row(
             children: [
               Expanded(
-                flex: 1,
-                child: DropdownButtonFormField<String>(
-                  value: _selectedCategory.isEmpty ? null : _selectedCategory,
-                  hint: const Text('Kategori', style: TextStyle(fontSize: 12)),
-                  style: const TextStyle(fontSize: 12, color: Colors.black),
-                  items: CategoryData.getCategoryNames()
-                      .map(
-                        (cat) => DropdownMenuItem(
-                          value: cat,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                CategoryData.getIconForCategory(cat),
-                                size: 16,
-                                color: Colors.grey[600],
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  cat,
-                                  style: const TextStyle(fontSize: 12),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    setState(() => _selectedCategory = value ?? '');
-                    _loadServices();
-                  },
-                  decoration: fieldDecoration.copyWith(
-                    prefixIcon: const Icon(Icons.category, size: 18),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 6,
-                    ),
-                  ),
-                  isExpanded: true,
-                  icon: const Icon(Icons.arrow_drop_down, size: 20),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                flex: 1,
                 child: DropdownButtonFormField<String>(
                   value: _selectedSort,
                   style: const TextStyle(fontSize: 12, color: Colors.black),
@@ -382,18 +334,7 @@ class _ServiceCard extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        Icon(
-                          _getIconForCategory(service.category),
-                          color: Colors.deepPurple,
-                          size: 18,
-                        ),
                       ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      service.category,
-                      style: const TextStyle(color: Colors.grey),
                     ),
 
                     const SizedBox(height: 8),

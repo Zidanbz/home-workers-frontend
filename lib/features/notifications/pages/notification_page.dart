@@ -17,6 +17,8 @@ class NotificationPage extends StatefulWidget {
 class _NotificationPageState extends State<NotificationPage> {
   final ApiService _apiService = ApiService();
   late Future<List<NotificationItem>> _notificationsFuture;
+  late final RealtimeNotificationService _realtimeService;
+  bool _isMarkingAll = false;
 
   // Color Palette
   static const Color primaryColor = Color(0xFF1A374D);
@@ -27,6 +29,7 @@ class _NotificationPageState extends State<NotificationPage> {
   @override
   void initState() {
     super.initState();
+    _realtimeService = RealtimeNotificationService();
     _loadNotifications();
   }
 
@@ -47,6 +50,35 @@ class _NotificationPageState extends State<NotificationPage> {
       token: authProvider.token!,
       notificationId: id,
     );
+  }
+
+  Future<void> _markAllAsRead() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (authProvider.token == null) return;
+    setState(() {
+      _isMarkingAll = true;
+    });
+    try {
+      await _realtimeService.markAllAsRead(authProvider.token);
+      await _loadNotifications();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Semua notifikasi ditandai telah dibaca')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal menandai semua notifikasi: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isMarkingAll = false;
+        });
+      }
+    }
   }
 
   void _handleNotificationTap(NotificationItem notif) async {
@@ -93,9 +125,7 @@ class _NotificationPageState extends State<NotificationPage> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: IconButton(
-              onPressed: () {
-                // TODO: Mark all as read
-              },
+              onPressed: _isMarkingAll ? null : () => _markAllAsRead(),
               icon: const Icon(
                 Icons.done_all_rounded,
                 color: primaryColor,
