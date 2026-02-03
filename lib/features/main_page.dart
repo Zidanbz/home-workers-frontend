@@ -5,12 +5,14 @@ import 'package:provider/provider.dart';
 import 'package:home_workers_fe/features/costumer_flow/dashboard/pages/costumer_dashboard_page.dart';
 import 'package:home_workers_fe/features/costumer_flow/marketplace/pages/marketplace_page.dart';
 import 'package:home_workers_fe/features/costumer_flow/orders/pages/customer_orders_page.dart';
+import 'package:home_workers_fe/features/costumer_flow/chat/pages/customer_chat_list_page.dart';
 import 'package:home_workers_fe/features/profile/pages/profile_page.dart';
 import 'package:home_workers_fe/features/worker_flow/order_management/pages/worker_orders_page.dart';
 import '../core/services/realtime_notification_service.dart';
 import '../core/services/chat_service.dart';
 import '../core/state/auth_provider.dart';
 import '../shared_widgets/badge_widget.dart';
+import '../shared_widgets/global_tap_guard.dart';
 
 // Impor halaman-halaman asli Anda
 import 'worker_flow/dashboard/pages/worker_dashboard_page.dart';
@@ -65,6 +67,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         const WorkerDashboardPage(),
         const MyJobsPage(),
         const WorkerOrdersPage(),
+        const ChatListPage(showBackButton: false),
         const ProfilePage(),
       ];
     } else {
@@ -72,6 +75,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         CustomerDashboardPage(onNavigateToOrders: () => jumpToPage(2)),
         MarketplacePage(),
         const CustomerOrdersPage(),
+        const CustomerChatListPage(showBackButton: false),
         const ProfilePage(),
       ];
     }
@@ -87,24 +91,35 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     if (widget.userRole == 'WORKER') {
       return [
         NavItem(
+          id: 'home',
           icon: Icons.home_rounded,
           activeIcon: Icons.home,
           label: 'Home',
           color: const Color(0xFF6C63FF),
         ),
         NavItem(
+          id: 'jobs',
           icon: Icons.work_outline_rounded,
           activeIcon: Icons.work_rounded,
           label: 'Jobs',
           color: const Color(0xFF00D4AA),
         ),
         NavItem(
+          id: 'orders',
           icon: Icons.assignment_outlined,
           activeIcon: Icons.assignment,
           label: 'Orders',
           color: const Color(0xFFFF6B6B),
         ),
         NavItem(
+          id: 'chat',
+          icon: Icons.chat_bubble_outline_rounded,
+          activeIcon: Icons.chat_bubble_rounded,
+          label: 'Chat',
+          color: const Color(0xFF3A86FF),
+        ),
+        NavItem(
+          id: 'profile',
           icon: Icons.person_outline_rounded,
           activeIcon: Icons.person_rounded,
           label: 'Profile',
@@ -114,24 +129,35 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     } else {
       return [
         NavItem(
+          id: 'home',
           icon: Icons.home_rounded,
           activeIcon: Icons.home,
           label: 'Home',
           color: const Color(0xFF6C63FF),
         ),
         NavItem(
+          id: 'workers',
           icon: Icons.people_outline_rounded,
           activeIcon: Icons.people_rounded,
           label: 'Pekerja',
           color: const Color(0xFF00D4AA),
         ),
         NavItem(
+          id: 'orders',
           icon: Icons.shopping_bag_outlined,
           activeIcon: Icons.shopping_bag,
           label: 'Orders',
           color: const Color(0xFFFF6B6B),
         ),
         NavItem(
+          id: 'chat',
+          icon: Icons.chat_bubble_outline_rounded,
+          activeIcon: Icons.chat_bubble_rounded,
+          label: 'Chat',
+          color: const Color(0xFF3A86FF),
+        ),
+        NavItem(
+          id: 'profile',
           icon: Icons.person_outline_rounded,
           activeIcon: Icons.person_rounded,
           label: 'Profile',
@@ -146,39 +172,41 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     return Scaffold(
       body: IndexedStack(index: _currentIndex, children: _pages),
       extendBody: true,
-      bottomNavigationBar: SafeArea(
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-          height: 65,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.08),
-                blurRadius: 15,
-                offset: const Offset(0, 8),
-                spreadRadius: 0,
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Colors.white, Colors.grey.shade50],
+      bottomNavigationBar: NoTapGuard(
+        child: SafeArea(
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            height: 65,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 15,
+                  offset: const Offset(0, 8),
+                  spreadRadius: 0,
                 ),
-                border: Border.all(color: Colors.grey.shade200, width: 0.5),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: List.generate(_navItems.length, (index) {
-                  return Expanded(
-                    child: _buildNavItem(index, _navItems[index]),
-                  );
-                }),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Colors.white, Colors.grey.shade50],
+                  ),
+                  border: Border.all(color: Colors.grey.shade200, width: 0.5),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: List.generate(_navItems.length, (index) {
+                    return Expanded(
+                      child: _buildNavItem(index, _navItems[index]),
+                    );
+                  }),
+                ),
               ),
             ),
           ),
@@ -190,6 +218,24 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
   Widget _buildNavItem(int index, NavItem item) {
     final isSelected = _currentIndex == index;
+    final int chatUnread = item.id == 'chat'
+        ? context.select<ChatService, int>(
+            (service) => service.totalUnreadMessages,
+          )
+        : 0;
+    final Widget baseIcon = Icon(
+      isSelected ? item.activeIcon : item.icon,
+      key: ValueKey('${item.id}-$isSelected'),
+      color: isSelected ? item.color : Colors.grey.shade600,
+      size: isSelected ? 24 : 22,
+    );
+    final Widget iconWidget = item.id == 'chat'
+        ? BadgeWidget(
+            key: ValueKey('badge-${item.id}-$isSelected'),
+            count: chatUnread,
+            child: baseIcon,
+          )
+        : baseIcon;
 
     return GestureDetector(
       onTapDown: (_) => _animationController.forward(),
@@ -227,16 +273,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 200),
-                      child: Icon(
-                        isSelected ? item.activeIcon : item.icon,
-                        key: ValueKey(isSelected),
-                        color: isSelected ? item.color : Colors.grey.shade600,
-                        size: isSelected ? 24 : 22,
-                      ),
-                    ),
-                  ),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: iconWidget,
+                ),
+              ),
 
                   const SizedBox(height: 1),
 
@@ -282,12 +323,14 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
 // Model untuk item navigasi
 class NavItem {
+  final String id;
   final IconData icon;
   final IconData activeIcon;
   final String label;
   final Color color;
 
   NavItem({
+    required this.id,
     required this.icon,
     required this.activeIcon,
     required this.label,

@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:home_workers_fe/features/costumer_flow/booking/pages/booking_page.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
 import '../../../../core/api/api_service.dart';
 import '../../../../core/models/service_model.dart';
-import '../../../../core/state/auth_provider.dart';
-import '../../../chat/pages/chat_detail_page.dart';
 
 class CustomerServiceDetailPage extends StatefulWidget {
   final String serviceId;
@@ -201,40 +198,7 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Tap untuk chat dengan worker',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[500],
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
                   ],
-                ),
-              ),
-              Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [const Color(0xFF1A374D), const Color(0xFF2A4A5D)],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF1A374D).withOpacity(0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: IconButton(
-                  onPressed: () => _openChatWithWorker(workerInfo),
-                  icon: const Icon(
-                    Icons.chat_bubble_outline,
-                    color: Colors.white,
-                    size: 22,
-                  ),
-                  tooltip: 'Chat dengan Worker',
                 ),
               ),
             ],
@@ -242,61 +206,6 @@ class _CustomerServiceDetailPageState extends State<CustomerServiceDetailPage> {
         ),
       ),
     );
-  }
-
-  Future<void> _openChatWithWorker(Map<String, dynamic> workerInfo) async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final token = authProvider.token;
-
-    if (token == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Anda harus login terlebih dahulu')),
-      );
-      return;
-    }
-
-    // Show loading
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator()),
-    );
-
-    try {
-      // Create or get existing chat with worker
-      final chatId = await _apiService.createChat(
-        token: token,
-        recipientId: workerInfo['id'],
-      );
-
-      // Close loading dialog
-      if (mounted) Navigator.of(context).pop();
-
-      // Navigate to chat detail page
-      if (mounted) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => ChatDetailPage(
-              chatId: chatId,
-              name: workerInfo['nama'] ?? 'Worker',
-              avatarUrl:
-                  workerInfo['avatarUrl'] ??
-                  'https://i.pravatar.cc/150?u=${workerInfo['id']}',
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      // Close loading dialog
-      if (mounted) Navigator.of(context).pop();
-
-      // Show error message
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Gagal membuka chat: $e')));
-      }
-    }
   }
 
   Widget _buildServiceHeader(Service service) {

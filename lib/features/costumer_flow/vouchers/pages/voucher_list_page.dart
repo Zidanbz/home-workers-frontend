@@ -197,17 +197,27 @@ class _VoucherListPageState extends State<VoucherListPage> {
   }
 
   Widget _buildVoucherCard(Map<String, dynamic> voucher) {
-    final code = voucher['code'] as String;
-    final discountType = voucher['discountType'] as String;
+    final code = (voucher['code'] ?? '').toString();
+    final discountType = (voucher['discountType'] ?? 'percent').toString();
     final value = voucher['value'];
-    final type = voucher['type'] as String;
+    final type = (voucher['type'] ?? 'ready').toString();
     final isReady = type == 'ready';
 
+    // Convert value to int safely
+    int numericValue = 0;
+    if (value != null) {
+      if (value is int) {
+        numericValue = value;
+      } else if (value is double) {
+        numericValue = value.toInt();
+      } else {
+        numericValue = int.tryParse(value.toString()) ?? 0;
+      }
+    }
+
     final discountText = discountType == 'percent'
-        ? '${value}%'
-        : _formatCurrency(
-            value is int ? value : int.tryParse(value.toString()) ?? 0,
-          );
+        ? '${numericValue}%'
+        : _formatCurrency(numericValue);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),

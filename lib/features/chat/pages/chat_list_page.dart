@@ -6,7 +6,9 @@ import '../../../core/state/auth_provider.dart';
 import 'chat_detail_page.dart';
 
 class ChatListPage extends StatefulWidget {
-  const ChatListPage({super.key});
+  final bool showBackButton;
+
+  const ChatListPage({super.key, this.showBackButton = true});
 
   @override
   State<ChatListPage> createState() => _ChatListPageState();
@@ -98,20 +100,22 @@ class _ChatListPageState extends State<ChatListPage> {
               ),
         backgroundColor: white,
         elevation: 0,
-        leading: Container(
-          margin: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: backgroundGray,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: IconButton(
-            onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(
-              Icons.arrow_back_ios_new_rounded,
-              color: primaryColor,
-            ),
-          ),
-        ),
+        leading: widget.showBackButton && Navigator.of(context).canPop()
+            ? Container(
+                margin: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: backgroundGray,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    color: primaryColor,
+                  ),
+                ),
+              )
+            : null,
         actions: [
           Container(
             margin: const EdgeInsets.only(right: 8),
@@ -419,6 +423,9 @@ class _ChatListPageState extends State<ChatListPage> {
   }
 
   Widget _buildChatListItem(Chat chat) {
+    final isReadOnly = chat.chatAllowed == false;
+    final String? readOnlyReason = chat.chatBlockedReason;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -445,6 +452,8 @@ class _ChatListPageState extends State<ChatListPage> {
                   chatId: chat.id,
                   name: chat.otherUserName,
                   avatarUrl: chat.otherUserAvatarUrl,
+                  readOnly: isReadOnly,
+                  readOnlyMessage: readOnlyReason,
                 ),
               ),
             );
@@ -515,6 +524,16 @@ class _ChatListPageState extends State<ChatListPage> {
                           height: 1.4,
                         ),
                       ),
+                      if (isReadOnly) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          readOnlyReason ?? 'Chat nonaktif (read-only)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 12),
 
                       // Time dan status

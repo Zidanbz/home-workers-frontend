@@ -19,6 +19,10 @@ class Order {
   final String? workerAvatar;
   final num? quotedPrice;
   final LatLng? coordinates; // Koordinat untuk peta
+  final String? paymentStatus;
+  final String? finalPaymentStatus;
+  final DateTime? completedAt;
+  final DateTime? updatedAt;
 
   Order({
     required this.id,
@@ -38,7 +42,59 @@ class Order {
     this.quotedPrice,
     required this.hasBeenReviewed,
     this.coordinates,
+    this.paymentStatus,
+    this.finalPaymentStatus,
+    this.completedAt,
+    this.updatedAt,
   });
+
+  Order copyWith({
+    String? id,
+    String? status,
+    DateTime? jadwalPerbaikan,
+    DateTime? dibuatPada,
+    String? customerId,
+    String? category,
+    String? serviceName,
+    String? customerName,
+    String? customerAddress,
+    String? serviceType,
+    bool? hasBeenReviewed,
+    String? workerDescription,
+    String? workerName,
+    String? workerId,
+    String? workerAvatar,
+    num? quotedPrice,
+    LatLng? coordinates,
+    String? paymentStatus,
+    String? finalPaymentStatus,
+    DateTime? completedAt,
+    DateTime? updatedAt,
+  }) {
+    return Order(
+      id: id ?? this.id,
+      status: status ?? this.status,
+      jadwalPerbaikan: jadwalPerbaikan ?? this.jadwalPerbaikan,
+      dibuatPada: dibuatPada ?? this.dibuatPada,
+      serviceName: serviceName ?? this.serviceName,
+      customerName: customerName ?? this.customerName,
+      customerAddress: customerAddress ?? this.customerAddress,
+      customerId: customerId ?? this.customerId,
+      category: category ?? this.category,
+      serviceType: serviceType ?? this.serviceType,
+      workerDescription: workerDescription ?? this.workerDescription,
+      workerName: workerName ?? this.workerName,
+      workerId: workerId ?? this.workerId,
+      workerAvatar: workerAvatar ?? this.workerAvatar,
+      quotedPrice: quotedPrice ?? this.quotedPrice,
+      hasBeenReviewed: hasBeenReviewed ?? this.hasBeenReviewed,
+      coordinates: coordinates ?? this.coordinates,
+      paymentStatus: paymentStatus ?? this.paymentStatus,
+      finalPaymentStatus: finalPaymentStatus ?? this.finalPaymentStatus,
+      completedAt: completedAt ?? this.completedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
 
   factory Order.fromJson(Map<String, dynamic> json) {
     // Helper untuk parsing Timestamp
@@ -53,6 +109,19 @@ class Order {
         return DateTime.tryParse(timestamp) ?? DateTime.now();
       }
       return DateTime.now();
+    }
+
+    DateTime? parseOptionalTimestamp(dynamic timestamp) {
+      if (timestamp == null) return null;
+      if (timestamp is Map && timestamp['_seconds'] != null) {
+        return DateTime.fromMillisecondsSinceEpoch(
+          timestamp['_seconds'] * 1000,
+        );
+      }
+      if (timestamp is String) {
+        return DateTime.tryParse(timestamp);
+      }
+      return null;
     }
 
     // Helper untuk parsing harga
@@ -115,7 +184,7 @@ class Order {
       customerAddress: json['customerAddress'] ?? 'Alamat Tidak Tersedia',
       category: json['category'] ?? 'lainnya',
       serviceType: json['serviceType'] ?? 'lainnya',
-      quotedPrice: parsePrice(json['harga'] ?? json['serviceHarga']),
+      quotedPrice: parsePrice(json['harga'] ?? json['serviceHarga'] ?? json['price'] ?? json['proposedPrice'] ?? json['quotedPrice']),
       customerId: json['customerId'] ?? '',
       workerId: json['workerId'],
       workerName: json['workerName'],
@@ -124,6 +193,10 @@ class Order {
       workerAvatar: json['workerAvatar'],
       jadwalPerbaikan: parseFirestoreTimestamp(json['jadwalPerbaikan']),
       dibuatPada: parseFirestoreTimestamp(json['dibuatPada']),
+      paymentStatus: json['paymentStatus'],
+      finalPaymentStatus: json['finalPaymentStatus'],
+      completedAt: parseOptionalTimestamp(json['completedAt']),
+      updatedAt: parseOptionalTimestamp(json['updatedAt']),
       coordinates: parseCoordinates(
         json['location'],
       ), // Ambil dari field 'location'

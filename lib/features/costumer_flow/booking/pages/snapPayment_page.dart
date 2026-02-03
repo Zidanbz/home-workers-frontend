@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:home_workers_fe/features/costumer_flow/booking/pages/payment_success_page.dart';
+
 import 'package:home_workers_fe/features/main_page.dart';
 import 'package:home_workers_fe/core/state/auth_provider.dart';
 
@@ -39,27 +39,11 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
             print('🌐 Navigated to: $url');
 
             // ✅ Cek apakah URL mengandung indikator sukses
-            if (url.contains('status=200') ||
-                url.contains('transaction_status=settlement') ||
-                url.contains('transaction_status=capture') ||
-                url.contains('status_code=200') ||
-                url.contains('payment_type=') ||
-                url.contains('finish')) {
-              setState(() {
-                _transactionFinished = true;
-              });
-              Future.delayed(Duration.zero, () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => PaymentSuccessPage(
-                      paymentMethod: 'Midtrans',
-                      totalAmount: 0,
-                    ),
-                  ),
-                );
-              });
-              return NavigationDecision.prevent;
+            if (url.contains('status_code=200') && url.contains('transaction_status=settlement')) {
+                 WidgetsBinding.instance.addPostFrameCallback((_) {
+                    Navigator.of(context).pop();
+                });
+                return NavigationDecision.prevent;
             }
 
             // ❌ Cek apakah URL mengandung indikator gagal

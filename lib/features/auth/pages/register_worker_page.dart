@@ -784,29 +784,36 @@ Dengan melanjutkan, Anda menyatakan telah membaca dan menyetujui semua Syarat & 
   Widget _buildBottomNavigation() {
     final isLast = _currentPage == 3;
     final disabled = _isLoading || (isLast && !_isAgreed);
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: ElevatedButton.icon(
-        icon: _isLoading
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : Icon(isLast ? Icons.check : Icons.arrow_forward),
-        onPressed: disabled ? null : _nextPage,
-        label: Text(isLast ? 'Daftar' : 'Lanjut'),
-        style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          backgroundColor: primaryColor,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+        child: SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            icon: _isLoading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : Icon(isLast ? Icons.check : Icons.arrow_forward),
+            onPressed: disabled ? null : _nextPage,
+            label: Text(isLast ? 'Daftar' : 'Lanjut'),
+            style: ElevatedButton.styleFrom(
+              minimumSize: const Size.fromHeight(52),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              backgroundColor: primaryColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              elevation: 4,
+            ),
           ),
-          elevation: 4,
         ),
       ),
     );

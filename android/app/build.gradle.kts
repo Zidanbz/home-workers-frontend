@@ -44,11 +44,11 @@ android {
 
     defaultConfig {
         applicationId = "com.homeworkers.app"
-        minSdk = 26
-        targetSdk = 34
+        minSdk = flutter.minSdkVersion
+        targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-
+        multiDexEnabled = true
         // Inject Google Maps API Key dari local.properties (jangan commit ke repo)
         manifestPlaceholders += mapOf(
             "MAPS_API_KEY" to (localProperties.getProperty("MAPS_API_KEY") ?: "")
@@ -89,6 +89,7 @@ android {
 }
 
 dependencies {
+    implementation("androidx.multidex:multidex:2.0.1")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 

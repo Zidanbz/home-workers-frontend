@@ -414,7 +414,7 @@ class _ProfilePageState extends State<ProfilePage>
           onTap: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const VoucherListPage()),
+              MaterialPageRoute(builder: (_) => const ClaimVoucherPage()),
             );
           },
         ),

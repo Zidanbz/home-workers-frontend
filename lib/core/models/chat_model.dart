@@ -9,6 +9,8 @@ class Chat {
   final String otherUserAvatarUrl;
   final String otherUserId; // Kita butuh ID lawan bicara
   final int unreadCount;
+  final bool chatAllowed;
+  final String? chatBlockedReason;
   // final avatarUrl;
 
   Chat({
@@ -19,6 +21,8 @@ class Chat {
     required this.otherUserAvatarUrl,
     required this.otherUserId,
     required this.unreadCount,
+    this.chatAllowed = true,
+    this.chatBlockedReason,
     // required this.avatarUrl,
   });
 
@@ -60,6 +64,8 @@ class Chat {
           'https://placehold.co/150x150/EFEFEF/AAAAAA?text=?',
       otherUserId: otherUserId,
       unreadCount: count is int ? count : 0,
+      chatAllowed: json['chatAllowed'] ?? true,
+      chatBlockedReason: json['chatBlockedReason'],
       // avatarUrl: json['avatarUrl'],
     );
   }

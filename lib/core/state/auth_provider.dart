@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -12,6 +13,7 @@ import '../api/api_service.dart';
 import '../models/user_model.dart';
 import '../services/secure_storage_service.dart';
 import '../services/realtime_notification_service.dart';
+import '../services/chat_service.dart';
 import '../../shared_widgets/hint_system.dart';
 
 /// Layar auth apa yang ingin ditampilkan root widget.
@@ -24,6 +26,8 @@ class AuthLoginResult {
   final User user;
   final String idToken; // Bearer ke backend
   final String customToken; // Untuk Firebase sign-in
+  final String refreshToken;
+  final int expiresIn; // dalam detik
 
   AuthLoginResult({
     required this.success,
@@ -31,6 +35,8 @@ class AuthLoginResult {
     required this.user,
     required this.idToken,
     required this.customToken,
+    required this.refreshToken,
+    required this.expiresIn,
   });
 }
 
@@ -45,8 +51,10 @@ class AuthProvider with ChangeNotifier {
   // State
   // ---------------------------------------------------------------------------
   User? _user;
-  String?
-  _token; // idToken dari backend (Firebase ID token). Dipakai untuk API bearer.
+  String? _token; // idToken dari backend (Firebase ID token). Dipakai untuk API bearer.
+  String? _refreshToken;
+  DateTime? _tokenExpiry;
+  Timer? _refreshTimer;
   bool _isLoading = true;
   bool _hasSeenOnboarding = false;
   AuthScreen _authScreen = AuthScreen.welcome;
@@ -70,6 +78,135 @@ class AuthProvider with ChangeNotifier {
   bool get lastLoginRequiresEmailVerification =>
       _lastLoginRequiresEmailVerification;
 
+  void updateLocalProfile({String? nama, String? contact}) {
+    if (_user == null) return;
+    _user = _user!.copyWith(
+      nama: nama ?? _user!.nama,
+      contact: contact ?? _user!.contact,
+    );
+    notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Token Helpers
+  // ---------------------------------------------------------------------------
+  static const Duration _refreshBuffer = Duration(minutes: 5);
+
+  DateTime _calculateExpiry({String? expiresIn, String? token}) {
+    final seconds = int.tryParse(expiresIn ?? '');
+    if (seconds != null && seconds > 0) {
+      return DateTime.now().add(Duration(seconds: seconds));
+    }
+    if (token != null) {
+      return JwtDecoder.getExpirationDate(token);
+    }
+    // Fallback konservatif: 45 menit
+    return DateTime.now().add(const Duration(minutes: 45));
+  }
+
+  void _scheduleTokenRefresh() {
+    _refreshTimer?.cancel();
+    final expiry = _tokenExpiry;
+    final refreshToken = _refreshToken;
+    if (expiry == null || refreshToken == null) return;
+
+    final refreshAt = expiry.subtract(_refreshBuffer);
+    final now = DateTime.now();
+    final delay = refreshAt.isAfter(now) ? refreshAt.difference(now) : Duration.zero;
+
+    _refreshTimer = Timer(delay, () {
+      _refreshSession();
+    });
+  }
+
+  Future<bool> _refreshSession() async {
+    final refreshToken = _refreshToken ?? await _storageService.readRefreshToken();
+    if (refreshToken == null) return false;
+
+    try {
+      final responseBody = await _apiService.refreshIdToken(
+        refreshToken: refreshToken,
+      );
+
+      final Map<String, dynamic>? data = responseBody['data'];
+      if (data == null) {
+        throw Exception('Struktur respons refresh token tidak valid.');
+      }
+
+      final String? newIdToken = data['idToken'];
+      final String? newRefreshToken = data['refreshToken'];
+      final String? expiresIn = data['expiresIn']?.toString();
+
+      if (newIdToken == null) {
+        throw Exception('Refresh token gagal: idToken kosong.');
+      }
+
+      _token = newIdToken;
+      _refreshToken = newRefreshToken ?? refreshToken;
+      _tokenExpiry = _calculateExpiry(expiresIn: expiresIn, token: newIdToken);
+
+      await _storageService.saveTokenAndRole(
+        token: _token!,
+        role: _user?.role,
+        refreshToken: _refreshToken,
+        expiresAt: _tokenExpiry,
+      );
+
+      _scheduleTokenRefresh();
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Gagal refresh token: $e');
+      return false;
+    }
+  }
+
+  Future<void> _restoreSession() async {
+    final storedToken = await _storageService.readToken();
+    final storedRefreshToken = await _storageService.readRefreshToken();
+    final storedExpiry = await _storageService.readTokenExpiry();
+
+    _refreshToken = storedRefreshToken;
+    _tokenExpiry =
+        storedExpiry ?? (storedToken != null ? JwtDecoder.getExpirationDate(storedToken) : null);
+
+    if (storedToken != null && !JwtDecoder.isExpired(storedToken)) {
+      try {
+        final userProfile = await _apiService.getMyProfile(storedToken);
+        _user = userProfile;
+        _token = storedToken;
+
+        // Fetch avatar after getting user profile
+        await getAvatar();
+
+        _scheduleTokenRefresh();
+        _startRealtimeNotifications();
+        _startRealtimeChats();
+        return;
+      } catch (_) {
+        await logout();
+        return;
+      }
+    }
+
+    if (storedRefreshToken != null) {
+      final refreshed = await _refreshSession();
+      if (refreshed && _token != null) {
+        try {
+          final userProfile = await _apiService.getMyProfile(_token!);
+          _user = userProfile;
+          await getAvatar();
+          _startRealtimeNotifications();
+          _startRealtimeChats();
+          return;
+        } catch (_) {
+          await logout();
+          return;
+        }
+      }
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Init / Auto Login
   // ---------------------------------------------------------------------------
@@ -77,40 +214,14 @@ class AuthProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _hasSeenOnboarding = prefs.getBool('hasSeenOnboarding') ?? false;
 
-    final storedToken = await _storageService.readToken();
-    if (storedToken != null && !JwtDecoder.isExpired(storedToken)) {
-      try {
-        final userProfile = await _apiService.getMyProfile(storedToken);
-        print(userProfile);
-        _user = userProfile;
-        _token = storedToken;
-
-        // Fetch avatar after getting user profile
-        await getAvatar();
-      } catch (_) {
-        await logout();
-      }
-    }
+    await _restoreSession();
 
     _isLoading = false;
     notifyListeners();
   }
 
   Future<void> tryAutoLogin() async {
-    final storedToken = await _storageService.readToken();
-
-    if (storedToken != null && !JwtDecoder.isExpired(storedToken)) {
-      try {
-        final userProfile = await _apiService.getMyProfile(storedToken);
-        _user = userProfile;
-        _token = storedToken;
-
-        // Fetch avatar after getting user profile
-        await getAvatar();
-      } catch (_) {
-        await logout();
-      }
-    }
+    await _restoreSession();
 
     _isLoading = false;
     notifyListeners();
@@ -171,13 +282,19 @@ class AuthProvider with ChangeNotifier {
       // 3. Ambil semua value dari dalam 'data', bukan dari level atas lagi
       final String? customToken = data['customToken'];
       final String? idToken = data['idToken'];
+      final String? refreshToken = data['refreshToken'];
+      final String? expiresIn = data['expiresIn']?.toString();
       final Map<String, dynamic>? userJson = data['user'];
       final bool requireEmailVerification =
           data['requireEmailVerification'] ?? false;
 
       // ===============================================================
 
-      if (customToken == null || idToken == null || userJson == null) {
+      if (customToken == null ||
+          idToken == null ||
+          refreshToken == null ||
+          expiresIn == null ||
+          userJson == null) {
         throw Exception('Respons dari backend tidak lengkap.');
       }
 
@@ -187,10 +304,19 @@ class AuthProvider with ChangeNotifier {
       // Update state
       _user = User.fromJson(userJson);
       _token = idToken;
+      _refreshToken = refreshToken;
+      _tokenExpiry = _calculateExpiry(expiresIn: expiresIn, token: idToken);
       _lastLoginRequiresEmailVerification = requireEmailVerification;
 
       // Simpan token + role ke storage
-      await _storageService.saveTokenAndRole(token: _token!, role: _user!.role);
+      await _storageService.saveTokenAndRole(
+        token: _token!,
+        role: _user!.role,
+        refreshToken: _refreshToken,
+        expiresAt: _tokenExpiry,
+      );
+
+      _scheduleTokenRefresh();
 
       // notifyListeners();
 
@@ -200,6 +326,8 @@ class AuthProvider with ChangeNotifier {
         user: _user!,
         idToken: _token!,
         customToken: customToken,
+        refreshToken: refreshToken,
+        expiresIn: int.tryParse(expiresIn) ?? 3600,
       );
     } catch (e) {
       _lastLoginRequiresEmailVerification = false;
@@ -315,14 +443,27 @@ class AuthProvider with ChangeNotifier {
       final user = User.fromJson(data['user']);
       final requireEmailVerification =
           data['requireEmailVerification'] ?? false;
+      final String? refreshToken = data['refreshToken'];
+      final String? expiresIn = data['expiresIn']?.toString();
+      final String? idToken = data['idToken'];
+      final String? customToken = data['customToken'];
+
+      if (refreshToken == null ||
+          expiresIn == null ||
+          idToken == null ||
+          customToken == null) {
+        throw Exception('Respons dari backend tidak lengkap.');
+      }
 
       // Fungsi ini HANYA mengembalikan data, tidak mengubah state provider
       return AuthLoginResult(
         success: true,
         requireEmailVerification: requireEmailVerification,
         user: user,
-        idToken: data['idToken'],
-        customToken: data['customToken'],
+        idToken: idToken,
+        customToken: customToken,
+        refreshToken: refreshToken,
+        expiresIn: int.tryParse(expiresIn) ?? 3600,
       );
     } catch (e) {
       rethrow;
@@ -333,16 +474,29 @@ class AuthProvider with ChangeNotifier {
   Future<void> processLoginSuccess(AuthLoginResult loginResult) async {
     _user = loginResult.user;
     _token = loginResult.idToken;
+    _refreshToken = loginResult.refreshToken;
+    _tokenExpiry = _calculateExpiry(
+      expiresIn: loginResult.expiresIn.toString(),
+      token: loginResult.idToken,
+    );
     _lastLoginRequiresEmailVerification = loginResult.requireEmailVerification;
 
     await _signInFirebaseWithCustomTokenIfNeeded(loginResult.customToken);
-    await _storageService.saveTokenAndRole(token: _token!, role: _user!.role);
+    await _storageService.saveTokenAndRole(
+      token: _token!,
+      role: _user!.role,
+      refreshToken: _refreshToken,
+      expiresAt: _tokenExpiry,
+    );
+
+    _scheduleTokenRefresh();
 
     // Fetch avatar after successful login
     await getAvatar();
 
     // ✅ TAMBAHAN: Start real-time notification listener (dengan error handling yang lebih baik)
     _startRealtimeNotifications();
+    _startRealtimeChats();
 
     // Sekarang, baru kita beritahu seluruh aplikasi bahwa login benar-benar selesai
     notifyListeners();
@@ -412,6 +566,28 @@ class AuthProvider with ChangeNotifier {
           '❌ [_startRealtimeNotifications] Failed to start real-time notifications: $e',
         );
         // Tidak throw error agar tidak mengganggu login
+      }
+    });
+  }
+
+  /// Start real-time chat listener (non-blocking)
+  void _startRealtimeChats() {
+    Future.microtask(() async {
+      try {
+        if (!ChatService().isInitialized) {
+          await ChatService.initialize();
+        }
+
+        final chatService = ChatService();
+        await chatService.startListening(_user!.uid, _token);
+
+        debugPrint(
+          '✅ [_startRealtimeChats] Chat listener started successfully',
+        );
+      } catch (e) {
+        debugPrint(
+          '❌ [_startRealtimeChats] Failed to start chat listener: $e',
+        );
       }
     });
   }
@@ -529,6 +705,14 @@ class AuthProvider with ChangeNotifier {
     }
 
     try {
+      final chatService = ChatService();
+      await chatService.stopListening();
+      debugPrint('✅ [logout] Chat listener stopped successfully');
+    } catch (e) {
+      debugPrint('❌ [logout] Failed to stop chat listener: $e');
+    }
+
+    try {
       await fba.FirebaseAuth.instance.signOut();
       debugPrint('Firebase signOut success.');
     } catch (e) {
@@ -537,6 +721,10 @@ class AuthProvider with ChangeNotifier {
 
     _user = null;
     _token = null;
+    _refreshToken = null;
+    _tokenExpiry = null;
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
     _lastLoginRequiresEmailVerification = false;
     _authScreen = AuthScreen.welcome;
     await _storageService.deleteAll();

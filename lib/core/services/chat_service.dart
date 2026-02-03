@@ -17,7 +17,9 @@ class ChatService extends ChangeNotifier {
   List<Chat> _chats = [];
   StreamSubscription<QuerySnapshot>? _chatSubscription;
   String? _currentUserId;
+  String? _currentToken;
   bool _isInitialized = false;
+  Timer? _refreshDebounce;
 
   // Getters
   List<Chat> get chats => _chats;
@@ -43,6 +45,7 @@ class ChatService extends ChangeNotifier {
     await stopListening();
 
     _currentUserId = userId;
+    _currentToken = token;
     print('💬 [ChatService] Starting real-time listener for user: $userId');
 
     try {
@@ -56,11 +59,10 @@ class ChatService extends ChangeNotifier {
       // Listen to Firestore chats collection for real-time updates
       _chatSubscription = _firestore
           .collection('chats')
-          .where('participants', arrayContains: userId)
-          .orderBy('lastMessageTime', descending: true)
+          .where('members', arrayContains: userId)
           .snapshots()
           .listen(
-            (snapshot) => _handleChatSnapshot(snapshot, userId),
+            (snapshot) => _handleChatSnapshot(snapshot),
             onError: (error) {
               print('❌ [ChatService] Error listening to chats: $error');
             },
@@ -77,34 +79,24 @@ class ChatService extends ChangeNotifier {
     await _chatSubscription?.cancel();
     _chatSubscription = null;
     _currentUserId = null;
+    _currentToken = null;
+    _refreshDebounce?.cancel();
+    _refreshDebounce = null;
     print('💬 [ChatService] Stopped listening to chats');
   }
 
   /// Handle Firestore chat snapshot changes
-  void _handleChatSnapshot(QuerySnapshot snapshot, String currentUserId) {
-    try {
-      final List<Chat> updatedChats = [];
-      
-      for (var doc in snapshot.docs) {
-        try {
-          final data = doc.data() as Map<String, dynamic>;
-          data['id'] = doc.id; // Add document ID
-          
-          final chat = Chat.fromJson(data, currentUserId);
-          updatedChats.add(chat);
-        } catch (e) {
-          print('❌ [ChatService] Error parsing chat: $e');
-        }
-      }
+  void _handleChatSnapshot(QuerySnapshot _snapshot) {
+    if (_currentToken == null) return;
+    _scheduleRefreshFromApi();
+  }
 
-      // Update state
-      _chats = updatedChats;
-      notifyListeners();
-
-      print('✅ [ChatService] Updated ${updatedChats.length} chats, ${unreadChatCount} unread');
-    } catch (e) {
-      print('❌ [ChatService] Error handling chat snapshot: $e');
-    }
+  void _scheduleRefreshFromApi() {
+    if (_currentToken == null || _currentUserId == null) return;
+    _refreshDebounce?.cancel();
+    _refreshDebounce = Timer(const Duration(milliseconds: 400), () {
+      refreshChats(_currentToken);
+    });
   }
 
   /// Mark chat as read

@@ -45,7 +45,26 @@ class ApiService {
       return jsonDecode(response.body);
     } else {
       print('❌ [loginUser] Login failed');
-      throw Exception('Gagal login: ${response.body}');
+      throw _asException('Gagal login: ${response.body}');
+    }
+  }
+
+  // Refresh ID token (untuk always login)
+  Future<Map<String, dynamic>> refreshIdToken({
+    required String refreshToken,
+  }) async {
+    final url = Uri.parse('$_baseUrl/auth/refresh-token');
+
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'refreshToken': refreshToken}),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw _asException('Gagal refresh token: ${response.body}');
     }
   }
 
@@ -73,7 +92,7 @@ class ApiService {
 
     if (response.statusCode != 200) {
       print('❌ [resendVerificationEmail] Failed to resend verification email');
-      throw Exception(
+      throw _asException(
         'Gagal mengirim ulang email verifikasi: ${response.body}',
       );
     }
@@ -107,7 +126,7 @@ class ApiService {
     if (response.statusCode != 200 || responseBody['success'] != true) {
       final message = responseBody['message'] ?? 'Failed to update FCM token';
       print('❌ [updateFcmToken] Failed: $message');
-      throw Exception(message);
+      throw _asException(message);
     }
     print('✅ [updateFcmToken] FCM token updated successfully');
   }
@@ -139,11 +158,11 @@ class ApiService {
         return data.map((json) => Service.fromJson(json)).toList();
       } else {
         print('❌ [getMyServices] Failed to load services');
-        throw Exception(responseBody['message'] ?? 'Failed to load services');
+        throw _asException(responseBody['message'] ?? 'Failed to load services');
       }
     } catch (e) {
       print('❌ [getMyServices] Exception: $e');
-      throw Exception('Failed to connect to the server. $e');
+      throw _asException('Failed to connect to the server. $e');
     }
   }
 
@@ -166,7 +185,7 @@ class ApiService {
     } else {
       final message =
           decoded['message'] ?? 'Gagal mengirim email reset password.';
-      throw Exception(message);
+      throw _asException(message);
     }
   }
 
@@ -192,7 +211,7 @@ class ApiService {
       return;
     } else {
       final message = decoded['message'] ?? 'Gagal mereset password.';
-      throw Exception(message);
+      throw _asException(message);
     }
   }
 
@@ -213,10 +232,10 @@ class ApiService {
       if (response.statusCode == 200 && responseBody['success'] == true) {
         return User.fromJson(responseBody['data']); // ✅ Ambil dari 'data'
       } else {
-        throw Exception(responseBody['message'] ?? 'Failed to fetch profile');
+        throw _asException(responseBody['message'] ?? 'Failed to fetch profile');
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server.');
+      throw _asException('Failed to connect to the server.');
     }
   }
 
@@ -237,10 +256,10 @@ class ApiService {
         final List<dynamic> data = responseBody['data'];
         return data.map((json) => Chat.fromJson(json, currentUserId)).toList();
       } else {
-        throw Exception(responseBody['message'] ?? 'Failed to load chats');
+        throw _asException(responseBody['message'] ?? 'Failed to load chats');
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server. $e');
+      throw _asException('Failed to connect to the server. $e');
     }
   }
 
@@ -263,11 +282,11 @@ class ApiService {
       } else {
         print("response body: ${response.body}");
 
-        throw Exception(responseBody['message'] ?? 'Failed to load messages');
+        throw _asException(responseBody['message'] ?? 'Failed to load messages');
       }
     } catch (e) {
       print("response body: ${e}");
-      throw Exception('Failed to connect to the server.');
+      throw _asException('Failed to connect to the server.');
     }
   }
 
@@ -286,10 +305,13 @@ class ApiService {
       final responseBody = jsonDecode(response.body);
 
       if (response.statusCode != 201 || responseBody['success'] != true) {
-        throw Exception(responseBody['message'] ?? 'Failed to send message');
+        throw _asException(responseBody['message'] ?? 'Failed to send message');
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server.');
+      if (e is Exception) {
+        throw _asException(e.toString().replaceFirst('Exception: ', ''));
+      }
+      throw _asException('Failed to connect to the server.');
     }
   }
 
@@ -330,11 +352,11 @@ class ApiService {
       if (response.statusCode == 201 && responseBody['success'] == true) {
         return responseBody['data'] ?? {};
       } else {
-        throw Exception(responseBody['message'] ?? 'Failed to create service');
+        throw _asException(responseBody['message'] ?? 'Failed to create service');
       }
     } catch (e) {
       print('Error saat memanggil API: $e');
-      throw Exception('Failed to connect to the server.');
+      throw _asException('Failed to connect to the server.');
     }
   }
 
@@ -356,10 +378,10 @@ class ApiService {
             responseBody['data']['asWorker'] ?? [];
         return workerOrdersJson.map((json) => Order.fromJson(json)).toList();
       } else {
-        throw Exception(responseBody['message'] ?? 'Failed to load orders');
+        throw _asException(responseBody['message'] ?? 'Failed to load orders');
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server.');
+      throw _asException('Failed to connect to the server.');
     }
   }
 
@@ -380,10 +402,10 @@ class ApiService {
 
       if (response.statusCode != 200) {
         final errorBody = jsonDecode(response.body);
-        throw Exception(errorBody['message'] ?? 'Failed to update profile');
+        throw _asException(errorBody['message'] ?? 'Failed to update profile');
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server.');
+      throw _asException('Failed to connect to the server.');
     }
   }
 
@@ -404,10 +426,10 @@ class ApiService {
         final List<dynamic> addressList = responseBody['data'];
         return addressList.map((json) => Address.fromJson(json)).toList();
       } else {
-        throw Exception(responseBody['message'] ?? 'Failed to load addresses');
+        throw _asException(responseBody['message'] ?? 'Failed to load addresses');
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server.');
+      throw _asException('Failed to connect to the server.');
     }
   }
 
@@ -439,10 +461,10 @@ class ApiService {
       if (response.statusCode == 201 && responseBody['success'] == true) {
         // Berhasil, tidak perlu return
       } else {
-        throw Exception(responseBody['message'] ?? 'Failed to add address');
+        throw _asException(responseBody['message'] ?? 'Failed to add address');
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server.');
+      throw _asException('Failed to connect to the server.');
     }
   }
 
@@ -467,10 +489,10 @@ class ApiService {
       if (response.statusCode == 200 && responseBody['success'] == true) {
         // Photo added successfully
       } else {
-        throw Exception(responseBody['message'] ?? 'Failed to add photo');
+        throw _asException(responseBody['message'] ?? 'Failed to add photo');
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server.');
+      throw _asException('Failed to connect to the server.');
     }
   }
 
@@ -494,24 +516,24 @@ class ApiService {
 
       // Handle server errors (5xx status codes)
       if (response.statusCode >= 500) {
-        throw Exception(
+        throw _asException(
           'The service is temporarily unavailable. Please try again later.',
         );
       }
 
       // Handle client errors (4xx status codes)
       if (response.statusCode >= 400) {
-        throw Exception('This service is no longer available.');
+        throw _asException('This service is no longer available.');
       }
 
       // Check if response is HTML (error page) instead of JSON
       if (response.headers['content-type']?.contains('text/html') == true) {
-        throw Exception('Server error occurred. Please try again later.');
+        throw _asException('Server error occurred. Please try again later.');
       }
 
       // Check for empty response
       if (response.body.isEmpty) {
-        throw Exception('Server returned empty response');
+        throw _asException('Server returned empty response');
       }
 
       Map<String, dynamic> responseBody;
@@ -519,7 +541,7 @@ class ApiService {
         responseBody = jsonDecode(response.body);
       } catch (e) {
         // If JSON parsing fails and it's a server error, provide user-friendly message
-        throw Exception(
+        throw _asException(
           'Service temporarily unavailable. Please try again later.',
         );
       }
@@ -527,7 +549,7 @@ class ApiService {
       if (response.statusCode == 200 && responseBody['success'] == true) {
         return Service.fromJson(responseBody['data']);
       } else {
-        throw Exception(
+        throw _asException(
           responseBody['message'] ??
               'Failed to load service details (Status: ${response.statusCode})',
         );
@@ -536,13 +558,13 @@ class ApiService {
       print('❌ Error in getServiceById: $e');
       // Provide more user-friendly error messages
       if (e.toString().contains('temporarily unavailable')) {
-        throw Exception(
+        throw _asException(
           'The service is temporarily unavailable. Please try again later.',
         );
       } else if (e.toString().contains('no longer available')) {
-        throw Exception('This service is no longer available.');
+        throw _asException('This service is no longer available.');
       } else {
-        throw Exception(
+        throw _asException(
           'Unable to load service details. Please check your connection and try again.',
         );
       }
@@ -568,10 +590,10 @@ class ApiService {
       if (response.statusCode == 200 && responseBody['success'] == true) {
         // Delete berhasil
       } else {
-        throw Exception(responseBody['message'] ?? 'Failed to delete service');
+        throw _asException(responseBody['message'] ?? 'Failed to delete service');
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server.');
+      throw _asException('Failed to connect to the server.');
     }
   }
 
@@ -596,10 +618,10 @@ class ApiService {
       if (response.statusCode == 200 && responseBody['success'] == true) {
         // Update berhasil
       } else {
-        throw Exception(responseBody['message'] ?? 'Failed to update service');
+        throw _asException(responseBody['message'] ?? 'Failed to update service');
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server.');
+      throw _asException('Failed to connect to the server.');
     }
   }
 
@@ -622,12 +644,12 @@ class ApiService {
       if (response.statusCode == 200 && responseBody['success'] == true) {
         return Order.fromJson(responseBody['data']);
       } else {
-        throw Exception(
+        throw _asException(
           responseBody['message'] ?? 'Failed to load order details',
         );
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server.');
+      throw _asException('Failed to connect to the server.');
     }
   }
 
@@ -650,10 +672,10 @@ class ApiService {
       if (response.statusCode == 200 && responseBody['success'] == true) {
         // Accepted successfully
       } else {
-        throw Exception(responseBody['message'] ?? 'Failed to accept order');
+        throw _asException(responseBody['message'] ?? 'Failed to accept order');
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server.');
+      throw _asException('Failed to connect to the server.');
     }
   }
 
@@ -678,12 +700,15 @@ class ApiService {
           responseBody['success'] == true) {
         return responseBody['data']['chatId'];
       } else {
-        throw Exception(
+        throw _asException(
           responseBody['message'] ?? 'Failed to create or get chat',
         );
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server.');
+      if (e is Exception) {
+        throw _asException(e.toString().replaceFirst('Exception: ', ''));
+      }
+      throw _asException('Failed to connect to the server.');
     }
   }
 
@@ -707,14 +732,14 @@ class ApiService {
       if (response.statusCode == 200 && responseBody['success'] == true) {
         return Map<String, dynamic>.from(responseBody['data'] ?? {});
       } else {
-        throw Exception(
+        throw _asException(
           responseBody['message'] ??
               'Server returned status ${response.statusCode}',
         );
       }
     } catch (e) {
       print('Error: $e');
-      throw Exception('Network error: $e');
+      throw _asException('Network error: $e');
     }
   }
 
@@ -729,7 +754,7 @@ class ApiService {
       // Opsional: jika ingin memastikan response berhasil
       final responseBody = jsonDecode(response.body);
       if (response.statusCode != 200 || responseBody['success'] != true) {
-        throw Exception(responseBody['message'] ?? 'Failed to mark as read');
+        throw _asException(responseBody['message'] ?? 'Failed to mark as read');
       }
     } catch (e) {
       // Biarkan error tidak mengganggu UI
@@ -753,10 +778,10 @@ class ApiService {
       if (response.statusCode == 200 && responseBody['success'] == true) {
         return Wallet.fromJson(responseBody['data']);
       } else {
-        throw Exception(responseBody['message'] ?? 'Failed to load wallet');
+        throw _asException(responseBody['message'] ?? 'Failed to load wallet');
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server.');
+      throw _asException('Failed to connect to the server.');
     }
   }
 
@@ -792,11 +817,11 @@ class ApiService {
         return services;
       } else {
         print('❌ [getAllApprovedServices] Failed to load services');
-        throw Exception(responseBody['message'] ?? 'Failed to load services');
+        throw _asException(responseBody['message'] ?? 'Failed to load services');
       }
     } catch (e) {
       print('❌ [getAllApprovedServices] Exception: $e');
-      throw Exception('Failed to connect to the server.');
+      throw _asException('Failed to connect to the server.');
     }
   }
 
@@ -810,12 +835,12 @@ class ApiService {
       if (response.statusCode == 200 && responseBody['success'] == true) {
         return responseBody['data'];
       } else {
-        throw Exception(
+        throw _asException(
           responseBody['message'] ?? 'Failed to load dashboard summary',
         );
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server.');
+      throw _asException('Failed to connect to the server.');
     }
   }
 
@@ -845,7 +870,7 @@ class ApiService {
         final Map<String, dynamic> responseBody = jsonDecode(response.body);
 
         if (responseBody['success'] != true) {
-          throw Exception(
+          throw _asException(
             responseBody['message'] ?? 'API returned success=false',
           );
         }
@@ -869,14 +894,14 @@ class ApiService {
         return ordersJson.map<Order>((json) => Order.fromJson(json)).toList();
       } else {
         final errorBody = jsonDecode(response.body);
-        throw Exception(
+        throw _asException(
           errorBody['message'] ??
               'Failed to load orders (Status: ${response.statusCode})',
         );
       }
     } catch (e) {
       print("❌ Error in getMyOrdersCustomer: $e");
-      throw Exception('Failed to connect to the server. $e');
+      throw _asException('Failed to connect to the server. $e');
     }
   }
 
@@ -905,13 +930,13 @@ class ApiService {
         return data.map((json) => NotificationItem.fromJson(json)).toList();
       } else {
         print('❌ [getMyNotifications] Failed to fetch notifications');
-        throw Exception(
+        throw _asException(
           responseBody['message'] ?? 'Failed to fetch notifications',
         );
       }
     } catch (e) {
       print('❌ [getMyNotifications] Exception: $e');
-      throw Exception('Failed to connect to the server. $e');
+      throw _asException('Failed to connect to the server. $e');
     }
   }
 
@@ -940,11 +965,11 @@ class ApiService {
   //     if (response.statusCode == 201) {
   //       return responseBody; // Kembalikan respons yang berisi orderId
   //     } else {
-  //       throw Exception(responseBody['message'] ?? 'Failed to create order');
+  //       throw _asException(responseBody['message'] ?? 'Failed to create order');
   //     }
   //   } catch (e) {
   //     print("error: $e");
-  //     throw Exception('Failed to connect to the server.');
+  //     throw _asException('Failed to connect to the server.');
   //   }
   // }
 
@@ -969,11 +994,11 @@ class ApiService {
       print("response: ${response.body}");
       if (response.statusCode != 200) {
         final errorBody = jsonDecode(response.body);
-        throw Exception(errorBody['message'] ?? 'Failed to process payment');
+        throw _asException(errorBody['message'] ?? 'Failed to process payment');
       }
     } catch (e) {
       print("error: $e");
-      throw Exception('Failed to connect to the server.');
+      throw _asException('Failed to connect to the server.');
     }
   }
 
@@ -992,10 +1017,10 @@ class ApiService {
       if (response.statusCode == 200) {
         return responseBody['data']['token'];
       } else {
-        throw Exception(responseBody['message']);
+        throw _asException(responseBody['message']);
       }
     } catch (e) {
-      throw Exception('Failed to initiate payment.');
+      throw _asException('Failed to initiate payment.');
     }
   }
 
@@ -1021,11 +1046,11 @@ class ApiService {
         final List<dynamic> data = responseBody['data'];
         return data.map((item) => Service.fromJson(item)).toList();
       } else {
-        throw Exception(responseBody['message'] ?? 'Failed to fetch services');
+        throw _asException(responseBody['message'] ?? 'Failed to fetch services');
       }
     } catch (e) {
       print('Error: $e');
-      throw Exception('Failed to connect to the server. $e');
+      throw _asException('Failed to connect to the server. $e');
     }
   }
 
@@ -1048,7 +1073,7 @@ class ApiService {
     );
 
     if (response.statusCode != 201) {
-      throw Exception('Gagal registrasi customer: ${response.body}');
+      throw _asException('Gagal registrasi customer: ${response.body}');
     }
   }
 
@@ -1122,7 +1147,7 @@ class ApiService {
       final response = await request.send();
       if (response.statusCode != 201) {
         final responseBody = await response.stream.bytesToString();
-        throw Exception(
+        throw _asException(
           'Gagal registrasi worker: ${response.statusCode} - $responseBody',
         );
       }
@@ -1157,10 +1182,10 @@ class ApiService {
       if (response.statusCode == 200 && responseBody['success'] == true) {
         // Quote dikirim berhasil
       } else {
-        throw Exception(responseBody['message'] ?? 'Gagal mengirim quote');
+        throw _asException(responseBody['message'] ?? 'Gagal mengirim quote');
       }
     } catch (e) {
-      throw Exception('Gagal terhubung ke server. $e');
+      throw _asException('Gagal terhubung ke server. $e');
     }
   }
 
@@ -1181,10 +1206,10 @@ class ApiService {
       final responseBody = jsonDecode(response.body);
 
       if (response.statusCode != 200 || responseBody['success'] != true) {
-        throw Exception(responseBody['message'] ?? 'Gagal menolak pesanan');
+        throw _asException(responseBody['message'] ?? 'Gagal menolak pesanan');
       }
     } catch (e) {
-      throw Exception('Gagal terhubung ke server. $e');
+      throw _asException('Gagal terhubung ke server. $e');
     }
   }
 
@@ -1200,7 +1225,7 @@ class ApiService {
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Gagal memuat profil worker');
+      throw _asException('Gagal memuat profil worker');
     }
 
     return jsonDecode(response.body)['data'];
@@ -1226,7 +1251,7 @@ class ApiService {
         data['data'].map((item) => Service.fromJson(item)),
       );
     } else {
-      throw Exception('Gagal mengambil layanan');
+      throw _asException('Gagal mengambil layanan');
     }
   }
 
@@ -1278,13 +1303,13 @@ class ApiService {
       // Check if response body is empty
       if (response.body.isEmpty) {
         print('❌ [createOrderWithPayment] Empty response body');
-        throw Exception('Server returned empty response');
+        throw _asException('Server returned empty response');
       }
 
       // Check if response is HTML (error page)
       if (response.headers['content-type']?.contains('text/html') == true) {
         print('❌ [createOrderWithPayment] Received HTML instead of JSON');
-        throw Exception('Server error - received HTML response');
+        throw _asException('Server error - received HTML response');
       }
 
       Map<String, dynamic> responseBody;
@@ -1294,7 +1319,7 @@ class ApiService {
       } catch (e) {
         print('❌ [createOrderWithPayment] Failed to parse JSON: $e');
         print('📝 [createOrderWithPayment] Raw response: ${response.body}');
-        throw Exception('Invalid JSON response from server');
+        throw _asException('Invalid JSON response from server');
       }
 
       if (response.statusCode == 201 && responseBody['success'] == true) {
@@ -1304,25 +1329,29 @@ class ApiService {
         // Ensure data is not null and is a Map
         if (data == null) {
           print('❌ [createOrderWithPayment] Data is null');
-          throw Exception('Server returned null data');
+          throw _asException('Server returned null data');
         }
 
         if (data is! Map<String, dynamic>) {
           print(
             '❌ [createOrderWithPayment] Data is not a Map: ${data.runtimeType}',
           );
-          throw Exception('Server returned invalid data format');
+          throw _asException('Server returned invalid data format');
         }
 
         return data;
       } else {
-        final message = responseBody['message'] ?? 'Terjadi kesalahan';
+        String message = responseBody['message'] ?? 'Terjadi kesalahan';
+        final errors = responseBody['errors'];
+        if (errors is List && errors.isNotEmpty) {
+          message = errors.first.toString();
+        }
         print('❌ [createOrderWithPayment] API Error: $message');
         print('❌ [createOrderWithPayment] Status Code: ${response.statusCode}');
         print(
           '❌ [createOrderWithPayment] Success Flag: ${responseBody['success']}',
         );
-        throw Exception(message);
+        throw _asException(message);
       }
     } catch (e) {
       print('❌ [createOrderWithPayment] Exception caught: $e');
@@ -1345,7 +1374,7 @@ class ApiService {
     if (response.statusCode == 200) {
       return data['data'];
     } else {
-      throw Exception('Gagal mengambil status transaksi Midtrans');
+      throw _asException('Gagal mengambil status transaksi Midtrans');
     }
   }
 
@@ -1371,7 +1400,7 @@ class ApiService {
     if (response.statusCode == 200 && responseBody['success'] == true) {
       return List<String>.from(responseBody['data']);
     } else {
-      throw Exception(
+      throw _asException(
         responseBody['message'] ?? 'Failed to fetch booked slots',
       );
     }
@@ -1406,12 +1435,12 @@ class ApiService {
       final responseBody = jsonDecode(response.body);
 
       if (response.statusCode != 200 || responseBody['success'] != true) {
-        throw Exception(
+        throw _asException(
           responseBody['message'] ?? 'Failed to request withdrawal',
         );
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server. $e');
+      throw _asException('Failed to connect to the server. $e');
     }
   }
 
@@ -1437,10 +1466,10 @@ class ApiService {
       final responseBody = jsonDecode(response.body);
 
       if (response.statusCode != 200 || responseBody['success'] != true) {
-        throw Exception(responseBody['message'] ?? 'Failed to complete order');
+        throw _asException(responseBody['message'] ?? 'Failed to complete order');
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server. $e');
+      throw _asException('Failed to connect to the server. $e');
     }
   }
 
@@ -1462,10 +1491,10 @@ class ApiService {
       final responseBody = jsonDecode(response.body);
 
       if (response.statusCode != 200 || responseBody['success'] != true) {
-        throw Exception(responseBody['message'] ?? 'Failed to cancel order');
+        throw _asException(responseBody['message'] ?? 'Failed to cancel order');
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server. $e');
+      throw _asException('Failed to connect to the server. $e');
     }
   }
 
@@ -1490,12 +1519,12 @@ class ApiService {
       if (response.statusCode == 200 && responseBody['success'] == true) {
         return responseBody['data'];
       } else {
-        throw Exception(
+        throw _asException(
           responseBody['message'] ?? 'Failed to get availability',
         );
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server. $e');
+      throw _asException('Failed to connect to the server. $e');
     }
   }
 
@@ -1509,7 +1538,7 @@ class ApiService {
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Gagal menandai notifikasi sebagai dibaca');
+      throw _asException('Gagal menandai notifikasi sebagai dibaca');
     }
   }
 
@@ -1532,7 +1561,7 @@ class ApiService {
     print('Response Body: ${response.body}');
 
     if (response.statusCode != 200) {
-      throw Exception(
+      throw _asException(
         jsonDecode(response.body)['message'] ??
             'Gagal memperbarui status order',
       );
@@ -1556,19 +1585,26 @@ class ApiService {
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Failed to respond to quote: ${response.body}');
+      throw _asException('Failed to respond to quote: ${response.body}');
     }
   }
 
   Future<Map<String, dynamic>> startPaymentForQuote({
     required String token,
     required String orderId,
+    String? voucherCode,
   }) async {
     print('💳 [startPaymentForQuote] Starting payment for quote');
     print('💳 [startPaymentForQuote] Order ID: $orderId');
+    print('🎫 [startPaymentForQuote] Voucher: $voucherCode');
 
     final url = Uri.parse('$_baseUrl/payments/start/$orderId');
     print('💳 [startPaymentForQuote] URL: $url');
+
+    final requestBody = <String, dynamic>{};
+    if (voucherCode != null) {
+      requestBody['voucherCode'] = voucherCode;
+    }
 
     try {
       final response = await http.post(
@@ -1577,6 +1613,7 @@ class ApiService {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
+        body: requestBody.isNotEmpty ? jsonEncode(requestBody) : null,
       );
 
       print(
@@ -1588,13 +1625,13 @@ class ApiService {
       // Check if response body is empty
       if (response.body.isEmpty) {
         print('❌ [startPaymentForQuote] Empty response body');
-        throw Exception('Server returned empty response');
+        throw _asException('Server returned empty response');
       }
 
       // Check if response is HTML (error page)
       if (response.headers['content-type']?.contains('text/html') == true) {
         print('❌ [startPaymentForQuote] Received HTML instead of JSON');
-        throw Exception('Server error - received HTML response');
+        throw _asException('Server error - received HTML response');
       }
 
       Map<String, dynamic> data;
@@ -1604,7 +1641,7 @@ class ApiService {
       } catch (e) {
         print('❌ [startPaymentForQuote] Failed to parse JSON: $e');
         print('📝 [startPaymentForQuote] Raw response: ${response.body}');
-        throw Exception('Invalid JSON response from server');
+        throw _asException('Invalid JSON response from server');
       }
 
       if (response.statusCode == 200 && data['success'] == true) {
@@ -1614,14 +1651,14 @@ class ApiService {
         // Ensure data is not null and is a Map
         if (responseData == null) {
           print('❌ [startPaymentForQuote] Data is null');
-          throw Exception('Server returned null data');
+          throw _asException('Server returned null data');
         }
 
         if (responseData is! Map<String, dynamic>) {
           print(
             '❌ [startPaymentForQuote] Data is not a Map: ${responseData.runtimeType}',
           );
-          throw Exception('Server returned invalid data format');
+          throw _asException('Server returned invalid data format');
         }
 
         return responseData; // { orderId, snapToken }
@@ -1630,7 +1667,7 @@ class ApiService {
         print('❌ [startPaymentForQuote] API Error: $message');
         print('❌ [startPaymentForQuote] Status Code: ${response.statusCode}');
         print('❌ [startPaymentForQuote] Success Flag: ${data['success']}');
-        throw Exception(message);
+        throw _asException(message);
       }
     } catch (e) {
       print('❌ [startPaymentForQuote] Exception caught: $e');
@@ -1656,7 +1693,7 @@ class ApiService {
 
     if (response.statusCode != 201) {
       final data = jsonDecode(response.body);
-      throw Exception(data['message'] ?? 'Gagal mengirim ulasan');
+      throw _asException(data['message'] ?? 'Gagal mengirim ulasan');
     }
   }
 
@@ -1668,7 +1705,7 @@ class ApiService {
     if (response.statusCode == 200 && body['success'] == true) {
       return Worker.fromJson(body['data']);
     } else {
-      throw Exception(body['message'] ?? 'Gagal ambil data worker');
+      throw _asException(body['message'] ?? 'Gagal ambil data worker');
     }
   }
 
@@ -1693,12 +1730,12 @@ class ApiService {
       if (response.statusCode == 200 && responseBody['success'] == true) {
         return responseBody['data'];
       } else {
-        throw Exception(
+        throw _asException(
           responseBody['message'] ?? 'Failed to fetch worker profile',
         );
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server. $e');
+      throw _asException('Failed to connect to the server. $e');
     }
   }
 
@@ -1721,12 +1758,12 @@ class ApiService {
       final responseBody = jsonDecode(response.body);
 
       if (response.statusCode != 200 || responseBody['success'] != true) {
-        throw Exception(
+        throw _asException(
           responseBody['message'] ?? 'Failed to update worker profile',
         );
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server. $e');
+      throw _asException('Failed to connect to the server. $e');
     }
   }
 
@@ -1742,10 +1779,10 @@ class ApiService {
         final List<dynamic> data = responseBody['data'];
         return data.map((json) => Worker.fromJson(json)).toList();
       } else {
-        throw Exception(responseBody['message'] ?? 'Failed to load workers');
+        throw _asException(responseBody['message'] ?? 'Failed to load workers');
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server. $e');
+      throw _asException('Failed to connect to the server. $e');
     }
   }
 
@@ -1773,10 +1810,10 @@ class ApiService {
       if (response.statusCode == 200 && decoded['success'] == true) {
         return decoded['data']['avatarUrl'];
       } else {
-        throw Exception(decoded['message'] ?? 'Failed to update avatar');
+        throw _asException(decoded['message'] ?? 'Failed to update avatar');
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server. $e');
+      throw _asException('Failed to connect to the server. $e');
     }
   }
 
@@ -1806,11 +1843,11 @@ class ApiService {
         return avatarUrl;
       } else {
         print('❌ [getAvatar] Failed to fetch avatar');
-        throw Exception(responseBody['message'] ?? 'Failed to fetch avatar');
+        throw _asException(responseBody['message'] ?? 'Failed to fetch avatar');
       }
     } catch (e) {
       print('❌ [getAvatar] Exception: $e');
-      throw Exception('Failed to connect to the server. $e');
+      throw _asException('Failed to connect to the server. $e');
     }
   }
 
@@ -1833,10 +1870,10 @@ class ApiService {
       final responseBody = jsonDecode(response.body);
 
       if (response.statusCode != 200 || responseBody['success'] != true) {
-        throw Exception(responseBody['message'] ?? 'Gagal update avatar');
+        throw _asException(responseBody['message'] ?? 'Gagal update avatar');
       }
     } catch (e) {
-      throw Exception('Terjadi kesalahan: $e');
+      throw _asException('Terjadi kesalahan: $e');
     }
   }
 
@@ -1867,10 +1904,10 @@ class ApiService {
       final decoded = jsonDecode(responseBody);
 
       if (response.statusCode != 200 || decoded['success'] != true) {
-        throw Exception(decoded['message'] ?? 'Failed to upload documents');
+        throw _asException(decoded['message'] ?? 'Failed to upload documents');
       }
     } catch (e) {
-      throw Exception('Failed to connect to the server. $e');
+      throw _asException('Failed to connect to the server. $e');
     }
   }
 
@@ -1899,7 +1936,7 @@ class ApiService {
     try {
       body = jsonDecode(resp.body) as Map<String, dynamic>;
     } catch (_) {
-      throw Exception(
+      throw _asException(
         'Format respons tidak valid dari server (kode: ${resp.statusCode}).',
       );
     }
@@ -1909,9 +1946,12 @@ class ApiService {
     final success = body['success'] == true;
 
     if (!success) {
-      // Ambil pesan error spesifik
-      final msg = body['message'] ?? 'Validasi voucher gagal.';
-      throw Exception(msg);
+      // Ambil pesan error spesifik dari errors array jika ada
+      final errors = body['errors'] as List<dynamic>?;
+      final msg = errors != null && errors.isNotEmpty
+          ? errors.first.toString()
+          : (body['message'] ?? 'Validasi voucher gagal.');
+      throw _asException(msg);
     }
 
     final data = (body['data'] ?? {}) as Map<String, dynamic>;
@@ -1943,13 +1983,13 @@ class ApiService {
     try {
       body = jsonDecode(resp.body) as Map<String, dynamic>;
     } catch (_) {
-      throw Exception(
+      throw _asException(
         'Format respons tidak valid dari server (kode: ${resp.statusCode}).',
       );
     }
 
     if (body['success'] != true) {
-      throw Exception(body['message'] ?? 'Gagal klaim voucher.');
+      throw _asException(body['message'] ?? 'Gagal klaim voucher.');
     }
 
     return body['data'] ?? {};
@@ -1969,14 +2009,14 @@ class ApiService {
     try {
       decoded = jsonDecode(resp.body) as Map<String, dynamic>;
     } catch (_) {
-      throw Exception(
+      throw _asException(
         'Gagal parsing respons server (status: ${resp.statusCode}).',
       );
     }
 
     final success = decoded['success'] == true;
     if (!success) {
-      throw Exception(decoded['message'] ?? 'Gagal mengambil voucher.');
+      throw _asException(decoded['message'] ?? 'Gagal mengambil voucher.');
     }
 
     final data = decoded['data'] as Map<String, dynamic>? ?? {};
@@ -1994,4 +2034,128 @@ class ApiService {
 
     return {'global': global, 'user': user};
   }
+
+  Exception _asException(dynamic message) {
+    final text = message?.toString() ?? '';
+    return AppException(_friendlyMessage(text));
+  }
+
+  String _friendlyMessage(String raw) {
+    final message = raw.trim();
+    if (message.isEmpty) {
+      return 'Terjadi kesalahan. Silakan coba lagi.';
+    }
+
+    final lower = message.toLowerCase();
+
+    // Network / connectivity
+    if (lower.contains('failed to connect to the server') ||
+        lower.contains('network error') ||
+        lower.contains('socketexception') ||
+        lower.contains('connection refused') ||
+        lower.contains('connection reset') ||
+        lower.contains('handshakeexception') ||
+        lower.contains('timed out')) {
+      return 'Gagal terhubung ke server. Periksa koneksi internet Anda.';
+    }
+
+    // Auth / session
+    if (lower.contains('token expired') || lower.contains('unauthorized')) {
+      return 'Sesi Anda berakhir. Silakan login kembali.';
+    }
+
+    if (lower.startsWith('gagal login')) {
+      return 'Gagal login. Periksa email dan kata sandi Anda.';
+    }
+
+    if (lower.startsWith('gagal refresh token')) {
+      return 'Sesi Anda berakhir. Silakan login kembali.';
+    }
+
+    if (lower.startsWith('gagal registrasi customer') ||
+        lower.startsWith('gagal registrasi worker') ||
+        lower.startsWith('gagal registrasi')) {
+      return 'Gagal registrasi. Periksa kembali data Anda.';
+    }
+
+    // Server / parsing
+    if (lower.contains('server returned empty response')) {
+      return 'Server tidak merespons. Silakan coba lagi.';
+    }
+    if (lower.contains('server error - received html response') ||
+        lower.contains('server error occurred')) {
+      return 'Terjadi kesalahan pada server. Silakan coba lagi.';
+    }
+    if (lower.contains('invalid json response')) {
+      return 'Respons server tidak valid. Silakan coba lagi.';
+    }
+    if (lower.contains('server returned null data')) {
+      return 'Data dari server kosong. Silakan coba lagi.';
+    }
+    if (lower.contains('server returned invalid data format')) {
+      return 'Format data dari server tidak sesuai.';
+    }
+    if (lower.contains('validation error')) {
+      return 'Data yang dimasukkan tidak valid.';
+    }
+
+    if (lower.contains('this service is no longer available')) {
+      return 'Layanan ini sudah tidak tersedia.';
+    }
+
+    // Common fallback translations
+    final translations = <String, String>{
+      'failed to load services': 'Gagal memuat layanan.',
+      'failed to fetch services': 'Gagal memuat layanan.',
+      'failed to fetch profile': 'Gagal memuat profil.',
+      'failed to load chats': 'Gagal memuat chat.',
+      'failed to load messages': 'Gagal memuat pesan.',
+      'failed to send message': 'Gagal mengirim pesan.',
+      'failed to create service': 'Gagal membuat layanan.',
+      'failed to delete service': 'Gagal menghapus layanan.',
+      'failed to update service': 'Gagal memperbarui layanan.',
+      'failed to load orders': 'Gagal memuat pesanan.',
+      'failed to accept order': 'Gagal menerima pesanan.',
+      'failed to complete order': 'Gagal menyelesaikan pesanan.',
+      'failed to cancel order': 'Gagal membatalkan pesanan.',
+      'failed to update profile': 'Gagal memperbarui profil.',
+      'failed to load addresses': 'Gagal memuat alamat.',
+      'failed to add address': 'Gagal menambah alamat.',
+      'failed to add photo': 'Gagal menambah foto.',
+      'failed to mark as read': 'Gagal menandai sebagai dibaca.',
+      'failed to load wallet': 'Gagal memuat dompet.',
+      'failed to load dashboard summary': 'Gagal memuat ringkasan.',
+      'failed to fetch notifications': 'Gagal memuat notifikasi.',
+      'failed to process payment': 'Gagal memproses pembayaran.',
+      'failed to initiate payment': 'Gagal memulai pembayaran.',
+      'failed to fetch booked slots': 'Gagal memuat jadwal.',
+      'failed to request withdrawal': 'Gagal mengajukan penarikan.',
+      'failed to get availability': 'Gagal memuat ketersediaan.',
+      'failed to respond to quote': 'Gagal merespons penawaran.',
+      'failed to fetch worker profile': 'Gagal memuat profil worker.',
+      'failed to update worker profile': 'Gagal memperbarui profil worker.',
+      'failed to load workers': 'Gagal memuat daftar worker.',
+      'failed to update avatar': 'Gagal memperbarui foto profil.',
+      'failed to fetch avatar': 'Gagal memuat foto profil.',
+      'failed to upload documents': 'Gagal mengunggah dokumen.',
+      'failed to create or get chat': 'Gagal membuka chat.',
+    };
+
+    for (final entry in translations.entries) {
+      if (lower.contains(entry.key)) {
+        return entry.value;
+      }
+    }
+
+    return message;
+  }
+}
+
+class AppException implements Exception {
+  final String message;
+
+  AppException(this.message);
+
+  @override
+  String toString() => message;
 }

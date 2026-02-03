@@ -733,38 +733,72 @@ class _ActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: color,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: fontSize ?? 18,
-                    fontWeight: FontWeight.bold,
-                    color: textColor,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: iconSize ?? 30, color: textColor),
-              ),
-            ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 180;
+        final baseFont = fontSize ?? 18;
+        final baseIcon = iconSize ?? 30;
+        final adjustedFont = isCompact ? (baseFont - 2) : baseFont;
+        final adjustedIcon = isCompact ? (baseIcon - 4) : baseIcon;
+        final padding = isCompact
+            ? const EdgeInsets.all(14.0)
+            : const EdgeInsets.all(20.0);
+
+        Widget iconChip() {
+          return Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: adjustedIcon, color: textColor),
+          );
+        }
+
+        Widget titleText() {
+          return Text(
+            title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: adjustedFont,
+              fontWeight: FontWeight.bold,
+              color: textColor,
+              height: 1.2,
+            ),
+          );
+        }
+
+        return Card(
+          color: color,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding: padding,
+              child: isCompact
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        titleText(),
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.bottomRight,
+                          child: iconChip(),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Expanded(child: titleText()),
+                        iconChip(),
+                      ],
+                    ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

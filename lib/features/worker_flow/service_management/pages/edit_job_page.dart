@@ -406,6 +406,14 @@ class _CreateEditJobPageState extends State<CreateEditJobPage>
     final navigator = Navigator.of(context);
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
+    if (!_isEditMode) {
+      final validationMessage = _validateCreateFields();
+      if (validationMessage != null) {
+        _showErrorSnack(scaffoldMessenger, validationMessage);
+        return;
+      }
+    }
+
     setState(() {
       _isLoading = true;
     });
@@ -512,29 +520,53 @@ class _CreateEditJobPageState extends State<CreateEditJobPage>
       print("==== KESALAHAN UPLOAD FOTO ====");
       print(e); // Baris ini akan menunjukkan error spesifiknya
       print("================================");
-      scaffoldMessenger.showSnackBar(
-        SnackBar(
-          backgroundColor: Colors.red.shade600,
-          content: Row(
-            children: [
-              const Icon(Icons.error, color: Colors.white),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Gagal: ${e.toString().replaceAll("Exception: ", "")}',
-                ),
-              ),
-            ],
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
+      _showErrorSnack(
+        scaffoldMessenger,
+        'Gagal: ${e.toString().replaceAll("Exception: ", "")}',
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  String? _validateCreateFields() {
+    if (_selectedCategory == null) return 'Kategori wajib dipilih.';
+
+    final hasImages =
+        _pickedImages.isNotEmpty || _existingImageUrls.isNotEmpty;
+    if (!hasImages) return 'Foto utama wajib diisi.';
+
+    final hasAvailability = _selectedAvailability.values.any(
+      (slots) => slots.isNotEmpty,
+    );
+    if (!hasAvailability) return 'Jadwal ketersediaan wajib diisi.';
+
+    if (_serviceType == ServiceType.fixed) {
+      final harga = double.tryParse(_hargaController.text.trim()) ?? 0;
+      if (harga <= 0) return 'Harga wajib diisi.';
+    } else {
+      final biaya = double.tryParse(_biayaSurveiController.text.trim()) ?? 0;
+      if (biaya <= 0) return 'Biaya survei wajib diisi.';
+    }
+
+    return null;
+  }
+
+  void _showErrorSnack(ScaffoldMessengerState messenger, String message) {
+    messenger.showSnackBar(
+      SnackBar(
+        backgroundColor: Colors.red.shade600,
+        content: Row(
+          children: [
+            const Icon(Icons.error, color: Colors.white),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Future<void> _handlePhotoUpload() async {
@@ -673,28 +705,39 @@ class _CreateEditJobPageState extends State<CreateEditJobPage>
                     'Foto Utama',
                     Icons.photo_camera,
                     Colors.blue,
-                    Row(
-                      children: [
-                        if (_existingImageUrls.isNotEmpty)
-                          _buildModernThumbnail(_existingImageUrls.first)
-                        else if (_pickedImages.isNotEmpty)
-                          _buildModernLocalThumbnail(_pickedImages.first)
-                        else
-                          _buildModernImagePlaceholder(),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Text(
-                            _existingImageUrls.isNotEmpty ||
-                                    _pickedImages.isNotEmpty
-                                ? 'Foto utama sudah dipilih'
-                                : 'Pilih foto utama untuk layanan Anda',
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 14,
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: _isUploading ? null : _handlePhotoUpload,
+                        borderRadius: BorderRadius.circular(16),
+                        child: Row(
+                          children: [
+                            if (_existingImageUrls.isNotEmpty)
+                              _buildModernThumbnail(_existingImageUrls.first)
+                            else if (_pickedImages.isNotEmpty)
+                              _buildModernLocalThumbnail(_pickedImages.first)
+                            else
+                              _buildModernImagePlaceholder(),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Text(
+                                _existingImageUrls.isNotEmpty ||
+                                        _pickedImages.isNotEmpty
+                                    ? 'Foto utama sudah dipilih'
+                                    : 'Pilih foto utama untuk layanan Anda',
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 14,
+                                ),
+                              ),
                             ),
-                          ),
+                            Icon(
+                              Icons.chevron_right,
+                              color: Colors.grey.shade400,
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
 
@@ -827,73 +870,53 @@ class _CreateEditJobPageState extends State<CreateEditJobPage>
 
                   const SizedBox(height: 20),
 
-                  // Payment Method Section
-                  _buildModernSection(
-                    'Metode Pembayaran',
-                    Icons.payment,
-                    Colors.teal,
-                    _serviceType == ServiceType.survey
-                        ? Row(
-                            children: [
-                              Expanded(
-                                child: _buildModernPaymentCard(
-                                  PaymentMethod.cashless,
-                                  'Cashless',
-                                  Icons.credit_card,
-                                  Colors.indigo,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _buildModernPaymentCard(
-                                  PaymentMethod.cash,
-                                  'Cek Dulu',
-                                  Icons.visibility,
-                                  Colors.orange,
-                                ),
-                              ),
+                  if (_serviceType == ServiceType.fixed) ...[
+                    // Payment Method Section (only for fixed price)
+                    _buildModernSection(
+                      'Metode Pembayaran',
+                      Icons.payment,
+                      Colors.teal,
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.indigo.shade50,
+                              Colors.indigo.shade100,
                             ],
-                          )
-                        : Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Colors.indigo.shade50,
-                                  Colors.indigo.shade100,
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.indigo.shade200),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.indigo.shade200,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Icon(
-                                    Icons.credit_card,
-                                    color: Colors.indigo.shade700,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  'Cashless (wajib)',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.indigo.shade800,
-                                  ),
-                                ),
-                              ],
-                            ),
                           ),
-                  ),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.indigo.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.indigo.shade200,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                Icons.credit_card,
+                                color: Colors.indigo.shade700,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              'Cashless (wajib)',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.indigo.shade800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
 
-                  const SizedBox(height: 20),
+                    const SizedBox(height: 20),
+                  ],
 
                   // Price/Survey Cost Field
                   _buildModernFormField(

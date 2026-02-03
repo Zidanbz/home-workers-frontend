@@ -521,6 +521,17 @@ class _OrderCard extends StatelessWidget {
   const _OrderCard({Key? key, required this.order, this.onRefresh})
     : super(key: key);
 
+  bool _isCompletedStatus() {
+    return order.status == 'completed' || order.status == 'done';
+  }
+
+  bool _isChatWindowOpen() {
+    if (!_isCompletedStatus()) return false;
+    final completedAt = order.completedAt;
+    if (completedAt == null) return true;
+    return DateTime.now().difference(completedAt) <= const Duration(days: 3);
+  }
+
   Future<void> _handleAction(BuildContext context) async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
@@ -554,6 +565,23 @@ class _OrderCard extends StatelessWidget {
                 chatId: chatId,
                 name: order.customerName,
                 avatarUrl: '', // TODO: avatar customer jika ada
+              ),
+            ),
+          );
+          break;
+        case 'completed':
+        case 'done':
+          if (!_isChatWindowOpen()) return;
+          final completedChatId = await apiService.createChat(
+            token: token,
+            recipientId: order.customerId,
+          );
+          await navigator.push(
+            MaterialPageRoute(
+              builder: (context) => ChatDetailPage(
+                chatId: completedChatId,
+                name: order.customerName,
+                avatarUrl: '',
               ),
             ),
           );
@@ -640,9 +668,16 @@ class _OrderCard extends StatelessWidget {
         buttonText = 'Ajukan Harga';
         break;
       case 'completed':
-        buttonColor = Colors.green.shade100;
-        buttonText = 'Selesai';
-        onPressed = null;
+      case 'done':
+        final canChat = _isChatWindowOpen();
+        if (canChat) {
+          buttonColor = Colors.blue.shade100;
+          buttonText = 'Chat';
+        } else {
+          buttonColor = Colors.green.shade100;
+          buttonText = 'Selesai';
+          onPressed = null;
+        }
         break;
       case 'cancelled':
       case 'quote_rejected':

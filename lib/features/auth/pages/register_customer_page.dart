@@ -102,11 +102,18 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new),
-          onPressed: () => Provider.of<AppAuthProvider.AuthProvider>(
-            // <--- Ubah di sini
-            context,
-            listen: false,
-          ).showWelcomePage(),
+          onPressed: () {
+            final navigator = Navigator.of(context);
+            if (navigator.canPop()) {
+              navigator.pop();
+              return;
+            }
+
+            Provider.of<AppAuthProvider.AuthProvider>(
+              context,
+              listen: false,
+            ).showWelcomePage();
+          },
         ),
       ),
       body: Center(

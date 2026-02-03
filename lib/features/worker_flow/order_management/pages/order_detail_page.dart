@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:home_workers_fe/shared_widgets/action_tap_guard.dart';
 import '../../../../core/api/api_service.dart';
 import '../../../../core/models/order_model.dart';
 import '../../../../core/state/auth_provider.dart';
@@ -61,29 +62,35 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     );
 
     if (confirm == true) {
-      setState(() => _isProcessing = true);
-      try {
-        final token = authProvider.token!;
-        await _apiService.rejectOrder(token: token, orderId: widget.orderId);
-        scaffoldMessenger.showSnackBar(
-          const SnackBar(
-            backgroundColor: Colors.green,
-            content: Text('Pesanan berhasil ditolak.'),
-          ),
-        );
-        Navigator.pop(context); // Kembali ke halaman sebelumnya
-      } catch (e) {
-        scaffoldMessenger.showSnackBar(
-          SnackBar(
-            backgroundColor: Colors.red,
-            content: Text(
-              'Gagal menolak pesanan: ${e.toString().replaceAll("Exception: ", "")}',
-            ),
-          ),
-        );
-      } finally {
-        if (mounted) setState(() => _isProcessing = false);
-      }
+      await ActionTapGuard.run(
+        context,
+        () async {
+          setState(() => _isProcessing = true);
+          try {
+            final token = authProvider.token!;
+            await _apiService.rejectOrder(token: token, orderId: widget.orderId);
+            scaffoldMessenger.showSnackBar(
+              const SnackBar(
+                backgroundColor: Colors.green,
+                content: Text('Pesanan berhasil ditolak.'),
+              ),
+            );
+            Navigator.pop(context); // Kembali ke halaman sebelumnya
+          } catch (e) {
+            scaffoldMessenger.showSnackBar(
+              SnackBar(
+                backgroundColor: Colors.red,
+                content: Text(
+                  'Gagal menolak pesanan: ${e.toString().replaceAll("Exception: ", "")}',
+                ),
+              ),
+            );
+          } finally {
+            if (mounted) setState(() => _isProcessing = false);
+          }
+        },
+        label: 'Memproses',
+      );
     }
   }
 
@@ -91,30 +98,36 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-    setState(() => _isProcessing = true);
+    await ActionTapGuard.run(
+      context,
+      () async {
+        setState(() => _isProcessing = true);
 
-    try {
-      final token = authProvider.token!;
-      await _apiService.acceptOrder(token: token, orderId: widget.orderId);
-      scaffoldMessenger.showSnackBar(
-        const SnackBar(
-          backgroundColor: Colors.green,
-          content: Text('Pesanan berhasil diterima.'),
-        ),
-      );
-      _loadOrderDetails();
-    } catch (e) {
-      scaffoldMessenger.showSnackBar(
-        SnackBar(
-          backgroundColor: Colors.red,
-          content: Text(
-            'Gagal menerima pesanan: ${e.toString().replaceAll("Exception: ", "")}',
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
-    }
+        try {
+          final token = authProvider.token!;
+          await _apiService.acceptOrder(token: token, orderId: widget.orderId);
+          scaffoldMessenger.showSnackBar(
+            const SnackBar(
+              backgroundColor: Colors.green,
+              content: Text('Pesanan berhasil diterima.'),
+            ),
+          );
+          _loadOrderDetails();
+        } catch (e) {
+          scaffoldMessenger.showSnackBar(
+            SnackBar(
+              backgroundColor: Colors.red,
+              content: Text(
+                'Gagal menerima pesanan: ${e.toString().replaceAll("Exception: ", "")}',
+              ),
+            ),
+          );
+        } finally {
+          if (mounted) setState(() => _isProcessing = false);
+        }
+      },
+      label: 'Memproses',
+    );
   }
 
   Future<void> _handleSendQuote(Order order) async {
@@ -148,63 +161,75 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     );
 
     if (result != null) {
-      setState(() => _isProcessing = true);
-      try {
-        final token = Provider.of<AuthProvider>(context, listen: false).token!;
-        await _apiService.proposeQuote(
-          token: token,
-          orderId: order.id,
-          proposedPrice: result,
-        );
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            backgroundColor: Colors.green,
-            content: Text('Penawaran berhasil dikirim.'),
-          ),
-        );
-        _loadOrderDetails(); // Refresh
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: Colors.red,
-            content: Text('Gagal mengirim penawaran: $e'),
-          ),
-        );
-      } finally {
-        if (mounted) setState(() => _isProcessing = false);
-      }
+      await ActionTapGuard.run(
+        context,
+        () async {
+          setState(() => _isProcessing = true);
+          try {
+            final token = Provider.of<AuthProvider>(context, listen: false).token!;
+            await _apiService.proposeQuote(
+              token: token,
+              orderId: order.id,
+              proposedPrice: result,
+            );
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                backgroundColor: Colors.green,
+                content: Text('Penawaran berhasil dikirim.'),
+              ),
+            );
+            _loadOrderDetails(); // Refresh
+          } catch (e) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                backgroundColor: Colors.red,
+                content: Text('Gagal mengirim penawaran: $e'),
+              ),
+            );
+          } finally {
+            if (mounted) setState(() => _isProcessing = false);
+          }
+        },
+        label: 'Mengirim',
+      );
     }
   }
 
   /// Generic status updater with snackbars & refresh
   Future<void> _handleUpdateStatus(String orderId, String newStatus) async {
     final token = Provider.of<AuthProvider>(context, listen: false).token!;
-    setState(() => _isProcessing = true);
+    await ActionTapGuard.run(
+      context,
+      () async {
+        setState(() => _isProcessing = true);
 
-    try {
-      await _apiService.updateOrderStatus(
-        token: token,
-        orderId: orderId,
-        newStatus: newStatus,
-      );
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: Colors.green,
-          content: Text('Status berhasil diperbarui.'),
-        ),
-      );
-      _loadOrderDetails();
-    } catch (e) {
-      debugPrint(e.toString());
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: Colors.red,
-          content: Text('Gagal memperbarui status: $e'),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
-    }
+        try {
+          await _apiService.updateOrderStatus(
+            token: token,
+            orderId: orderId,
+            newStatus: newStatus,
+          );
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor: Colors.green,
+              content: Text('Status berhasil diperbarui.'),
+            ),
+          );
+          _loadOrderDetails();
+        } catch (e) {
+          debugPrint(e.toString());
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: Colors.red,
+              content: Text('Gagal memperbarui status: $e'),
+            ),
+          );
+        } finally {
+          if (mounted) setState(() => _isProcessing = false);
+        }
+      },
+      label: 'Memproses',
+    );
   }
 
   /// Pop-up konfirmasi untuk menyelesaikan pekerjaan (umum, dipakai fixed & lainnya)

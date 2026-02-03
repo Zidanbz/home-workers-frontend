@@ -3,6 +3,7 @@ import 'package:home_workers_fe/core/helper/voucher_helper.dart';
 import 'package:home_workers_fe/core/models/availability_model.dart';
 import 'package:home_workers_fe/features/costumer_flow/booking/pages/snapPayment_page.dart';
 import 'package:home_workers_fe/features/workerprofile/pages/worker_profile_page.dart';
+import 'package:home_workers_fe/shared_widgets/action_tap_guard.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:home_workers_fe/core/api/api_service.dart';
@@ -29,7 +30,6 @@ class _BookingPageState extends State<BookingPage> {
   int _basePrice = 0; // harga dasar layanan
   int _discount = 0; // diskon dari voucher
   int _finalPrice = 0; // harga setelah diskon
-  bool _checkingVoucher = false;
   String? _voucherMessage;
 
   List<Map<String, dynamic>> _vouchers = []; // List voucher untuk dropdown
@@ -98,26 +98,14 @@ class _BookingPageState extends State<BookingPage> {
     }
   }
 
-  Future<void> _checkVoucher() async {
-    if (_selectedVoucher == null || _selectedVoucher!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pilih kode voucher terlebih dahulu.')),
-      );
-      return;
-    }
-
-    setState(() {
-      _checkingVoucher = true;
-      _voucherMessage = null;
-    });
-
+  Future<void> _validateAndApplyVoucher(String voucherCode) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final token = authProvider.token;
 
     try {
       final result = await _apiService.validateVoucherCode(
         token: token!,
-        voucherCode: _selectedVoucher!,
+        voucherCode: voucherCode,
         orderAmount: _basePrice,
       );
 
@@ -128,7 +116,7 @@ class _BookingPageState extends State<BookingPage> {
       setState(() {
         _discount = discount;
         _finalPrice = finalTotal < 0 ? 0 : finalTotal;
-        _appliedVoucherCode = result['voucherCode'] ?? _selectedVoucher;
+        _appliedVoucherCode = result['voucherCode'] ?? voucherCode;
         _voucherMessage = result['message'] ?? 'Voucher diterapkan.';
       });
 
@@ -138,19 +126,30 @@ class _BookingPageState extends State<BookingPage> {
         ),
       );
     } catch (e) {
+      // Reset voucher state and selected voucher if validation fails
+      String errorMessage = e.toString().replaceFirst('Exception: ', '');
+      if (errorMessage.contains('validation error') || errorMessage.contains('Validasi voucher gagal')) {
+        errorMessage = 'Voucher tidak memenuhi syarat minimum order atau sudah kadaluarsa.';
+      }
       setState(() {
-        _discount = 0;
-        _finalPrice = _basePrice;
-        _appliedVoucherCode = null;
-        _voucherMessage = e.toString().replaceFirst('Exception: ', 'Gagal: ');
+        _selectedVoucher = null;
+        _resetVoucher();
+        _voucherMessage = 'Gagal: $errorMessage';
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(_voucherMessage!), backgroundColor: Colors.red),
       );
-    } finally {
-      if (mounted) setState(() => _checkingVoucher = false);
     }
   }
+
+  void _resetVoucher() {
+    _discount = 0;
+    _finalPrice = _basePrice;
+    _appliedVoucherCode = null;
+    _voucherMessage = null;
+  }
+
+
 
   Future<void> _handleCreateOrder() async {
     if (_selectedTimeSlot == null) {
@@ -206,13 +205,13 @@ class _BookingPageState extends State<BookingPage> {
       // Check if response is null
       if (response == null) {
         print('❌ [BookingPage] Response is null!');
-        throw Exception('Server returned null response');
+        throw Exception('Server tidak merespons. Silakan coba lagi.');
       }
 
       // Check if response is a Map
       if (response is! Map<String, dynamic>) {
         print('❌ [BookingPage] Response is not a Map: ${response.runtimeType}');
-        throw Exception('Invalid response format from server');
+        throw Exception('Format respons server tidak valid.');
       }
 
       print('🎯 [BookingPage] Response keys: ${response.keys.toList()}');
@@ -222,11 +221,11 @@ class _BookingPageState extends State<BookingPage> {
 
       if (snapToken == null) {
         print('❌ [BookingPage] Snap token is null!');
-        throw Exception('Payment token not received from server');
+        throw Exception('Token pembayaran tidak diterima dari server.');
       }
 
       final snapRedirectUrl =
-          "https://app.sandbox.midtrans.com/snap/v2/vtweb/$snapToken";
+          "https://app.midtrans.com/snap/v2/vtweb/$snapToken";
 
       print('🎯 [BookingPage] Redirect URL: $snapRedirectUrl');
       print('🎯 [BookingPage] Navigating to payment page...');
@@ -270,6 +269,17 @@ class _BookingPageState extends State<BookingPage> {
   @override
   Widget build(BuildContext context) {
     final isSurvey = widget.service.tipeLayanan == 'survey';
+    
+    // Check if payment method contains "cek dulu" (case-insensitive)
+    final hasCekDulu = widget.service.metodePembayaran.any(
+      (method) => method.toString().toLowerCase().contains('cek dulu')
+    );
+
+    // Debug print
+    print('🔍 [BookingPage] Metode Pembayaran: ${widget.service.metodePembayaran}');
+    print('🔍 [BookingPage] isSurvey: $isSurvey');
+    print('🔍 [BookingPage] hasCekDulu: $hasCekDulu');
+    print('🔍 [BookingPage] Show Voucher: ${!isSurvey && !hasCekDulu}');
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
@@ -305,7 +315,7 @@ class _BookingPageState extends State<BookingPage> {
               const SizedBox(height: 16),
               _buildTimeSlotPicker(),
               const SizedBox(height: 24),
-              if (!isSurvey) _buildVoucherSection(),
+              if (!isSurvey && !hasCekDulu) _buildVoucherSection(),
             ],
           ),
         ),
@@ -504,35 +514,28 @@ class _BookingPageState extends State<BookingPage> {
             onChanged: (value) {
               setState(() {
                 _selectedVoucher = value;
-                _discount = 0;
-                _finalPrice = _basePrice;
-                _appliedVoucherCode = null;
-                _voucherMessage = null;
               });
+              if (value != null) {
+                _validateAndApplyVoucher(value);
+              } else {
+                _resetVoucher();
+              }
             },
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
               hintText: 'Pilih voucher',
             ),
           ),
-        const SizedBox(height: 8),
-        ElevatedButton(
-          onPressed: _checkingVoucher ? null : _checkVoucher,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF1E232C),
-            foregroundColor: Colors.white,
+        if (_voucherMessage != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Text(
+              _voucherMessage!,
+              style: TextStyle(
+                color: _appliedVoucherCode != null ? Colors.green : Colors.red,
+              ),
+            ),
           ),
-          child: _checkingVoucher
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : const Text('Cek Voucher'),
-        ),
         if (_appliedVoucherCode != null)
           TextButton.icon(
             onPressed: () {
@@ -593,7 +596,13 @@ class _BookingPageState extends State<BookingPage> {
             _isLoading
                 ? const CircularProgressIndicator()
                 : ElevatedButton(
-                    onPressed: _handleCreateOrder,
+                    onPressed: () {
+                      ActionTapGuard.run(
+                        context,
+                        _handleCreateOrder,
+                        label: 'Membuat pesanan',
+                      );
+                    },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF1E232C),
                       foregroundColor: Colors.white,

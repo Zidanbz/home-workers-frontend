@@ -60,6 +60,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
         dataToUpdate: dataToUpdate,
       );
 
+      authProvider.updateLocalProfile(
+        nama: _nameController.text,
+        contact: _contactController.text,
+      );
+
       // Refresh data pengguna di AuthProvider
       // await authProvider.refreshUserData();
 
