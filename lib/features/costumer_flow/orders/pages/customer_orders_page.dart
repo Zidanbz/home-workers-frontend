@@ -219,7 +219,10 @@ class _CustomerOrdersPageState extends State<CustomerOrdersPage>
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Error: ${snapshot.error}',
+                    ApiService.readableError(
+                      snapshot.error,
+                      action: 'Gagal memuat pesanan',
+                    ),
                     style: const TextStyle(color: Colors.grey, fontSize: 14),
                     textAlign: TextAlign.center,
                   ),
@@ -538,9 +541,13 @@ class _OrderCard extends StatelessWidget {
         }
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Gagal mengirim ulasan: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ApiService.readableError(e, action: 'Gagal mengirim ulasan'),
+          ),
+        ),
+      );
     }
   }
 

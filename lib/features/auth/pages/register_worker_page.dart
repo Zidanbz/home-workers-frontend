@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:provider/provider.dart';
+import 'package:home_workers_fe/core/api/api_service.dart';
 
 import 'package:home_workers_fe/core/state/auth_provider.dart' as AppAuth;
 import 'package:home_workers_fe/features/auth/pages/email_verification_pending_page.dart';
@@ -257,7 +258,7 @@ class _RegisterWorkerPageState extends State<RegisterWorkerPage>
     } catch (e) {
       if (!mounted) return;
       _snack(
-        'Registrasi gagal: ${e.toString().replaceAll("Exception: ", "")}',
+        ApiService.readableError(e, action: 'Registrasi worker gagal'),
         error: true,
       );
     } finally {

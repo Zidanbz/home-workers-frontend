@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart'; // Import Firebase Auth
 import 'package:provider/provider.dart';
+import 'package:home_workers_fe/core/api/api_service.dart';
 
 // Import AuthProvider kustom Anda dengan alias untuk menghindari konflik
 import '../../../core/state/auth_provider.dart' as AppAuthProvider;
@@ -33,7 +34,7 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
     super.dispose();
   }
 
- Future<void> _handleRegister() async {
+  Future<void> _handleRegister() async {
     if (!_formKey.currentState!.validate()) return;
 
     final authProvider = Provider.of<AppAuthProvider.AuthProvider>(
@@ -77,7 +78,7 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
         SnackBar(
           backgroundColor: Colors.red,
           content: Text(
-            'Registrasi gagal: ${e.toString().replaceAll("Exception: ", "")}',
+            ApiService.readableError(e, action: 'Registrasi customer gagal'),
           ),
         ),
       );
@@ -85,7 +86,6 @@ class _RegisterCustomerPageState extends State<RegisterCustomerPage> {
       if (mounted) setState(() => _isLoading = false);
     }
   }
-
 
   // Hapus _showSuccessDialog() atau pastikan tidak dipanggil lagi
   // karena navigasi ke EmailVerificationPendingPage sudah menggantikannya.

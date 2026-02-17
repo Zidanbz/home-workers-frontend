@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:home_workers_fe/core/state/auth_provider.dart';
+import 'package:home_workers_fe/core/api/api_service.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});
@@ -55,7 +56,10 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         SnackBar(
           backgroundColor: Colors.red,
           content: Text(
-            'Gagal kirim reset password: ${e.toString().replaceAll("Exception: ", "")}',
+            ApiService.readableError(
+              e,
+              action: 'Gagal kirim reset password',
+            ),
           ),
         ),
       );
@@ -195,7 +199,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
         SnackBar(
           backgroundColor: Colors.red,
           content: Text(
-            'Gagal reset password: ${e.toString().replaceAll("Exception: ", "")}',
+            ApiService.readableError(e, action: 'Gagal reset password'),
           ),
         ),
       );

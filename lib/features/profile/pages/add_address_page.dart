@@ -105,7 +105,13 @@ class _AddAddressPageState extends State<AddAddressPage> {
     } catch (e) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Gagal: $e')));
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            ApiService.readableError(e, action: 'Gagal menambahkan alamat'),
+          ),
+        ),
+      );
     } finally {
       if (mounted)
         setState(() {

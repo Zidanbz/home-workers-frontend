@@ -357,7 +357,12 @@ class _MyJobsPageState extends State<MyJobsPage> with TickerProviderStateMixin {
             return _buildLoadingState();
           }
           if (snapshot.hasError) {
-            return _buildErrorState(snapshot.error.toString());
+            return _buildErrorState(
+              ApiService.readableError(
+                snapshot.error,
+                action: 'Gagal memuat layanan saya',
+              ),
+            );
           }
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return _buildEmptyState();

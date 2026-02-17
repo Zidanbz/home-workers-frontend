@@ -522,7 +522,7 @@ class _CreateEditJobPageState extends State<CreateEditJobPage>
       print("================================");
       _showErrorSnack(
         scaffoldMessenger,
-        'Gagal: ${e.toString().replaceAll("Exception: ", "")}',
+        ApiService.readableError(e, action: 'Gagal menyimpan layanan'),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);

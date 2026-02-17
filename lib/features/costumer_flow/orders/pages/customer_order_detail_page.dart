@@ -110,12 +110,15 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
         ),
       );
     } catch (e) {
-      String errorMessage = e.toString().replaceFirst('Exception: ', '');
+      final errorMessage = ApiService.readableError(
+        e,
+        action: 'Validasi voucher gagal',
+      );
       setState(() {
         _selectedVoucher = null;
         _discount = 0;
         _appliedVoucherCode = null;
-        _voucherMessage = 'Gagal: $errorMessage';
+        _voucherMessage = errorMessage;
         _isVoucherValid = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -268,7 +271,14 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal memuat data terbaru: $e')),
+          SnackBar(
+            content: Text(
+              ApiService.readableError(
+                e,
+                action: 'Gagal memuat data pesanan terbaru',
+              ),
+            ),
+          ),
         );
       }
     } finally {
@@ -534,9 +544,16 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
       await _refreshOrderDetails();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Gagal memulai pembayaran: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              ApiService.readableError(
+                e,
+                action: 'Gagal memulai pembayaran',
+              ),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -566,7 +583,14 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal memproses penawaran: $e')),
+          SnackBar(
+            content: Text(
+              ApiService.readableError(
+                e,
+                action: 'Gagal memproses penawaran',
+              ),
+            ),
+          ),
         );
       }
     } finally {
@@ -804,7 +828,14 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
                     } catch (e) {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Gagal membuka chat: $e')),
+                          SnackBar(
+                            content: Text(
+                              ApiService.readableError(
+                                e,
+                                action: 'Gagal membuka chat',
+                              ),
+                            ),
+                          ),
                         );
                       }
                     }

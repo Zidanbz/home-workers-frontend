@@ -244,7 +244,12 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
               return _buildLoadingState();
             }
             if (snapshot.hasError) {
-              return _buildErrorState(snapshot.error.toString());
+              return _buildErrorState(
+                ApiService.readableError(
+                  snapshot.error,
+                  action: 'Gagal memuat pesanan',
+                ),
+              );
             }
             if (!snapshot.hasData || snapshot.data!.isEmpty) {
               // Pastikan tetap bisa tarik untuk refresh
@@ -639,7 +644,12 @@ class _OrderCard extends StatelessWidget {
       }
     } catch (e) {
       scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text('Gagal: $e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text(
+            ApiService.readableError(e, action: 'Gagal memproses aksi pesanan'),
+          ),
+          backgroundColor: Colors.red,
+        ),
       );
     }
 

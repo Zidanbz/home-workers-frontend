@@ -69,7 +69,14 @@ class _NotificationPageState extends State<NotificationPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal menandai semua notifikasi: $e')),
+          SnackBar(
+            content: Text(
+              ApiService.readableError(
+                e,
+                action: 'Gagal menandai semua notifikasi',
+              ),
+            ),
+          ),
         );
       }
     } finally {
@@ -187,7 +194,10 @@ class _NotificationPageState extends State<NotificationPage> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Error: ${snapshot.error}',
+                            ApiService.readableError(
+                              snapshot.error,
+                              action: 'Gagal memuat notifikasi',
+                            ),
                             style: const TextStyle(
                               color: Colors.grey,
                               fontSize: 14,

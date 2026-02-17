@@ -193,7 +193,10 @@ class _ChatListPageState extends State<ChatListPage> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Error: ${snapshot.error}',
+                        ApiService.readableError(
+                          snapshot.error,
+                          action: 'Gagal memuat daftar chat',
+                        ),
                         style: const TextStyle(
                           color: Colors.grey,
                           fontSize: 14,

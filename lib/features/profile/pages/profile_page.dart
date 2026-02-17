@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:home_workers_fe/core/api/api_service.dart';
 import 'package:home_workers_fe/core/models/user_model.dart';
 import 'package:home_workers_fe/features/auth/pages/login_page.dart';
 import 'package:home_workers_fe/features/costumer_flow/vouchers/pages/claim_voucher_page.dart';
@@ -96,7 +97,10 @@ class _ProfilePageState extends State<ProfilePage>
       }
     } catch (e) {
       if (mounted) {
-        _showSnack('Gagal memperbarui foto: $e', isError: true);
+        _showSnack(
+          ApiService.readableError(e, action: 'Gagal memperbarui foto profil'),
+          isError: true,
+        );
       }
     } finally {
       if (mounted) setState(() => _uploading = false);

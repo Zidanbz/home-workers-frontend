@@ -81,7 +81,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
         SnackBar(
           backgroundColor: Colors.red,
           content: Text(
-            'Gagal memperbarui profil: ${e.toString().replaceAll("Exception: ", "")}',
+            ApiService.readableError(e, action: 'Gagal memperbarui profil'),
           ),
         ),
       );

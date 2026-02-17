@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart'; // Penting untuk Firebase Auth
+import 'package:home_workers_fe/core/api/api_service.dart';
 import 'package:home_workers_fe/features/auth/pages/login_page.dart'; // Import Login Page
 
 class EmailVerificationPendingPage extends StatefulWidget {
@@ -53,7 +54,10 @@ class _EmailVerificationPendingPageState
         );
       }
     } catch (e) {
-      _showCustomSnackBar('Gagal mengirim ulang email: $e', isError: true);
+      _showCustomSnackBar(
+        ApiService.readableError(e, action: 'Gagal mengirim ulang email'),
+        isError: true,
+      );
       print('Error resending verification email: $e');
     } finally {
       setState(() {

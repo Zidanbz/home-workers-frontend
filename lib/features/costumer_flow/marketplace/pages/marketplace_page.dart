@@ -85,7 +85,14 @@ class _MarketplacePageState extends State<MarketplacePage> {
                     return const Center(child: CircularProgressIndicator());
                   }
                   if (snapshot.hasError) {
-                    return Center(child: Text('Error: ${snapshot.error}'));
+                    return Center(
+                      child: Text(
+                        ApiService.readableError(
+                          snapshot.error,
+                          action: 'Gagal memuat marketplace',
+                        ),
+                      ),
+                    );
                   }
                   if (!snapshot.hasData || snapshot.data!.isEmpty) {
                     return const Center(

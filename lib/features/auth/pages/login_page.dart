@@ -1,7 +1,6 @@
-import 'dart:convert';
-
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:home_workers_fe/core/api/api_service.dart';
 import 'package:home_workers_fe/features/auth/pages/email_verification_pending_page.dart';
 import 'package:home_workers_fe/features/auth/pages/forgot_password_page.dart';
 import 'package:provider/provider.dart';
@@ -112,31 +111,7 @@ class _LoginPageState extends State<LoginPage> {
       }
     } catch (e) {
       if (!mounted) return;
-
-      String errorMessage = 'Terjadi kesalahan saat login.';
-
-      try {
-        // Ambil JSON dari string seperti: "Gagal login: { ... }"
-        final raw = e.toString();
-        final startIndex = raw.indexOf('{');
-        if (startIndex != -1) {
-          final jsonPart = raw.substring(startIndex);
-          final decoded = jsonDecode(jsonPart);
-          if (decoded['message'] != null) {
-            errorMessage = decoded['message'];
-
-            // Custom handling for password or email errors
-            if (errorMessage.toLowerCase().contains('password')) {
-              errorMessage = 'Password yang Anda masukkan tidak sesuai.';
-            } else if (errorMessage.toLowerCase().contains('email')) {
-              errorMessage = 'Email yang Anda masukkan tidak ditemukan.';
-            }
-          }
-        }
-      } catch (parseError) {
-        debugPrint('Gagal parse error: $parseError');
-      }
-
+      final errorMessage = ApiService.readableError(e, action: 'Login gagal');
       _showErrorDialog(errorMessage);
     } finally {
       if (mounted) setState(() => _isLoading = false);

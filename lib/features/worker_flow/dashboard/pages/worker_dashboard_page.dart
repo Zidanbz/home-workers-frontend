@@ -316,7 +316,12 @@ class _WorkerDashboardPageState extends State<WorkerDashboardPage>
               return _buildLoadingState();
             }
             if (snapshot.hasError) {
-              return _buildErrorState(snapshot.error.toString());
+              return _buildErrorState(
+                ApiService.readableError(
+                  snapshot.error,
+                  action: 'Gagal memuat dashboard',
+                ),
+              );
             }
             if (!snapshot.hasData) {
               return _buildEmptyState();

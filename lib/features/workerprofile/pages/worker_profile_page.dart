@@ -54,7 +54,14 @@ class _WorkerProfilePageState extends State<WorkerProfilePage>
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           } else if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+            return Center(
+              child: Text(
+                ApiService.readableError(
+                  snapshot.error,
+                  action: 'Gagal memuat profil worker',
+                ),
+              ),
+            );
           } else if (!snapshot.hasData) {
             return const Center(child: Text('Data tidak ditemukan.'));
           }

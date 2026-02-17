@@ -147,7 +147,13 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
         if (!mounted) return;
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Gagal mengirim pesan: $e')));
+        ).showSnackBar(
+          SnackBar(
+            content: Text(
+              ApiService.readableError(e, action: 'Gagal mengirim pesan'),
+            ),
+          ),
+        );
       } finally {
         if (mounted) {
           setState(() {

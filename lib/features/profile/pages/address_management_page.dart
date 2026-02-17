@@ -49,7 +49,14 @@ class _AddressManagementPageState extends State<AddressManagementPage> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+            return Center(
+              child: Text(
+                ApiService.readableError(
+                  snapshot.error,
+                  action: 'Gagal memuat alamat tersimpan',
+                ),
+              ),
+            );
           }
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return const Center(

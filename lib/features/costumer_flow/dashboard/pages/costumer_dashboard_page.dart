@@ -200,7 +200,10 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
                             child: Padding(
                               padding: const EdgeInsets.symmetric(vertical: 80),
                               child: Text(
-                                'Gagal memuat data: ${snapshot.error}',
+                                ApiService.readableError(
+                                  snapshot.error,
+                                  action: 'Gagal memuat data dashboard',
+                                ),
                               ),
                             ),
                           ),

@@ -131,7 +131,7 @@ flutter_icons:
 
 flutter_native_splash:
   # Warna background splash screen disesuaikan dengan logo
-  color: "#0xfffff" # Warna biru gelap sesuai tema app
+  color: "#F4F7FB" # Warna terang agar logo lebih kontras
 
   # Path ke gambar logo asli dengan warna original
   image: assets/logo_howe.png
@@ -148,4 +148,4 @@ flutter_native_splash:
   # Konfigurasi untuk Android 12+
   android_12:
     image: assets/logo_howe.png
-    color: "#0xfffff"
+    color: "#F4F7FB"

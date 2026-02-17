@@ -81,7 +81,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
               SnackBar(
                 backgroundColor: Colors.red,
                 content: Text(
-                  'Gagal menolak pesanan: ${e.toString().replaceAll("Exception: ", "")}',
+                  ApiService.readableError(
+                    e,
+                    action: 'Gagal menolak pesanan',
+                  ),
                 ),
               ),
             );
@@ -118,7 +121,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
             SnackBar(
               backgroundColor: Colors.red,
               content: Text(
-                'Gagal menerima pesanan: ${e.toString().replaceAll("Exception: ", "")}',
+                ApiService.readableError(
+                  e,
+                  action: 'Gagal menerima pesanan',
+                ),
               ),
             ),
           );
@@ -183,7 +189,12 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 backgroundColor: Colors.red,
-                content: Text('Gagal mengirim penawaran: $e'),
+                content: Text(
+                  ApiService.readableError(
+                    e,
+                    action: 'Gagal mengirim penawaran',
+                  ),
+                ),
               ),
             );
           } finally {
@@ -221,7 +232,12 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               backgroundColor: Colors.red,
-              content: Text('Gagal memperbarui status: $e'),
+              content: Text(
+                ApiService.readableError(
+                  e,
+                  action: 'Gagal memperbarui status pesanan',
+                ),
+              ),
             ),
           );
         } finally {
@@ -279,7 +295,14 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+            return Center(
+              child: Text(
+                ApiService.readableError(
+                  snapshot.error,
+                  action: 'Gagal memuat detail pesanan',
+                ),
+              ),
+            );
           }
           if (!snapshot.hasData) {
             return const Center(child: Text('Detail pesanan tidak ditemukan.'));

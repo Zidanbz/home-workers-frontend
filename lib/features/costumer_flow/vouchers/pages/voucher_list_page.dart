@@ -49,7 +49,9 @@ class _VoucherListPageState extends State<VoucherListPage> {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Gagal memuat voucher: $e'),
+            content: Text(
+              ApiService.readableError(e, action: 'Gagal memuat voucher'),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -79,7 +81,9 @@ class _VoucherListPageState extends State<VoucherListPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Gagal klaim voucher: $e'),
+            content: Text(
+              ApiService.readableError(e, action: 'Gagal klaim voucher'),
+            ),
             backgroundColor: Colors.red,
           ),
         );

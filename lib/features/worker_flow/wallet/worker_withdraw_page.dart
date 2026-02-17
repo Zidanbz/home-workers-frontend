@@ -45,7 +45,10 @@ class _WorkerWithdrawPageState extends State<WorkerWithdrawPage> {
       });
     } catch (e) {
       setState(() {
-        _walletError = 'Gagal memuat saldo';
+        _walletError = ApiService.readableError(
+          e,
+          action: 'Gagal memuat saldo',
+        );
         _isWalletLoading = false;
       });
     }
@@ -79,7 +82,9 @@ class _WorkerWithdrawPageState extends State<WorkerWithdrawPage> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gagal tarik dana: $e'),
+          content: Text(
+            ApiService.readableError(e, action: 'Gagal tarik dana'),
+          ),
           backgroundColor: Colors.red,
         ),
       );

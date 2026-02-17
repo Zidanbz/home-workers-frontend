@@ -123,7 +123,14 @@ class _CustomerChatListPageState extends State<CustomerChatListPage> {
                     return const Center(child: CircularProgressIndicator());
                   }
                   if (snapshot.hasError) {
-                    return Center(child: Text('Error: ${snapshot.error}'));
+                    return Center(
+                      child: Text(
+                        ApiService.readableError(
+                          snapshot.error,
+                          action: 'Gagal memuat daftar chat',
+                        ),
+                      ),
+                    );
                   }
                   if (!snapshot.hasData || snapshot.data!.isEmpty) {
                     return _buildEmptyState();

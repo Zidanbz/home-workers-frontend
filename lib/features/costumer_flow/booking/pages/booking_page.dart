@@ -127,14 +127,20 @@ class _BookingPageState extends State<BookingPage> {
       );
     } catch (e) {
       // Reset voucher state and selected voucher if validation fails
-      String errorMessage = e.toString().replaceFirst('Exception: ', '');
-      if (errorMessage.contains('validation error') || errorMessage.contains('Validasi voucher gagal')) {
+      String errorMessage = ApiService.readableError(
+        e,
+        action: 'Validasi voucher gagal',
+      );
+      final lowerErrorMessage = errorMessage.toLowerCase();
+      if (lowerErrorMessage.contains('validation error') ||
+          lowerErrorMessage.contains('validasi voucher gagal') ||
+          lowerErrorMessage.contains('data yang dimasukkan tidak valid')) {
         errorMessage = 'Voucher tidak memenuhi syarat minimum order atau sudah kadaluarsa.';
       }
       setState(() {
         _selectedVoucher = null;
         _resetVoucher();
-        _voucherMessage = 'Gagal: $errorMessage';
+        _voucherMessage = errorMessage;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(_voucherMessage!), backgroundColor: Colors.red),
@@ -245,7 +251,7 @@ class _BookingPageState extends State<BookingPage> {
         SnackBar(
           backgroundColor: Colors.red,
           content: Text(
-            'Gagal: ${e.toString().replaceFirst('Exception: ', '')}',
+            ApiService.readableError(e, action: 'Gagal membuat pesanan'),
           ),
         ),
       );

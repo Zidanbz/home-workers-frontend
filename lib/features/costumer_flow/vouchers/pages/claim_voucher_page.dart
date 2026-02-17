@@ -48,7 +48,11 @@ class _ClaimVoucherPageState extends State<ClaimVoucherPage> {
       _controller.clear();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(
+          content: Text(
+            ApiService.readableError(e, action: 'Gagal klaim voucher'),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);

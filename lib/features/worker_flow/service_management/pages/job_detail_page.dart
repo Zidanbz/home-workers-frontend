@@ -89,7 +89,7 @@ class _JobDetailPageState extends State<JobDetailPage> {
         SnackBar(
           backgroundColor: Colors.red,
           content: Text(
-            'Gagal menghapus layanan: ${e.toString().replaceAll("Exception: ", "")}',
+            ApiService.readableError(e, action: 'Gagal menghapus layanan'),
           ),
         ),
       );
@@ -124,7 +124,14 @@ class _JobDetailPageState extends State<JobDetailPage> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+            return Center(
+              child: Text(
+                ApiService.readableError(
+                  snapshot.error,
+                  action: 'Gagal memuat detail layanan',
+                ),
+              ),
+            );
           }
           if (!snapshot.hasData) {
             return const Center(child: Text('Layanan tidak ditemukan.'));

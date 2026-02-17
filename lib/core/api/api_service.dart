@@ -158,7 +158,9 @@ class ApiService {
         return data.map((json) => Service.fromJson(json)).toList();
       } else {
         print('❌ [getMyServices] Failed to load services');
-        throw _asException(responseBody['message'] ?? 'Failed to load services');
+        throw _asException(
+          responseBody['message'] ?? 'Failed to load services',
+        );
       }
     } catch (e) {
       print('❌ [getMyServices] Exception: $e');
@@ -232,7 +234,9 @@ class ApiService {
       if (response.statusCode == 200 && responseBody['success'] == true) {
         return User.fromJson(responseBody['data']); // ✅ Ambil dari 'data'
       } else {
-        throw _asException(responseBody['message'] ?? 'Failed to fetch profile');
+        throw _asException(
+          responseBody['message'] ?? 'Failed to fetch profile',
+        );
       }
     } catch (e) {
       throw _asException('Failed to connect to the server.');
@@ -282,7 +286,9 @@ class ApiService {
       } else {
         print("response body: ${response.body}");
 
-        throw _asException(responseBody['message'] ?? 'Failed to load messages');
+        throw _asException(
+          responseBody['message'] ?? 'Failed to load messages',
+        );
       }
     } catch (e) {
       print("response body: ${e}");
@@ -352,7 +358,9 @@ class ApiService {
       if (response.statusCode == 201 && responseBody['success'] == true) {
         return responseBody['data'] ?? {};
       } else {
-        throw _asException(responseBody['message'] ?? 'Failed to create service');
+        throw _asException(
+          responseBody['message'] ?? 'Failed to create service',
+        );
       }
     } catch (e) {
       print('Error saat memanggil API: $e');
@@ -426,7 +434,9 @@ class ApiService {
         final List<dynamic> addressList = responseBody['data'];
         return addressList.map((json) => Address.fromJson(json)).toList();
       } else {
-        throw _asException(responseBody['message'] ?? 'Failed to load addresses');
+        throw _asException(
+          responseBody['message'] ?? 'Failed to load addresses',
+        );
       }
     } catch (e) {
       throw _asException('Failed to connect to the server.');
@@ -590,7 +600,9 @@ class ApiService {
       if (response.statusCode == 200 && responseBody['success'] == true) {
         // Delete berhasil
       } else {
-        throw _asException(responseBody['message'] ?? 'Failed to delete service');
+        throw _asException(
+          responseBody['message'] ?? 'Failed to delete service',
+        );
       }
     } catch (e) {
       throw _asException('Failed to connect to the server.');
@@ -618,7 +630,9 @@ class ApiService {
       if (response.statusCode == 200 && responseBody['success'] == true) {
         // Update berhasil
       } else {
-        throw _asException(responseBody['message'] ?? 'Failed to update service');
+        throw _asException(
+          responseBody['message'] ?? 'Failed to update service',
+        );
       }
     } catch (e) {
       throw _asException('Failed to connect to the server.');
@@ -817,7 +831,9 @@ class ApiService {
         return services;
       } else {
         print('❌ [getAllApprovedServices] Failed to load services');
-        throw _asException(responseBody['message'] ?? 'Failed to load services');
+        throw _asException(
+          responseBody['message'] ?? 'Failed to load services',
+        );
       }
     } catch (e) {
       print('❌ [getAllApprovedServices] Exception: $e');
@@ -1046,7 +1062,9 @@ class ApiService {
         final List<dynamic> data = responseBody['data'];
         return data.map((item) => Service.fromJson(item)).toList();
       } else {
-        throw _asException(responseBody['message'] ?? 'Failed to fetch services');
+        throw _asException(
+          responseBody['message'] ?? 'Failed to fetch services',
+        );
       }
     } catch (e) {
       print('Error: $e');
@@ -1073,7 +1091,10 @@ class ApiService {
     );
 
     if (response.statusCode != 201) {
-      throw _asException('Gagal registrasi customer: ${response.body}');
+      final message =
+          _extractStructuredErrorMessage(response.body) ??
+          'Gagal registrasi customer.';
+      throw _asException(message);
     }
   }
 
@@ -1147,9 +1168,10 @@ class ApiService {
       final response = await request.send();
       if (response.statusCode != 201) {
         final responseBody = await response.stream.bytesToString();
-        throw _asException(
-          'Gagal registrasi worker: ${response.statusCode} - $responseBody',
-        );
+        final message =
+            _extractStructuredErrorMessage(responseBody) ??
+            'Gagal registrasi worker.';
+        throw _asException(message);
       }
 
       print(
@@ -1466,7 +1488,9 @@ class ApiService {
       final responseBody = jsonDecode(response.body);
 
       if (response.statusCode != 200 || responseBody['success'] != true) {
-        throw _asException(responseBody['message'] ?? 'Failed to complete order');
+        throw _asException(
+          responseBody['message'] ?? 'Failed to complete order',
+        );
       }
     } catch (e) {
       throw _asException('Failed to connect to the server. $e');
@@ -2035,13 +2059,43 @@ class ApiService {
     return {'global': global, 'user': user};
   }
 
+  static String readableError(
+    dynamic error, {
+    String? action,
+    String fallback = 'Terjadi kesalahan. Silakan coba lagi.',
+  }) {
+    final raw = error?.toString() ?? '';
+    final formatted = ApiService()._friendlyMessage(raw).trim();
+    final message = formatted.isEmpty ? fallback : formatted;
+    final actionText = action?.trim();
+
+    if (actionText == null || actionText.isEmpty) {
+      return message;
+    }
+
+    final actionLower = actionText.toLowerCase();
+    final messageLower = message.toLowerCase();
+
+    if (messageLower.startsWith(actionLower) ||
+        messageLower.contains('$actionLower:')) {
+      return message;
+    }
+
+    return '$actionText: $message';
+  }
+
   Exception _asException(dynamic message) {
-    final text = message?.toString() ?? '';
-    return AppException(_friendlyMessage(text));
+    return AppException(readableError(message));
   }
 
   String _friendlyMessage(String raw) {
-    final message = raw.trim();
+    final source = raw.trim();
+    if (source.isEmpty) {
+      return 'Terjadi kesalahan. Silakan coba lagi.';
+    }
+
+    final extracted = _extractStructuredErrorMessage(source);
+    final message = _normalizeErrorMessage(extracted ?? source);
     if (message.isEmpty) {
       return 'Terjadi kesalahan. Silakan coba lagi.';
     }
@@ -2063,6 +2117,20 @@ class ApiService {
     if (lower.contains('token expired') || lower.contains('unauthorized')) {
       return 'Sesi Anda berakhir. Silakan login kembali.';
     }
+    if (lower.contains('invalid token')) {
+      return 'Token tidak valid. Silakan login kembali.';
+    }
+    if (lower.contains('email atau kata sandi salah') ||
+        lower.contains('wrong-password') ||
+        lower.contains('invalid credential') ||
+        lower.contains('auth/invalid-credential')) {
+      return 'Email atau kata sandi salah.';
+    }
+    if (lower.contains('user account has been disabled') ||
+        lower.contains('user-disabled') ||
+        lower.contains('akun anda telah dinonaktifkan')) {
+      return 'Akun Anda telah dinonaktifkan. Hubungi admin.';
+    }
 
     if (lower.startsWith('gagal login')) {
       return 'Gagal login. Periksa email dan kata sandi Anda.';
@@ -2070,6 +2138,33 @@ class ApiService {
 
     if (lower.startsWith('gagal refresh token')) {
       return 'Sesi Anda berakhir. Silakan login kembali.';
+    }
+
+    // Common auth/registration details from Firebase/backend
+    if (lower.contains('email address is already in use') ||
+        lower.contains('email already registered') ||
+        lower.contains('email already in use') ||
+        lower.contains('auth/email-already-in-use')) {
+      return 'Email sudah terdaftar. Gunakan email lain atau login.';
+    }
+    if (lower.contains('invalid email format') ||
+        lower.contains('invalid-email') ||
+        lower.contains('email address is badly formatted')) {
+      return 'Format email tidak valid.';
+    }
+    if (lower.contains('password is too weak') ||
+        lower.contains('weak password') ||
+        lower.contains('weak-password')) {
+      return 'Password terlalu lemah. Gunakan minimal 6 karakter.';
+    }
+    if (lower.contains('too many requests')) {
+      return 'Terlalu banyak percobaan. Silakan coba lagi nanti.';
+    }
+    if (lower.contains('operation not allowed')) {
+      return 'Operasi tidak diizinkan.';
+    }
+    if (lower.contains('authentication error')) {
+      return 'Data registrasi tidak valid. Periksa kembali data Anda.';
     }
 
     if (lower.startsWith('gagal registrasi customer') ||
@@ -2101,6 +2196,16 @@ class ApiService {
 
     if (lower.contains('this service is no longer available')) {
       return 'Layanan ini sudah tidak tersedia.';
+    }
+
+    final requiredFieldMatch = RegExp(
+      r'^([a-z0-9_ /\-]+?)\s+is required\.?$',
+    ).firstMatch(lower);
+    if (requiredFieldMatch != null) {
+      final field = requiredFieldMatch.group(1)?.trim();
+      if (field != null && field.isNotEmpty) {
+        return '${_fieldLabel(field)} wajib diisi.';
+      }
     }
 
     // Common fallback translations
@@ -2139,6 +2244,48 @@ class ApiService {
       'failed to fetch avatar': 'Gagal memuat foto profil.',
       'failed to upload documents': 'Gagal mengunggah dokumen.',
       'failed to create or get chat': 'Gagal membuka chat.',
+      'validation failed': 'Data yang dimasukkan tidak valid.',
+      'invalid resource id format': 'Format ID data tidak valid.',
+      'resource not found': 'Data tidak ditemukan.',
+      'internal server error':
+          'Terjadi kesalahan pada server. Silakan coba lagi.',
+      'access forbidden': 'Anda tidak memiliki izin untuk melakukan aksi ini.',
+      'user data not found in database': 'Data pengguna tidak ditemukan.',
+      'user data not found': 'Data pengguna tidak ditemukan.',
+      'user not found': 'Pengguna tidak ditemukan.',
+      'worker profile not found': 'Profil worker tidak ditemukan.',
+      'worker not found': 'Worker tidak ditemukan.',
+      'service not found': 'Layanan tidak ditemukan.',
+      'voucher not found': 'Voucher tidak ditemukan.',
+      'voucher code already exists': 'Kode voucher sudah digunakan.',
+      'voucher already claimed': 'Voucher sudah diklaim.',
+      'voucher is not active': 'Voucher tidak aktif.',
+      'invalid voucher type': 'Tipe voucher tidak valid.',
+      'invalid discount type': 'Tipe diskon tidak valid.',
+      'value must be a number': 'Nilai harus berupa angka.',
+      'maxdiscount must be a number': 'Maksimum diskon harus berupa angka.',
+      'minorder must be a number': 'Minimum order harus berupa angka.',
+      'invalid startdate format': 'Format tanggal mulai tidak valid.',
+      'invalid enddate format': 'Format tanggal akhir tidak valid.',
+      'invalid voucher status': 'Status voucher tidak valid.',
+      'missing user': 'Data pengguna tidak ditemukan.',
+      'only workers can access this endpoint': 'Fitur ini hanya untuk worker.',
+      'only workers can create services': 'Fitur ini hanya untuk worker.',
+      'only workers can delete services': 'Fitur ini hanya untuk worker.',
+      'only workers can withdraw':
+          'Hanya worker yang dapat melakukan penarikan.',
+      'wallets are for workers only': 'Fitur dompet hanya untuk worker.',
+      'this feature is for workers only': 'Fitur ini hanya untuk worker.',
+      'amount and destination are required':
+          'Nominal dan tujuan penarikan wajib diisi.',
+      'photo url is required': 'URL foto wajib diisi.',
+      'category name is required': 'Nama kategori wajib diisi.',
+      'voucher code is required': 'Kode voucher wajib diisi.',
+      'fcmtoken is required': 'FCM token wajib diisi.',
+      'refresh token gagal': 'Sesi Anda berakhir. Silakan login kembali.',
+      'auth failed': 'Autentikasi gagal. Periksa kembali data Anda.',
+      'tidak dapat terhubung ke server autentikasi':
+          'Layanan autentikasi sedang bermasalah. Silakan coba lagi nanti.',
     };
 
     for (final entry in translations.entries) {
@@ -2147,7 +2294,147 @@ class ApiService {
       }
     }
 
+    if (_looksLikeRawErrorPayload(message)) {
+      return 'Terjadi kesalahan pada server. Silakan coba lagi.';
+    }
+
     return message;
+  }
+
+  String? _extractStructuredErrorMessage(String raw) {
+    final cleaned = raw.replaceFirst(RegExp(r'^Exception:\s*'), '').trim();
+    Map<String, dynamic>? decoded = _tryDecodeJsonMap(cleaned);
+
+    if (decoded == null) {
+      final start = cleaned.indexOf('{');
+      final end = cleaned.lastIndexOf('}');
+      if (start != -1 && end > start) {
+        final jsonCandidate = cleaned.substring(start, end + 1);
+        decoded = _tryDecodeJsonMap(jsonCandidate);
+      }
+    }
+
+    if (decoded == null) {
+      return null;
+    }
+
+    final error = decoded['error'];
+    if (error is Map) {
+      final details = error['details']?.toString().trim();
+      if (details != null && details.isNotEmpty) {
+        return details;
+      }
+    }
+
+    final errors = decoded['errors'];
+    if (errors is List && errors.isNotEmpty) {
+      final first = errors.first;
+      if (first is String && first.trim().isNotEmpty) {
+        return first.trim();
+      }
+      if (first is Map && first['message'] != null) {
+        final firstMessage = first['message'].toString().trim();
+        if (firstMessage.isNotEmpty) {
+          return firstMessage;
+        }
+      }
+    }
+
+    final message = decoded['message']?.toString().trim();
+    if (message != null && message.isNotEmpty) {
+      return message;
+    }
+
+    return null;
+  }
+
+  Map<String, dynamic>? _tryDecodeJsonMap(String text) {
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      if (decoded is Map) {
+        return decoded.map((key, value) => MapEntry(key.toString(), value));
+      }
+    } catch (_) {
+      // Ignore decode errors and fallback to generic message handling.
+    }
+
+    return null;
+  }
+
+  String _normalizeErrorMessage(String raw) {
+    var normalized = raw.trim();
+    if (normalized.isEmpty) return normalized;
+
+    normalized = normalized.replaceFirst(
+      RegExp(r'^Exception:\s*', caseSensitive: false),
+      '',
+    );
+    normalized = normalized.replaceFirst(
+      RegExp(r'^Error:\s*', caseSensitive: false),
+      '',
+    );
+    normalized = normalized.replaceFirst(
+      RegExp(r'^Auth failed:\s*', caseSensitive: false),
+      '',
+    );
+    normalized = normalized.trim();
+
+    if (normalized.startsWith('"') && normalized.endsWith('"')) {
+      normalized = normalized.substring(1, normalized.length - 1).trim();
+    }
+
+    final lineBreakIndex = normalized.indexOf('\n');
+    if (lineBreakIndex != -1) {
+      normalized = normalized.substring(0, lineBreakIndex).trim();
+    }
+
+    final escapedStackIndex = normalized.toLowerCase().indexOf(r'\n at ');
+    if (escapedStackIndex != -1) {
+      normalized = normalized.substring(0, escapedStackIndex).trim();
+    }
+
+    return normalized;
+  }
+
+  String _fieldLabel(String rawField) {
+    final field = rawField.trim().toLowerCase();
+    const labels = <String, String>{
+      'email': 'Email',
+      'password': 'Password',
+      'nama': 'Nama',
+      'name': 'Nama',
+      'fcmtoken': 'FCM token',
+      'fcm token': 'FCM token',
+      'refresh token': 'Refresh token',
+      'refreshtoken': 'Refresh token',
+      'photo url': 'URL foto',
+      'voucher code': 'Kode voucher',
+      'category name': 'Nama kategori',
+      'amount': 'Nominal',
+      'destination': 'Tujuan',
+    };
+
+    return labels[field] ?? _capitalize(rawField.trim());
+  }
+
+  String _capitalize(String value) {
+    if (value.isEmpty) return value;
+    final compact = value.replaceAll('_', ' ').trim();
+    if (compact.isEmpty) return value;
+    return compact[0].toUpperCase() + compact.substring(1);
+  }
+
+  bool _looksLikeRawErrorPayload(String message) {
+    final lower = message.toLowerCase();
+    return lower.contains('"success":false') ||
+        (lower.contains('"statuscode"') && lower.contains('"timestamp"')) ||
+        lower.contains('firebaseautherror.fromservererror') ||
+        lower.contains('/node_modules/') ||
+        lower.contains(' at /workspace/') ||
+        lower.contains('process.processticksandrejections');
   }
 }
 
