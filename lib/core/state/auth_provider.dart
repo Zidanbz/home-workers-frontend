@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart'; // opsional: untuk debug/snackbar
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
@@ -51,7 +50,8 @@ class AuthProvider with ChangeNotifier {
   // State
   // ---------------------------------------------------------------------------
   User? _user;
-  String? _token; // idToken dari backend (Firebase ID token). Dipakai untuk API bearer.
+  String?
+  _token; // idToken dari backend (Firebase ID token). Dipakai untuk API bearer.
   String? _refreshToken;
   DateTime? _tokenExpiry;
   Timer? _refreshTimer;
@@ -104,6 +104,16 @@ class AuthProvider with ChangeNotifier {
     return DateTime.now().add(const Duration(minutes: 45));
   }
 
+  DateTime? _safeExpiryFromToken(String? token) {
+    if (token == null || token.isEmpty) return null;
+    try {
+      return JwtDecoder.getExpirationDate(token);
+    } catch (e) {
+      debugPrint('Token expiry parse failed: $e');
+      return null;
+    }
+  }
+
   void _scheduleTokenRefresh() {
     _refreshTimer?.cancel();
     final expiry = _tokenExpiry;
@@ -112,7 +122,9 @@ class AuthProvider with ChangeNotifier {
 
     final refreshAt = expiry.subtract(_refreshBuffer);
     final now = DateTime.now();
-    final delay = refreshAt.isAfter(now) ? refreshAt.difference(now) : Duration.zero;
+    final delay = refreshAt.isAfter(now)
+        ? refreshAt.difference(now)
+        : Duration.zero;
 
     _refreshTimer = Timer(delay, () {
       _refreshSession();
@@ -120,7 +132,8 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<bool> _refreshSession() async {
-    final refreshToken = _refreshToken ?? await _storageService.readRefreshToken();
+    final refreshToken =
+        _refreshToken ?? await _storageService.readRefreshToken();
     if (refreshToken == null) return false;
 
     try {
@@ -167,10 +180,14 @@ class AuthProvider with ChangeNotifier {
     final storedExpiry = await _storageService.readTokenExpiry();
 
     _refreshToken = storedRefreshToken;
-    _tokenExpiry =
-        storedExpiry ?? (storedToken != null ? JwtDecoder.getExpirationDate(storedToken) : null);
+    _tokenExpiry = storedExpiry ?? _safeExpiryFromToken(storedToken);
 
-    if (storedToken != null && !JwtDecoder.isExpired(storedToken)) {
+    final tokenLooksValid =
+        storedToken != null && _safeExpiryFromToken(storedToken) != null;
+    final tokenNotExpired =
+        tokenLooksValid && !JwtDecoder.isExpired(storedToken);
+
+    if (tokenNotExpired) {
       try {
         final userProfile = await _apiService.getMyProfile(storedToken);
         _user = userProfile;
@@ -205,26 +222,40 @@ class AuthProvider with ChangeNotifier {
         }
       }
     }
+
+    if (storedToken != null && !tokenLooksValid) {
+      // Bersihkan token lama/invalid agar startup berikutnya tidak macet.
+      await _storageService.deleteAll();
+    }
   }
 
   // ---------------------------------------------------------------------------
   // Init / Auto Login
   // ---------------------------------------------------------------------------
   Future<void> initializeApp() async {
-    final prefs = await SharedPreferences.getInstance();
-    _hasSeenOnboarding = prefs.getBool('hasSeenOnboarding') ?? false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _hasSeenOnboarding = prefs.getBool('hasSeenOnboarding') ?? false;
 
-    await _restoreSession();
-
-    _isLoading = false;
-    notifyListeners();
+      await _restoreSession();
+    } catch (e) {
+      debugPrint('initializeApp failed: $e');
+      // Jangan biarkan root app terkunci di splash saat startup error.
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> tryAutoLogin() async {
-    await _restoreSession();
-
-    _isLoading = false;
-    notifyListeners();
+    try {
+      await _restoreSession();
+    } catch (e) {
+      debugPrint('tryAutoLogin failed: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -585,9 +616,7 @@ class AuthProvider with ChangeNotifier {
           '✅ [_startRealtimeChats] Chat listener started successfully',
         );
       } catch (e) {
-        debugPrint(
-          '❌ [_startRealtimeChats] Failed to start chat listener: $e',
-        );
+        debugPrint('❌ [_startRealtimeChats] Failed to start chat listener: $e');
       }
     });
   }

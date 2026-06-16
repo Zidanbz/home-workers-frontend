@@ -16,7 +16,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.1+1
+version: 1.0.2+14
 
 environment:
   sdk: ^3.8.1
@@ -61,15 +61,19 @@ dependencies:
   file_picker: ^10.2.0
   google_sign_in: ^7.1.0
   cloud_firestore: ^5.6.11
-  midtrans_sdk: ^1.0.1
   webview_flutter: ^4.13.0
+  webview_flutter_android: ^4.10.11
   flutter_dotenv: ^5.1.0
   dio: ^5.8.0+1
   path: ^1.9.1
   firebase_messaging: ^15.2.9
+  firebase_remote_config: ^5.4.5
+  package_info_plus: ^8.3.0
+  url_launcher: ^6.3.1
   flutter_local_notifications: ^19.4.0
   encrypt: ^5.0.3
   crypto: ^3.0.3
+  cached_network_image: ^3.3.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -95,6 +99,7 @@ flutter:
   assets:
     - assets/
     - .env
+    - .env.sandbox
   #   - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see
@@ -125,27 +130,24 @@ flutter:
 flutter_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/logo_howe_new.png"
+  image_path: "assets/logo_howe.png"
   adaptive_icon_background: "#1A374D"
-  adaptive_icon_foreground: "assets/logo_howe_new.png"
+  adaptive_icon_foreground: "assets/logo_howe.png"
 
 flutter_native_splash:
-  # Warna background splash screen disesuaikan dengan logo
-  color: "#F4F7FB" # Warna terang agar logo lebih kontras
-
-  # Path ke gambar logo asli dengan warna original
-  image: assets/logo_howe.png
-
-  # Tambahkan konfigurasi untuk mempertahankan warna logo
-  branding: assets/logo_howe.png
-  branding_mode: bottom
-
-  # Kontrol ukuran logo agar tidak terlalu besar
+  color: "#1A374D"
+  color_dark: "#1A374D"
+  image: assets/logo_howe_splash.png
+  image_dark: assets/logo_howe_splash.png
+  android: true
+  ios: true
+  web: true
   android_gravity: center
-  ios_content_mode: scaleAspectFit
+  ios_content_mode: center
   android_screen_orientation: portrait
 
-  # Konfigurasi untuk Android 12+
   android_12:
-    image: assets/logo_howe.png
-    color: "#F4F7FB"
+    image: assets/logo_howe_splash_android12.png
+    image_dark: assets/logo_howe_splash_android12.png
+    icon_background_color: "#1A374D"
+    icon_background_color_dark: "#1A374D"

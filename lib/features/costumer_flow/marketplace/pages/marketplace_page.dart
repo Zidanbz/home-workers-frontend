@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:home_workers_fe/features/costumer_flow/chat/pages/customer_chat_list_page.dart';
 import 'package:home_workers_fe/features/costumer_flow/marketplace/pages/marketplace_detail_page.dart';
 import 'package:home_workers_fe/features/notifications/pages/notification_page.dart';
@@ -16,12 +17,16 @@ class MarketplacePage extends StatefulWidget {
   State<MarketplacePage> createState() => _MarketplacePageState();
 }
 
-class _MarketplacePageState extends State<MarketplacePage> {
+class _MarketplacePageState extends State<MarketplacePage>
+    with AutomaticKeepAliveClientMixin {
   final ApiService _apiService = ApiService();
   late Future<List<Service>> _servicesFuture;
   String _searchQuery = '';
   String _selectedCategory = '';
   String _selectedSort = 'default';
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -39,6 +44,7 @@ class _MarketplacePageState extends State<MarketplacePage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: const Color(0xFFFFFFFF),
       appBar: AppBar(
@@ -132,6 +138,7 @@ class _MarketplacePageState extends State<MarketplacePage> {
                   }
 
                   return ListView.builder(
+                    key: const PageStorageKey('marketplace-list'),
                     padding: const EdgeInsets.all(20.0),
                     itemCount: filteredServices.length,
                     itemBuilder: (context, index) {
@@ -306,12 +313,23 @@ class _ServiceCard extends StatelessWidget {
               // Foto
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  service.fotoUtamaUrl,
+                child: CachedNetworkImage(
+                  imageUrl: service.fotoUtamaUrl,
                   width: 80,
                   height: 80,
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
+                  placeholder: (context, _) => Container(
+                    width: 80,
+                    height: 80,
+                    color: const Color(0xFFEAEAEA),
+                    alignment: Alignment.center,
+                    child: const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                  errorWidget: (context, _, __) => Container(
                     width: 80,
                     height: 80,
                     color: const Color(0xFFD9D9D9),

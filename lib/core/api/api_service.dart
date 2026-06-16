@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:home_workers_fe/core/models/address_model.dart';
 import 'package:home_workers_fe/core/models/chat_model.dart';
 import 'package:home_workers_fe/core/models/message_model.dart';
@@ -15,7 +16,8 @@ import 'package:http/http.dart' as http;
 import '../models/service_model.dart'; // Impor model yang baru kita buat
 
 class ApiService {
-  final String _baseUrl = 'https://api-eh5nicgdhq-uc.a.run.app/api';
+  final String _baseUrl =
+      dotenv.env['API_BASE_URL'] ?? 'https://api-eh5nicgdhq-uc.a.run.app/api';
 
   // Fungsi login (tidak berubah)
   Future<Map<String, dynamic>> loginUser({
@@ -474,6 +476,33 @@ class ApiService {
         throw _asException(responseBody['message'] ?? 'Failed to add address');
       }
     } catch (e) {
+      throw _asException('Failed to connect to the server.');
+    }
+  }
+
+  Future<void> deleteAddress({
+    required String token,
+    required String addressId,
+  }) async {
+    final url = Uri.parse('$_baseUrl/users/me/addresses/$addressId');
+    try {
+      final response = await http.delete(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      final responseBody = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseBody['success'] == true) {
+        return;
+      }
+
+      throw _asException(responseBody['message'] ?? 'Failed to delete address');
+    } catch (e) {
+      if (e is Exception) rethrow;
       throw _asException('Failed to connect to the server.');
     }
   }
@@ -1283,6 +1312,11 @@ class ApiService {
     required DateTime jadwalPerbaikan,
     required String catatan,
     String? voucherCode,
+    String? locationMode,
+    String? savedAddressId,
+    String? customAddress,
+    double? customLatitude,
+    double? customLongitude,
   }) async {
     print('🚀 [createOrderWithPayment] Starting payment process');
     print('🔗 [createOrderWithPayment] Service ID: $serviceId');
@@ -1298,6 +1332,11 @@ class ApiService {
       'jadwalPerbaikan': jadwalPerbaikan.toIso8601String(),
       'catatan': catatan ?? '',
       if (voucherCode != null) 'voucherCode': voucherCode,
+      if (locationMode != null) 'locationMode': locationMode,
+      if (savedAddressId != null) 'savedAddressId': savedAddressId,
+      if (customAddress != null) 'customAddress': customAddress,
+      if (customLatitude != null) 'customLatitude': customLatitude,
+      if (customLongitude != null) 'customLongitude': customLongitude,
     };
 
     print(
@@ -1392,12 +1431,25 @@ class ApiService {
       headers: {'Authorization': 'Bearer $token'},
     );
 
-    final data = jsonDecode(response.body);
-    if (response.statusCode == 200) {
-      return data['data'];
-    } else {
-      throw _asException('Gagal mengambil status transaksi Midtrans');
+    Map<String, dynamic>? decoded;
+    try {
+      if (response.body.isNotEmpty) {
+        final parsed = jsonDecode(response.body);
+        if (parsed is Map<String, dynamic>) decoded = parsed;
+      }
+    } catch (_) {
+      // Ignore; we'll fall back to generic error below.
     }
+
+    if (response.statusCode == 200) {
+      return decoded?['data'] as Map<String, dynamic>? ?? <String, dynamic>{};
+    }
+
+    final serverMessage = decoded?['message']?.toString().trim();
+    final message = (serverMessage != null && serverMessage.isNotEmpty)
+        ? serverMessage
+        : 'Gagal mengambil status transaksi Midtrans (HTTP ${response.statusCode}).';
+    throw _asException(message);
   }
 
   Future<List<String>> getBookedSlots({

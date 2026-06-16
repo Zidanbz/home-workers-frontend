@@ -7,6 +7,10 @@ Folder ini dipakai untuk dokumentasi project frontend.
 - `docs/api`: dokumentasi contract API yang dipakai frontend.
 - `docs/ui`: dokumentasi alur layar, state, dan behavior UI.
 - `docs/changelog`: catatan perubahan per tanggal rilis.
+- [`docs/play-store-release-notes.md`](play-store-release-notes.md): panduan nama rilis, penamaan, dan format catatan rilis di Google Play Store (bug fix, fitur baru, dll.).
+- [`docs/environment-and-mandatory-update.md`](environment-and-mandatory-update.md): pemisahan lingkungan API (dev/prod) di frontend dan konsep pembaruan wajib lewat Play Store / Remote Config.
+- [`docs/version-bump-checklist.md`](version-bump-checklist.md): langkah menaikkan versi (`pubspec.yaml`), build CLI, Remote Config, dan Play Console.
+- [`docs/force-update-remote-config.md`](force-update-remote-config.md): panduan Firebase Remote Config untuk layar wajib update (parameter, arti angka, contoh, alur rilis).
 
 ## Aturan Singkat
 

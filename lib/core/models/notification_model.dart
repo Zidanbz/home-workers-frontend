@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class NotificationItem {
   final String id;
@@ -21,14 +22,7 @@ class NotificationItem {
   });
 
   factory NotificationItem.fromJson(Map<String, dynamic> json) {
-    DateTime parsedTimestamp;
-    if (json['timestamp'] != null && json['timestamp']['_seconds'] != null) {
-      parsedTimestamp = DateTime.fromMillisecondsSinceEpoch(
-        json['timestamp']['_seconds'] * 1000,
-      );
-    } else {
-      parsedTimestamp = DateTime.now();
-    }
+    final parsedTimestamp = _parseTimestamp(json['timestamp']) ?? DateTime.now();
     return NotificationItem(
       id: json['id'] ?? '',
       title: json['title'] ?? '',
@@ -40,6 +34,40 @@ class NotificationItem {
     );
   }
 
+  static DateTime? _parseTimestamp(dynamic value) {
+    if (value == null) return null;
+
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+
+    // Firestore JSON-like timestamp format (REST/serialized): { _seconds: ..., _nanoseconds: ... }
+    if (value is Map) {
+      final seconds = value['_seconds'] ?? value['seconds'];
+      if (seconds is int) {
+        return DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
+      }
+      if (seconds is num) {
+        return DateTime.fromMillisecondsSinceEpoch(seconds.toInt() * 1000);
+      }
+    }
+
+    if (value is String) return DateTime.tryParse(value);
+    if (value is int) {
+      // Heuristic: treat large ints as milliseconds, small as seconds.
+      if (value > 1000000000000) {
+        return DateTime.fromMillisecondsSinceEpoch(value);
+      }
+      if (value > 1000000000) {
+        return DateTime.fromMillisecondsSinceEpoch(value * 1000);
+      }
+    }
+    if (value is num) {
+      return DateTime.fromMillisecondsSinceEpoch(value.toInt());
+    }
+
+    return null;
+  }
+
   // Helper untuk mendapatkan ikon dan warna berdasarkan tipe notifikasi
   IconData get icon {
     switch (type) {
@@ -48,6 +76,8 @@ class NotificationItem {
       case 'service_rejected':
         return Icons.cancel_outlined;
       case 'new_order':
+        return Icons.receipt_long_outlined;
+      case 'order_update':
         return Icons.receipt_long_outlined;
       case 'promo':
         return Icons.campaign_outlined;
@@ -63,6 +93,8 @@ class NotificationItem {
       case 'service_rejected':
         return Colors.red.shade700;
       case 'new_order':
+        return Colors.deepPurple;
+      case 'order_update':
         return Colors.deepPurple;
       case 'promo':
         return Colors.blue.shade700;

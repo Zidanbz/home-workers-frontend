@@ -13,3 +13,7 @@ Dokumentasi alur UI per fitur.
 ## Template Cepat
 
 Gunakan `docs/ui/TEMPLATE.md` untuk flow baru.
+
+## Daftar Dokumen
+
+- `docs/ui/worker-flow.md`: alur worker dari daftar sampai selesai pekerjaan.

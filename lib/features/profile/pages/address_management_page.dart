@@ -15,6 +15,7 @@ class AddressManagementPage extends StatefulWidget {
 class _AddressManagementPageState extends State<AddressManagementPage> {
   final ApiService _apiService = ApiService();
   late Future<List<Address>> _addressesFuture;
+  bool _isDeleting = false;
 
   @override
   void initState() {
@@ -30,6 +31,56 @@ class _AddressManagementPageState extends State<AddressManagementPage> {
       });
     } else {
       _addressesFuture = Future.error('Anda tidak terautentikasi.');
+    }
+  }
+
+  Future<void> _deleteAddress(Address address) async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final token = authProvider.token;
+    if (token == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Hapus Alamat'),
+        content: Text(
+          'Yakin ingin menghapus alamat "${address.label}"?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isDeleting = true);
+    try {
+      await _apiService.deleteAddress(token: token, addressId: address.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Alamat berhasil dihapus.')),
+      );
+      _loadAddresses();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ApiService.readableError(e, action: 'Gagal menghapus alamat'),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isDeleting = false);
     }
   }
 
@@ -92,10 +143,11 @@ class _AddressManagementPageState extends State<AddressManagementPage> {
                     ),
                     subtitle: Text(address.fullAddress),
                     trailing: IconButton(
-                      icon: const Icon(Icons.more_vert),
-                      onPressed: () {
-                        // TODO: Tampilkan opsi edit/hapus
-                      },
+                      icon: const Icon(Icons.delete_outline),
+                      color: Colors.red,
+                      onPressed: _isDeleting
+                          ? null
+                          : () => _deleteAddress(address),
                     ),
                   ),
                 );
@@ -105,8 +157,8 @@ class _AddressManagementPageState extends State<AddressManagementPage> {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          final result = Navigator.of(context).push<bool>(
+        onPressed: () async {
+          final result = await Navigator.of(context).push<bool>(
             MaterialPageRoute(builder: (context) => const AddAddressPage()),
           );
           // Jika halaman tambah alamat kembali dengan nilai true, refresh daftar alamat

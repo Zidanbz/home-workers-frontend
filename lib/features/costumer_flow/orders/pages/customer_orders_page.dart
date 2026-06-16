@@ -236,6 +236,7 @@ class _CustomerOrdersPageState extends State<CustomerOrdersPage>
           final ongoingOrders = allOrders
               .where(
                 (o) => [
+                  'awaiting_payment',
                   'pending',
                   'accepted',
                   'quote_proposed',
@@ -379,6 +380,8 @@ class _OrderCard extends StatelessWidget {
 
   Color _statusColor(String status) {
     switch (status) {
+      case 'awaiting_payment':
+        return const Color(0xFFE91E63);
       case 'pending':
         return const Color(0xFFFF9800);
       case 'accepted':
@@ -400,6 +403,8 @@ class _OrderCard extends StatelessWidget {
 
   IconData _statusIcon(String status) {
     switch (status) {
+      case 'awaiting_payment':
+        return Icons.payments_rounded;
       case 'pending':
         return Icons.access_time_rounded;
       case 'accepted':
@@ -422,6 +427,8 @@ class _OrderCard extends StatelessWidget {
 
   String _statusText(String status) {
     switch (status) {
+      case 'awaiting_payment':
+        return 'Menunggu Pembayaran';
       case 'pending':
         return 'Menunggu Konfirmasi';
       case 'accepted':

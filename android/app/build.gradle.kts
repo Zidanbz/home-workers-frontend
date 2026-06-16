@@ -1,11 +1,66 @@
 import java.util.Properties
 import java.io.FileInputStream
+import java.util.Base64
 
 plugins {
     id("com.android.application")
     id("com.google.gms.google-services") // FlutterFire
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin") // Harus terakhir
+}
+
+fun decodeDartDefines(raw: String?): Map<String, String> {
+    if (raw.isNullOrBlank()) return emptyMap()
+
+    return raw
+        .split(",")
+        .mapNotNull { encoded ->
+            runCatching {
+                String(Base64.getDecoder().decode(encoded))
+            }.getOrNull()
+        }
+        .mapNotNull { entry ->
+            val separatorIndex = entry.indexOf('=')
+            if (separatorIndex <= 0) {
+                null
+            } else {
+                entry.substring(0, separatorIndex) to entry.substring(separatorIndex + 1)
+            }
+        }
+        .toMap()
+}
+
+tasks.matching { task ->
+    task.name.contains("GoogleServices", ignoreCase = true)
+}.configureEach {
+    doFirst {
+        val runtimeDartDefines =
+            decodeDartDefines(project.findProperty("dart-defines") as String?)
+        val runtimeAppEnv = runtimeDartDefines["APP_ENV"]?.lowercase() ?: "prod"
+        val runtimeGoogleServicesSourceFileName =
+            if (runtimeAppEnv == "sandbox") {
+                "google-services-dev.json"
+            } else {
+                "google-services-prod.json"
+            }
+        val runtimeGoogleServicesSourceFile = file(runtimeGoogleServicesSourceFileName)
+
+        if (!runtimeGoogleServicesSourceFile.exists()) {
+            error(
+                "File Firebase config tidak ditemukan: ${runtimeGoogleServicesSourceFile.absolutePath}"
+            )
+        }
+
+        copy {
+            from(runtimeGoogleServicesSourceFile)
+            into(project.projectDir)
+            rename { "google-services.json" }
+        }
+
+        println(
+            "Using ${runtimeGoogleServicesSourceFile.name} for APP_ENV=$runtimeAppEnv"
+        )
+    }
 }
 
 // ⬇️ Load dari key.properties

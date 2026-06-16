@@ -534,7 +534,7 @@ class _OrderCard extends StatelessWidget {
     if (!_isCompletedStatus()) return false;
     final completedAt = order.completedAt;
     if (completedAt == null) return true;
-    return DateTime.now().difference(completedAt) <= const Duration(days: 3);
+    return DateTime.now().difference(completedAt) <= const Duration(days: 7);
   }
 
   Future<void> _handleAction(BuildContext context) async {

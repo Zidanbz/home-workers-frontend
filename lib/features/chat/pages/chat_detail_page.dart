@@ -145,9 +145,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
           });
         }
         if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
               ApiService.readableError(e, action: 'Gagal mengirim pesan'),
@@ -217,12 +215,16 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.lock_outline, color: Colors.orange.shade600, size: 18),
+                  Icon(
+                    Icons.lock_outline,
+                    color: Colors.orange.shade600,
+                    size: 18,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       widget.readOnlyMessage ??
-                          'Chat hanya tersedia sampai 3 hari setelah pesanan selesai.',
+                          'Chat hanya tersedia sampai 7 hari setelah pesanan selesai.',
                       style: TextStyle(
                         color: Colors.orange.shade700,
                         fontSize: 12.5,
@@ -244,8 +246,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                     itemCount: _messages.length,
                     itemBuilder: (context, index) {
                       final message = _messages[index];
-                      final bool isSentByMe =
-                          message.senderId == currentUserId;
+                      final bool isSentByMe = message.senderId == currentUserId;
                       return _buildMessageBubble(message, isSentByMe);
                     },
                   ),
@@ -270,15 +271,20 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
             padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: primaryColor.withOpacity(0.15), width: 2),
+              border: Border.all(
+                color: primaryColor.withOpacity(0.15),
+                width: 2,
+              ),
             ),
             child: CircleAvatar(
               radius: 18,
-              backgroundImage: (widget.avatarUrl.isNotEmpty)
+              backgroundImage: widget.avatarUrl.isNotEmpty
                   ? NetworkImage(widget.avatarUrl)
-                  : const AssetImage('assets/default_profile.png')
-                        as ImageProvider,
+                  : null,
               backgroundColor: Colors.grey.shade200,
+              child: widget.avatarUrl.isEmpty
+                  ? const Icon(Icons.person, color: primaryColor, size: 18)
+                  : null,
             ),
           ),
           const SizedBox(width: 12),
@@ -296,7 +302,9 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
               Text(
                 widget.readOnly ? 'Read-only' : 'Online',
                 style: TextStyle(
-                  color: widget.readOnly ? Colors.orange.shade700 : mutedTextColor,
+                  color: widget.readOnly
+                      ? Colors.orange.shade700
+                      : mutedTextColor,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
@@ -323,8 +331,9 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   Widget _buildMessageBubble(Message message, bool isSentByMe) {
     final color = isSentByMe ? sentBubbleColor : receivedBubbleColor;
     final textColor = isSentByMe ? Colors.white : const Color(0xFF1F2937);
-    final bubbleAlignment =
-        isSentByMe ? MainAxisAlignment.end : MainAxisAlignment.start;
+    final bubbleAlignment = isSentByMe
+        ? MainAxisAlignment.end
+        : MainAxisAlignment.start;
     final timeText = DateFormat('HH:mm').format(message.timestamp);
 
     return Padding(
@@ -347,23 +356,28 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                 radius: 14,
                 backgroundImage: widget.avatarUrl.isNotEmpty
                     ? NetworkImage(widget.avatarUrl)
-                    : const AssetImage('assets/default_profile.png')
-                          as ImageProvider,
+                    : null,
                 backgroundColor: Colors.grey.shade200,
+                child: widget.avatarUrl.isEmpty
+                    ? const Icon(Icons.person, color: primaryColor, size: 14)
+                    : null,
               ),
             ),
             const SizedBox(width: 8),
           ],
           Column(
-            crossAxisAlignment:
-                isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            crossAxisAlignment: isSentByMe
+                ? CrossAxisAlignment.end
+                : CrossAxisAlignment.start,
             children: [
               Container(
                 constraints: BoxConstraints(
                   maxWidth: MediaQuery.of(context).size.width * 0.68,
                 ),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: color,
                   borderRadius: BorderRadius.only(
@@ -405,11 +419,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                   if (isSentByMe) ...[
                     const SizedBox(width: 6),
                     if (message.id.startsWith('local_'))
-                      Icon(
-                        Icons.access_time,
-                        size: 13,
-                        color: mutedTextColor,
-                      )
+                      Icon(Icons.access_time, size: 13, color: mutedTextColor)
                     else
                       Icon(
                         message.readAt != null ? Icons.done_all : Icons.check,
@@ -441,11 +451,8 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
               Expanded(
                 child: Text(
                   widget.readOnlyMessage ??
-                      'Chat hanya tersedia sampai 3 hari setelah pesanan selesai.',
-                  style: TextStyle(
-                    color: Colors.grey.shade700,
-                    fontSize: 13,
-                  ),
+                      'Chat hanya tersedia sampai 7 hari setelah pesanan selesai.',
+                  style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
                 ),
               ),
             ],

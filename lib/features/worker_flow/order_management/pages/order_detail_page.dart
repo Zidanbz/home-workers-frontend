@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:home_workers_fe/shared_widgets/action_tap_guard.dart';
 import '../../../../core/api/api_service.dart';
 import '../../../../core/models/order_model.dart';
@@ -274,6 +275,29 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     }
   }
 
+  Future<void> _openDirections(Order order) async {
+    if (order.coordinates == null) return;
+
+    final lat = order.coordinates!.latitude;
+    final lng = order.coordinates!.longitude;
+    final directionsUrl = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving',
+    );
+
+    final opened = await launchUrl(
+      directionsUrl,
+      mode: LaunchMode.externalApplication,
+    );
+
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tidak bisa membuka aplikasi peta.'),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -397,6 +421,23 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                 ),
               },
               zoomControlsEnabled: true,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () => _openDirections(order),
+            icon: const Icon(Icons.directions_rounded),
+            label: const Text('Tunjukkan Arah'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1A374D),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
           ),
         ),

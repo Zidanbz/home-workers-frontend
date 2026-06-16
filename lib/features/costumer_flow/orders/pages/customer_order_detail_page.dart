@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:home_workers_fe/core/api/api_service.dart';
 import 'package:home_workers_fe/core/helper/voucher_helper.dart';
 import 'package:home_workers_fe/core/state/auth_provider.dart';
@@ -33,7 +34,8 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
   bool _isLoading = false;
   final ApiService _apiService = ApiService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _orderSubscription;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+  _orderSubscription;
   bool _isRealtimeActive = false;
 
   // Voucher state
@@ -83,7 +85,9 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
     final token = authProvider.token;
     final quotedPrice = (_order.quotedPrice ?? 0).toInt();
 
-    print('DEBUG: _validateAndApplyVoucher - voucherCode: $voucherCode, quotedPrice: $quotedPrice');
+    print(
+      'DEBUG: _validateAndApplyVoucher - voucherCode: $voucherCode, quotedPrice: $quotedPrice',
+    );
 
     try {
       final result = await _apiService.validateVoucherCode(
@@ -95,7 +99,8 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
       print('DEBUG: _validateAndApplyVoucher - result: $result');
 
       final discount = (result['discount'] ?? 0) as int;
-      final finalTotal = (result['finalTotal'] ?? (quotedPrice - discount)) as int;
+      final finalTotal =
+          (result['finalTotal'] ?? (quotedPrice - discount)) as int;
 
       setState(() {
         _discount = discount;
@@ -195,15 +200,15 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => VoucherDetailPage(
-                                  voucher: voucher,
-                                ),
+                                builder: (_) =>
+                                    VoucherDetailPage(voucher: voucher),
                               ),
                             );
                           },
                           child: const Text('Details'),
                           style: TextButton.styleFrom(
-                            foregroundColor: CustomerOrderDetailPage.primaryColor,
+                            foregroundColor:
+                                CustomerOrderDetailPage.primaryColor,
                           ),
                         ),
                         onTap: () {
@@ -322,8 +327,7 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
       _order.jadwalPerbaikan,
     );
     final dibuatPada = _parseTimestamp(data['dibuatPada'], _order.dibuatPada);
-    final shouldFetchVouchers =
-        status == 'quote_accepted' && _vouchers.isEmpty;
+    final shouldFetchVouchers = status == 'quote_accepted' && _vouchers.isEmpty;
 
     if (!mounted) return;
     setState(() {
@@ -408,7 +412,7 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
     if (!_isOrderCompleted(order.status)) return true;
     final completedAt = order.completedAt;
     if (completedAt == null) return true;
-    return DateTime.now().difference(completedAt) <= const Duration(days: 3);
+    return DateTime.now().difference(completedAt) <= const Duration(days: 7);
   }
 
   String? _chatBlockedReason() {
@@ -417,7 +421,7 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
       return 'Chat tersedia setelah pembayaran berhasil.';
     }
     if (_isOrderCompleted(_order.status) && !_isWithinChatWindow(_order)) {
-      return 'Chat sudah ditutup. Maksimal 3 hari setelah pesanan selesai.';
+      return 'Chat sudah ditutup. Maksimal 7 hari setelah pesanan selesai.';
     }
     return null;
   }
@@ -528,16 +532,61 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
         orderId: _order.id,
         voucherCode: _appliedVoucherCode,
       );
-      final snapToken = paymentData['snapToken'];
+      final snapToken = paymentData['snapToken']?.toString();
+      if (snapToken == null || snapToken.isEmpty) {
+        throw Exception('Token pembayaran tidak diterima dari server.');
+      }
+
+      final redirectUrlFromServer = paymentData['redirectUrl']?.toString();
+      final midtransOrderId =
+          paymentData['midtransOrderId']?.toString() ?? 'quote_${_order.id}';
+      final snapHost = dotenv.env['MIDTRANS_SNAP_HOST'] ?? 'app.midtrans.com';
       final snapRedirectUrl =
-          "https://app.midtrans.com/snap/v2/vtweb/$snapToken";
+          (redirectUrlFromServer != null && redirectUrlFromServer.isNotEmpty)
+          ? redirectUrlFromServer
+          : "https://$snapHost/snap/v2/vtweb/$snapToken";
+
+      // Guard: kalau app run sandbox tapi backend masih mengembalikan URL production.
+      const appEnv = String.fromEnvironment('APP_ENV', defaultValue: 'prod');
+      final isSandboxApp = appEnv.toLowerCase() == 'sandbox';
+      final redirectHost = Uri.tryParse(snapRedirectUrl)?.host ?? '';
+      final isSandboxRedirect = redirectHost.contains('sandbox.midtrans.com');
+      if (isSandboxApp && !isSandboxRedirect) {
+        print(
+          '⚠️ [CustomerOrderDetailPage] APP_ENV=sandbox tapi redirectUrl production. '
+          'Cek API_BASE_URL & deploy backend dev (howek-dev) + MIDTRANS_IS_PRODUCTION=false.',
+        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Mode sandbox aktif, tapi link pembayaran masih production. Cek API_BASE_URL dan pastikan backend dev memakai Midtrans sandbox.',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        });
+      }
+
+      final resolvedHost = Uri.tryParse(snapRedirectUrl)?.host;
+      if (resolvedHost != null &&
+          resolvedHost.isNotEmpty &&
+          resolvedHost != snapHost) {
+        print(
+          '⚠️ [CustomerOrderDetailPage] Redirect host mismatch. envHost=$snapHost, redirectHost=$resolvedHost',
+        );
+      }
 
       if (!mounted) return;
 
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => SnapPaymentPage(redirectUrl: snapRedirectUrl),
+          builder: (_) => SnapPaymentPage(
+            redirectUrl: snapRedirectUrl,
+            orderId: midtransOrderId,
+          ),
         ),
       );
 
@@ -547,10 +596,7 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              ApiService.readableError(
-                e,
-                action: 'Gagal memulai pembayaran',
-              ),
+              ApiService.readableError(e, action: 'Gagal memulai pembayaran'),
             ),
           ),
         );
@@ -585,10 +631,7 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              ApiService.readableError(
-                e,
-                action: 'Gagal memproses penawaran',
-              ),
+              ApiService.readableError(e, action: 'Gagal memproses penawaran'),
             ),
           ),
         );
@@ -788,8 +831,14 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
                       _order.workerAvatar != null &&
                           _order.workerAvatar!.isNotEmpty
                       ? NetworkImage(_order.workerAvatar!)
-                      : const AssetImage('assets/default_profile.png')
-                            as ImageProvider,
+                      : null,
+                  backgroundColor: Colors.grey.shade200,
+                  child: (_order.workerAvatar?.isEmpty ?? true)
+                      ? const Icon(
+                          Icons.person,
+                          color: CustomerOrderDetailPage.primaryColor,
+                        )
+                      : null,
                 ),
                 const SizedBox(width: 12),
                 Expanded(child: Text(_order.workerName!)),
@@ -841,8 +890,9 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
                     }
                   },
                   style: TextButton.styleFrom(
-                    foregroundColor:
-                        canChat ? CustomerOrderDetailPage.primaryColor : Colors.grey,
+                    foregroundColor: canChat
+                        ? CustomerOrderDetailPage.primaryColor
+                        : Colors.grey,
                   ),
                   icon: const Icon(Icons.chat_outlined),
                   label: Text(canChat ? 'Chat' : 'Chat Nonaktif'),
@@ -1073,10 +1123,7 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
                 const SizedBox(height: 4),
                 Text(
                   step.description,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
               ],
             ),
@@ -1087,23 +1134,25 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
   }
 
   Widget _buildRealtimeIndicator() {
-    final Color indicatorColor =
-        _isRealtimeActive ? const Color(0xFF4CAF50) : Colors.grey;
-    final String label =
-        _isRealtimeActive ? 'Realtime aktif' : 'Menghubungkan pembaruan...';
+    final Color indicatorColor = _isRealtimeActive
+        ? const Color(0xFF4CAF50)
+        : Colors.grey;
+    final String label = _isRealtimeActive
+        ? 'Realtime aktif'
+        : 'Menghubungkan pembaruan...';
 
     return Row(
       children: [
         Container(
           width: 8,
           height: 8,
-          decoration: BoxDecoration(color: indicatorColor, shape: BoxShape.circle),
+          decoration: BoxDecoration(
+            color: indicatorColor,
+            shape: BoxShape.circle,
+          ),
         ),
         const SizedBox(width: 8),
-        Text(
-          label,
-          style: TextStyle(fontSize: 12, color: indicatorColor),
-        ),
+        Text(label, style: TextStyle(fontSize: 12, color: indicatorColor)),
       ],
     );
   }
@@ -1180,10 +1229,7 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
               const SizedBox(width: 8),
               const Text(
                 'Rincian Harga',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
             ],
           ),
@@ -1191,10 +1237,7 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Harga yang Diajukan',
-                style: TextStyle(fontSize: 14),
-              ),
+              const Text('Harga yang Diajukan', style: TextStyle(fontSize: 14)),
               Text(
                 _formatCurrency(quotedPrice),
                 style: const TextStyle(
@@ -1229,10 +1272,7 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
               children: [
                 const Text(
                   'Total Pembayaran',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 Text(
                   _formatCurrency(finalPrice),
@@ -1277,10 +1317,7 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
               const SizedBox(width: 8),
               const Text(
                 'Pilih Voucher',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
             ],
           ),
@@ -1302,7 +1339,10 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
             InkWell(
               onTap: () => _showVoucherSelectionDialog(),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   border: Border.all(color: Colors.grey.shade400),
                   borderRadius: BorderRadius.circular(12),
@@ -1315,7 +1355,9 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
                             ? _getVoucherDisplayText(_selectedVoucher!)
                             : 'Pilih voucher',
                         style: TextStyle(
-                          color: _selectedVoucher != null ? Colors.black : Colors.grey,
+                          color: _selectedVoucher != null
+                              ? Colors.black
+                              : Colors.grey,
                         ),
                       ),
                     ),
@@ -1330,7 +1372,9 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
               child: Text(
                 _voucherMessage!,
                 style: TextStyle(
-                  color: _appliedVoucherCode != null ? Colors.green : Colors.red,
+                  color: _appliedVoucherCode != null
+                      ? Colors.green
+                      : Colors.red,
                   fontSize: 13,
                 ),
               ),
@@ -1414,7 +1458,11 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded, color: Colors.red.shade600, size: 20),
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.red.shade600,
+                    size: 20,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -1441,8 +1489,12 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
                       );
                     },
               style: ElevatedButton.styleFrom(
-                backgroundColor: isDisabled ? Colors.grey.shade400 : const Color(0xFF2196F3),
-                foregroundColor: isDisabled ? Colors.grey.shade600 : Colors.white,
+                backgroundColor: isDisabled
+                    ? Colors.grey.shade400
+                    : const Color(0xFF2196F3),
+                foregroundColor: isDisabled
+                    ? Colors.grey.shade600
+                    : Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -1452,10 +1504,7 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    isDisabled ? Icons.block : Icons.payment,
-                    size: 20,
-                  ),
+                  Icon(isDisabled ? Icons.block : Icons.payment, size: 20),
                   const SizedBox(width: 8),
                   Text(
                     isDisabled ? 'Pembayaran Dinonaktifkan' : 'Bayar Sekarang',

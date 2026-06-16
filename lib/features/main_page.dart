@@ -8,9 +8,7 @@ import 'package:home_workers_fe/features/costumer_flow/orders/pages/customer_ord
 import 'package:home_workers_fe/features/costumer_flow/chat/pages/customer_chat_list_page.dart';
 import 'package:home_workers_fe/features/profile/pages/profile_page.dart';
 import 'package:home_workers_fe/features/worker_flow/order_management/pages/worker_orders_page.dart';
-import '../core/services/realtime_notification_service.dart';
 import '../core/services/chat_service.dart';
-import '../core/state/auth_provider.dart';
 import '../shared_widgets/badge_widget.dart';
 import '../shared_widgets/global_tap_guard.dart';
 
@@ -18,7 +16,6 @@ import '../shared_widgets/global_tap_guard.dart';
 import 'worker_flow/dashboard/pages/worker_dashboard_page.dart';
 import 'worker_flow/service_management/pages/my_jobs_page.dart';
 import 'chat/pages/chat_list_page.dart';
-import 'notifications/pages/notification_page.dart';
 
 class OrdersPage extends StatelessWidget {
   const OrdersPage({super.key});
@@ -31,7 +28,12 @@ class OrdersPage extends StatelessWidget {
 
 class MainPage extends StatefulWidget {
   final String userRole;
-  const MainPage({super.key, required this.userRole});
+  final int initialIndex;
+  const MainPage({
+    super.key,
+    required this.userRole,
+    this.initialIndex = 0,
+  });
 
   @override
   State<MainPage> createState() => _MainPageState();
@@ -46,6 +48,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    _currentIndex = widget.initialIndex;
 
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 200),

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:home_workers_fe/core/models/category_model.dart';
 import 'package:home_workers_fe/core/services/storage_service_page.dart';
 import 'package:provider/provider.dart';
@@ -41,6 +42,8 @@ class CreateEditJobPage extends StatefulWidget {
 enum PaymentMethod { cashless, cash }
 
 PaymentMethod _selectedPaymentMethod = PaymentMethod.cashless;
+
+const int _thumbnailCacheSize = 512;
 
 class _CreateEditJobPageState extends State<CreateEditJobPage>
     with TickerProviderStateMixin {
@@ -532,8 +535,7 @@ class _CreateEditJobPageState extends State<CreateEditJobPage>
   String? _validateCreateFields() {
     if (_selectedCategory == null) return 'Kategori wajib dipilih.';
 
-    final hasImages =
-        _pickedImages.isNotEmpty || _existingImageUrls.isNotEmpty;
+    final hasImages = _pickedImages.isNotEmpty || _existingImageUrls.isNotEmpty;
     if (!hasImages) return 'Foto utama wajib diisi.';
 
     final hasAvailability = _selectedAvailability.values.any(
@@ -570,15 +572,41 @@ class _CreateEditJobPageState extends State<CreateEditJobPage>
   }
 
   Future<void> _handlePhotoUpload() async {
-    final List<XFile> pickedFiles = await ImagePicker().pickMultiImage(
-      imageQuality: 70,
-    );
-    if (pickedFiles.isNotEmpty) {
+    if (_isUploading) return;
+
+    setState(() => _isUploading = true);
+
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      final List<XFile> pickedFiles = await ImagePicker().pickMultiImage(
+        imageQuality: 70,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        requestFullMetadata: false,
+      );
+
+      if (!mounted || pickedFiles.isEmpty) return;
+
       setState(() {
-        _pickedImages.addAll(
-          pickedFiles.map((file) => File(file.path)).toList(),
-        );
+        _pickedImages.addAll(pickedFiles.map((file) => File(file.path)));
       });
+    } on PlatformException catch (e) {
+      if (!mounted) return;
+      _showErrorSnack(
+        messenger,
+        e.message ?? 'Gagal membuka galeri. Coba pilih gambar lagi.',
+      );
+    } catch (_) {
+      if (!mounted) return;
+      _showErrorSnack(
+        messenger,
+        'Terjadi kendala saat memilih gambar. Coba lagi.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isUploading = false);
+      }
     }
   }
 
@@ -1376,6 +1404,15 @@ class _CreateEditJobPageState extends State<CreateEditJobPage>
                   fit: BoxFit.cover,
                   width: double.infinity,
                   height: double.infinity,
+                  cacheWidth: _thumbnailCacheSize,
+                  cacheHeight: _thumbnailCacheSize,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    color: Colors.grey.shade200,
+                    child: Icon(
+                      Icons.broken_image,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -1424,6 +1461,8 @@ Widget _buildModernThumbnail(String url) {
       child: Image.network(
         url,
         fit: BoxFit.cover,
+        cacheWidth: _thumbnailCacheSize,
+        cacheHeight: _thumbnailCacheSize,
         loadingBuilder: (context, child, loadingProgress) {
           if (loadingProgress == null) return child;
           return Container(
@@ -1464,7 +1503,16 @@ Widget _buildModernLocalThumbnail(File file) {
     ),
     child: ClipRRect(
       borderRadius: BorderRadius.circular(16),
-      child: Image.file(file, fit: BoxFit.cover),
+      child: Image.file(
+        file,
+        fit: BoxFit.cover,
+        cacheWidth: _thumbnailCacheSize,
+        cacheHeight: _thumbnailCacheSize,
+        errorBuilder: (context, error, stackTrace) => Container(
+          color: Colors.grey.shade200,
+          child: Icon(Icons.broken_image, color: Colors.grey.shade600),
+        ),
+      ),
     ),
   );
 }

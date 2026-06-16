@@ -480,9 +480,11 @@ class _ChatListPageState extends State<ChatListPage> {
                     radius: 28,
                     backgroundImage: chat.otherUserAvatarUrl.isNotEmpty
                         ? NetworkImage(chat.otherUserAvatarUrl)
-                        : const AssetImage('assets/default_profile.png')
-                              as ImageProvider,
+                        : null,
                     backgroundColor: lightGray.withOpacity(0.3),
+                    child: chat.otherUserAvatarUrl.isEmpty
+                        ? const Icon(Icons.person, color: primaryColor, size: 22)
+                        : null,
                   ),
                 ),
                 const SizedBox(width: 16),
