@@ -52,7 +52,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyByZ_z2fq2TGRKZKFcKrPrEEacLEttpdCY',
-    appId: '1:891691718664:android:411e6ffdbd1e617d1459bd',
+    appId: '1:891691718664:android:08caee9df5a6437d1459bd',
     messagingSenderId: '891691718664',
     projectId: 'home-workers-fa5cd',
     storageBucket: 'home-workers-fa5cd.firebasestorage.app',
@@ -60,7 +60,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyABCQg9Q_tGSFpw004GmrSDveWK7GEG5vY',
-    appId: '1:891691718664:ios:ab0df72ac220feed1459bd',
+    appId: '1:891691718664:ios:577b7321221d4cc81459bd',
     messagingSenderId: '891691718664',
     projectId: 'home-workers-fa5cd',
     storageBucket: 'home-workers-fa5cd.firebasestorage.app',

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/chat_model.dart';
 import '../api/api_service.dart';
@@ -10,21 +9,23 @@ class ChatService extends ChangeNotifier {
   ChatService._internal();
 
   // Services
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final ApiService _apiService = ApiService();
 
   // State
   List<Chat> _chats = [];
-  StreamSubscription<QuerySnapshot>? _chatSubscription;
+  Timer? _chatPollingTimer;
   String? _currentUserId;
   String? _currentToken;
   bool _isInitialized = false;
-  Timer? _refreshDebounce;
+  bool _refreshInProgress = false;
+  int _syncGeneration = 0;
 
   // Getters
   List<Chat> get chats => _chats;
-  int get unreadChatCount => _chats.where((chat) => chat.unreadCount > 0).length;
-  int get totalUnreadMessages => _chats.fold(0, (sum, chat) => sum + chat.unreadCount);
+  int get unreadChatCount =>
+      _chats.where((chat) => chat.unreadCount > 0).length;
+  int get totalUnreadMessages =>
+      _chats.fold(0, (sum, chat) => sum + chat.unreadCount);
   bool get isInitialized => _isInitialized;
 
   /// Initialize chat service
@@ -36,67 +37,55 @@ class ChatService extends ChangeNotifier {
 
   /// Start listening to user's chats in real-time
   Future<void> startListening(String userId, String? token) async {
-    if (_currentUserId == userId && _chatSubscription != null) {
-      print('💬 [ChatService] Already listening for user: $userId');
+    if (_currentUserId == userId && _chatPollingTimer != null) {
+      print('💬 [ChatService] Already syncing for user: $userId');
       return;
     }
 
     // Stop previous subscription
     await stopListening();
 
+    final generation = ++_syncGeneration;
     _currentUserId = userId;
     _currentToken = token;
-    print('💬 [ChatService] Starting real-time listener for user: $userId');
+    print('💬 [ChatService] Starting chat synchronization for user: $userId');
 
     try {
       // Load initial chats from API
       if (token != null) {
-        _chats = await _apiService.getMyChats(token, userId);
+        final chats = await _apiService.getMyChats(token, userId);
+        if (generation != _syncGeneration || _currentUserId != userId) return;
+        _chats = chats;
         notifyListeners();
         print('💬 [ChatService] Loaded ${_chats.length} chats from API');
       }
 
-      // Listen to Firestore chats collection for real-time updates
-      _chatSubscription = _firestore
-          .collection('chats')
-          .where('members', arrayContains: userId)
-          .snapshots()
-          .listen(
-            (snapshot) => _handleChatSnapshot(snapshot),
-            onError: (error) {
-              print('❌ [ChatService] Error listening to chats: $error');
-            },
-          );
+      // Sinkronisasi melalui API menjaga aturan otorisasi tetap berada di
+      // backend dan tidak bergantung pada Firestore Rules milik client.
+      if (generation != _syncGeneration) return;
+      _chatPollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+        unawaited(refreshChats(_currentToken));
+      });
 
-      print('✅ [ChatService] Real-time listener started successfully');
+      print('✅ [ChatService] API synchronization started successfully');
     } catch (e) {
       print('❌ [ChatService] Error starting chat listener: $e');
     }
   }
 
   /// Stop listening to chats
-  Future<void> stopListening() async {
-    await _chatSubscription?.cancel();
-    _chatSubscription = null;
+  Future<void> stopListening({bool clearData = false}) async {
+    _syncGeneration++;
+    _chatPollingTimer?.cancel();
+    _chatPollingTimer = null;
     _currentUserId = null;
     _currentToken = null;
-    _refreshDebounce?.cancel();
-    _refreshDebounce = null;
+    _refreshInProgress = false;
+    if (clearData && _chats.isNotEmpty) {
+      _chats = [];
+      notifyListeners();
+    }
     print('💬 [ChatService] Stopped listening to chats');
-  }
-
-  /// Handle Firestore chat snapshot changes
-  void _handleChatSnapshot(QuerySnapshot _snapshot) {
-    if (_currentToken == null) return;
-    _scheduleRefreshFromApi();
-  }
-
-  void _scheduleRefreshFromApi() {
-    if (_currentToken == null || _currentUserId == null) return;
-    _refreshDebounce?.cancel();
-    _refreshDebounce = Timer(const Duration(milliseconds: 400), () {
-      refreshChats(_currentToken);
-    });
   }
 
   /// Mark chat as read
@@ -130,14 +119,23 @@ class ChatService extends ChangeNotifier {
 
   /// Refresh chats from API
   Future<void> refreshChats(String? token) async {
-    if (token == null || _currentUserId == null) return;
+    if (token == null || _currentUserId == null || _refreshInProgress) return;
 
+    final generation = _syncGeneration;
+    final userId = _currentUserId!;
+    _refreshInProgress = true;
     try {
-      _chats = await _apiService.getMyChats(token, _currentUserId!);
+      final chats = await _apiService.getMyChats(token, userId);
+      if (generation != _syncGeneration || _currentUserId != userId) return;
+      _chats = chats;
       notifyListeners();
       print('✅ [ChatService] Refreshed ${_chats.length} chats');
     } catch (e) {
       print('❌ [ChatService] Error refreshing chats: $e');
+    } finally {
+      if (generation == _syncGeneration) {
+        _refreshInProgress = false;
+      }
     }
   }
 

@@ -6,6 +6,8 @@ class HintSystem {
   static const String _keyAddressHint = 'address_hint_shown';
   static const String _keyFeatureHints = 'feature_hints_shown';
 
+  static String _userScopedKey(String key, String userId) => '${key}_$userId';
+
   // Check if user is logging in for the first time after registration
   static Future<bool> shouldShowFirstLoginHint() async {
     final prefs = await SharedPreferences.getInstance();
@@ -19,20 +21,21 @@ class HintSystem {
   }
 
   // Check if address hint should be shown
-  static Future<bool> shouldShowAddressHint() async {
+  static Future<bool> shouldShowAddressHint(String userId) async {
     final prefs = await SharedPreferences.getInstance();
-    return !(prefs.getBool(_keyAddressHint) ?? false);
+    return !(prefs.getBool(_userScopedKey(_keyAddressHint, userId)) ?? false);
   }
 
   // Mark address hint as shown
-  static Future<void> markAddressHintShown() async {
+  static Future<void> markAddressHintShown(String userId) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyAddressHint, true);
+    await prefs.setBool(_userScopedKey(_keyAddressHint, userId), true);
   }
 
   // Show first login hint dialog
   static Future<void> showFirstLoginHint(BuildContext context) async {
     if (!await shouldShowFirstLoginHint()) return;
+    if (!context.mounted) return;
 
     await showDialog(
       context: context,
@@ -46,8 +49,12 @@ class HintSystem {
   }
 
   // Show address completion hint
-  static Future<void> showAddressHint(BuildContext context) async {
-    if (!await shouldShowAddressHint()) return;
+  static Future<void> showAddressHint(
+    BuildContext context, {
+    required String userId,
+  }) async {
+    if (!await shouldShowAddressHint(userId)) return;
+    if (!context.mounted) return;
 
     await showDialog(
       context: context,
@@ -57,7 +64,7 @@ class HintSystem {
       },
     );
 
-    await markAddressHintShown();
+    await markAddressHintShown(userId);
   }
 }
 
@@ -112,10 +119,7 @@ class _FirstLoginHintDialogState extends State<FirstLoginHintDialog>
               child: ScaleTransition(
                 scale: _scaleAnimation,
                 child: Container(
-                  constraints: BoxConstraints(
-                    maxWidth: 400,
-                    maxHeight: 400,
-                  ),
+                  constraints: BoxConstraints(maxWidth: 400, maxHeight: 400),
                   margin: const EdgeInsets.symmetric(horizontal: 24),
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
@@ -189,10 +193,14 @@ class _FirstLoginHintDialogState extends State<FirstLoginHintDialog>
                               child: TextButton(
                                 onPressed: () => Navigator.of(context).pop(),
                                 style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
-                                    side: BorderSide(color: Colors.grey.shade300),
+                                    side: BorderSide(
+                                      color: Colors.grey.shade300,
+                                    ),
                                   ),
                                 ),
                                 child: const Text(
@@ -217,7 +225,9 @@ class _FirstLoginHintDialogState extends State<FirstLoginHintDialog>
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF6C63FF),
                                   foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),

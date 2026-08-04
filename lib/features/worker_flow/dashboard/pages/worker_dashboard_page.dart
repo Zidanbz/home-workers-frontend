@@ -5,6 +5,7 @@ import 'package:home_workers_fe/features/worker_flow/wallet/worker_wallet_page.d
 import 'package:provider/provider.dart';
 import '../../../../core/api/api_service.dart';
 import '../../../../core/state/auth_provider.dart';
+import '../../../../shared_widgets/content_loading_skeleton.dart';
 
 class WorkerDashboardPage extends StatefulWidget {
   const WorkerDashboardPage({super.key});
@@ -67,9 +68,15 @@ class _WorkerDashboardPageState extends State<WorkerDashboardPage>
   Future<void> _loadDashboardData() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.token != null) {
+      final future = _apiService.getDashboardSummary(authProvider.token!);
       setState(() {
-        _summaryFuture = _apiService.getDashboardSummary(authProvider.token!);
+        _summaryFuture = future;
       });
+      try {
+        await future;
+      } catch (_) {
+        // FutureBuilder bertanggung jawab menampilkan error.
+      }
     }
   }
 
@@ -312,7 +319,8 @@ class _WorkerDashboardPageState extends State<WorkerDashboardPage>
         child: FutureBuilder<Map<String, dynamic>>(
           future: _summaryFuture,
           builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !snapshot.hasData) {
               return _buildLoadingState();
             }
             if (snapshot.hasError) {
@@ -353,42 +361,10 @@ class _WorkerDashboardPageState extends State<WorkerDashboardPage>
   }
 
   Widget _buildLoadingState() {
-    return SizedBox(
-      height: 400,
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFD9D9D9).withOpacity(0.5),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: const CircularProgressIndicator(
-                color: Color(0xFF1A374D),
-                strokeWidth: 3,
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Memuat data dashboard...',
-              style: TextStyle(
-                color: Color(0xFF1A374D),
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
+    return const ContentLoadingSkeleton(
+      variant: ContentSkeletonVariant.dashboard,
+      scrollable: false,
+      padding: EdgeInsets.zero,
     );
   }
 

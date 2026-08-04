@@ -5,15 +5,27 @@
 		<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
 		<key>CFBundleDisplayName</key>
-		<string>Home Workers Fe</string>
+		<string>Home Workers</string>
 		<key>CFBundleExecutable</key>
 		<string>$(EXECUTABLE_NAME)</string>
 		<key>CFBundleIdentifier</key>
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 		<key>CFBundleInfoDictionaryVersion</key>
 		<string>6.0</string>
+		<key>CFBundleURLTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>com.googleusercontent.apps.891691718664-df6narc91kga6ckpud5tacmgmm36pgv3</string>
+					<string>com.googleusercontent.apps.132125085396-6j9q9uh7bcok75lmg09hgh1eqgeod80j</string>
+				</array>
+			</dict>
+		</array>
 		<key>CFBundleName</key>
-		<string>home_workers_fe</string>
+		<string>Home Workers</string>
 		<key>CFBundlePackageType</key>
 		<string>APPL</string>
 		<key>CFBundleShortVersionString</key>
@@ -24,6 +36,12 @@
 		<string>$(FLUTTER_BUILD_NUMBER)</string>
 		<key>LSRequiresIPhoneOS</key>
 		<true/>
+		<key>NSCameraUsageDescription</key>
+		<string>Home Workers memerlukan kamera untuk foto profil, verifikasi worker, dan dokumentasi pekerjaan.</string>
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>Home Workers menggunakan lokasi saat aplikasi dibuka untuk membantu Worker menentukan area operasional dan jangkauan layanan.</string>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>Home Workers memerlukan akses galeri untuk memilih foto profil, verifikasi worker, dan dokumentasi pekerjaan.</string>
 		<key>UILaunchStoryboardName</key>
 		<string>LaunchScreen</string>
 		<key>UIMainStoryboardFile</key>

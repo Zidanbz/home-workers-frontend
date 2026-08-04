@@ -3,11 +3,15 @@ import 'package:provider/provider.dart';
 import '../../../../core/api/api_service.dart';
 import '../../../../core/models/order_model.dart';
 import '../../../../core/state/auth_provider.dart';
+import '../../../../shared_widgets/order_summary_card.dart';
+import '../../../../shared_widgets/content_loading_skeleton.dart';
 import '../../../chat/pages/chat_detail_page.dart';
 import 'order_detail_page.dart';
 
 class WorkerOrdersPage extends StatefulWidget {
-  const WorkerOrdersPage({super.key});
+  final double bottomNavigationClearance;
+
+  const WorkerOrdersPage({super.key, this.bottomNavigationClearance = 0});
 
   @override
   State<WorkerOrdersPage> createState() => _WorkerOrdersPageState();
@@ -24,7 +28,7 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
@@ -103,10 +107,10 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
+                          color: Colors.white.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: Colors.white.withOpacity(0.2),
+                            color: Colors.white.withValues(alpha: 0.2),
                             width: 1,
                           ),
                         ),
@@ -218,6 +222,22 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
                       ],
                     ),
                   ),
+                  Tab(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.verified_user_outlined,
+                          size: 20,
+                          color: _tabController.index == 2
+                              ? const Color(0xFF1A374D)
+                              : Colors.grey[500],
+                        ),
+                        const SizedBox(width: 6),
+                        const Text('Garansi'),
+                      ],
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -240,7 +260,8 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
         child: FutureBuilder<List<Order>>(
           future: _ordersFuture,
           builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !snapshot.hasData) {
               return _buildLoadingState();
             }
             if (snapshot.hasError) {
@@ -266,7 +287,10 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
                 'pending',
                 'accepted',
                 'quote_proposed',
+                'quote_accepted',
+                'ready_to_start',
                 'work_in_progress',
+                'completion_submitted',
               ].contains(o.status);
             }).toList();
 
@@ -276,14 +300,29 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
                 'cancelled',
                 'quote_rejected',
                 'rejected',
+                'worker_acceptance_expired',
               ].contains(o.status);
             }).toList();
+
+            const activeWarrantyStatuses = {
+              'under_review',
+              'more_evidence_required',
+              'awaiting_worker_response',
+              'repair_scheduled',
+              'repair_in_progress',
+              'customer_confirmation',
+              'escalated',
+            };
+            final warrantyOrders = validOrders
+                .where((o) => activeWarrantyStatuses.contains(o.warrantyStatus))
+                .toList();
 
             return TabBarView(
               controller: _tabController,
               children: [
                 _buildOrderList(queuedOrders, 'queue'),
                 _buildOrderList(historyOrders, 'history'),
+                _buildOrderList(warrantyOrders, 'warranty'),
               ],
             );
           },
@@ -293,38 +332,15 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
   }
 
   Widget _buildLoadingState() {
-    return ListView(
-      // Biar RefreshIndicator tetap bisa ditarik saat loading
-      physics: const AlwaysScrollableScrollPhysics(),
-      children: [
-        const SizedBox(height: 120),
-        Center(
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A374D).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1A374D)),
-                  strokeWidth: 3,
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Memuat pesanan...',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF1A374D),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+    return ContentLoadingSkeleton(
+      itemCount: 3,
+      padding: EdgeInsets.fromLTRB(
+        20,
+        24,
+        20,
+        widget.bottomNavigationClearance +
+            MediaQuery.viewPaddingOf(context).bottom,
+      ),
     );
   }
 
@@ -342,7 +358,7 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
+                    color: Colors.red.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Icon(
@@ -405,7 +421,7 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
                 Container(
                   padding: const EdgeInsets.all(30),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1A374D).withOpacity(0.1),
+                    color: const Color(0xFF1A374D).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(30),
                   ),
                   child: const Icon(
@@ -454,19 +470,25 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
                     Container(
                       padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFD9D9D9).withOpacity(0.5),
+                        color: const Color(0xFFD9D9D9).withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Icon(
-                        type == 'queue' ? Icons.schedule : Icons.history,
+                        type == 'queue'
+                            ? Icons.schedule
+                            : type == 'warranty'
+                            ? Icons.verified_user_outlined
+                            : Icons.history,
                         size: 48,
-                        color: const Color(0xFF1A374D).withOpacity(0.7),
+                        color: const Color(0xFF1A374D).withValues(alpha: 0.7),
                       ),
                     ),
                     const SizedBox(height: 16),
                     Text(
                       type == 'queue'
                           ? 'Tidak ada pesanan dalam antrean'
+                          : type == 'warranty'
+                          ? 'Tidak ada klaim garansi aktif'
                           : 'Belum ada riwayat pesanan',
                       style: const TextStyle(
                         fontSize: 16,
@@ -478,6 +500,8 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
                     Text(
                       type == 'queue'
                           ? 'Pesanan baru akan muncul di sini'
+                          : type == 'warranty'
+                          ? 'Klaim yang membutuhkan tindakan akan muncul di sini'
                           : 'Riwayat pesanan yang selesai akan muncul di sini',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.grey[600], fontSize: 14),
@@ -493,7 +517,13 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
 
     return ListView.builder(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        widget.bottomNavigationClearance +
+            MediaQuery.viewPaddingOf(context).bottom,
+      ),
       itemCount: orders.length,
       itemBuilder: (context, index) {
         return TweenAnimationBuilder<double>(
@@ -523,8 +553,7 @@ class _OrderCard extends StatelessWidget {
   final Order order;
   final Future<void> Function()? onRefresh;
 
-  const _OrderCard({Key? key, required this.order, this.onRefresh})
-    : super(key: key);
+  const _OrderCard({required this.order, this.onRefresh});
 
   bool _isCompletedStatus() {
     return order.status == 'completed' || order.status == 'done';
@@ -559,7 +588,9 @@ class _OrderCard extends StatelessWidget {
           break;
 
         case 'accepted':
+        case 'ready_to_start':
         case 'work_in_progress':
+        case 'completion_submitted':
           final chatId = await apiService.createChat(
             token: token,
             recipientId: order.customerId,
@@ -660,151 +691,229 @@ class _OrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Color buttonColor;
+    Color buttonForeground;
     String buttonText;
+    IconData buttonIcon;
     VoidCallback? onPressed = () => _handleAction(context);
+    const activeWarrantyStatuses = {
+      'under_review',
+      'more_evidence_required',
+      'awaiting_worker_response',
+      'repair_scheduled',
+      'repair_in_progress',
+      'customer_confirmation',
+      'escalated',
+    };
+    final hasActiveWarranty = activeWarrantyStatuses.contains(
+      order.warrantyStatus,
+    );
 
     switch (order.status) {
       case 'pending':
         buttonColor = Colors.orange.shade100;
+        buttonForeground = const Color(0xFF9A5B00);
         buttonText = 'Terima';
+        buttonIcon = Icons.check_circle_outline_rounded;
         break;
       case 'accepted':
+      case 'ready_to_start':
       case 'work_in_progress':
+      case 'completion_submitted':
         buttonColor = Colors.blue.shade100;
-        buttonText = 'Tanya';
+        buttonForeground = const Color(0xFF175CD3);
+        buttonText = order.status == 'completion_submitted'
+            ? 'Chat Customer'
+            : 'Tanya';
+        buttonIcon = Icons.chat_bubble_outline_rounded;
         break;
       case 'quote_proposed':
         buttonColor = Colors.indigo.shade100;
+        buttonForeground = const Color(0xFF4338CA);
         buttonText = 'Ajukan Harga';
+        buttonIcon = Icons.request_quote_outlined;
         break;
       case 'completed':
       case 'done':
         final canChat = _isChatWindowOpen();
         if (canChat) {
           buttonColor = Colors.blue.shade100;
+          buttonForeground = const Color(0xFF175CD3);
           buttonText = 'Chat';
+          buttonIcon = Icons.chat_bubble_outline_rounded;
         } else {
           buttonColor = Colors.green.shade100;
+          buttonForeground = const Color(0xFF16835D);
           buttonText = 'Selesai';
+          buttonIcon = Icons.verified_rounded;
           onPressed = null;
         }
         break;
       case 'cancelled':
       case 'quote_rejected':
+      case 'worker_acceptance_expired':
         buttonColor = Colors.red.shade100;
-        buttonText = 'Dibatalkan';
+        buttonForeground = const Color(0xFFB42318);
+        buttonText = order.status == 'worker_acceptance_expired'
+            ? 'Waktu Habis'
+            : 'Dibatalkan';
+        buttonIcon = Icons.cancel_outlined;
         onPressed = null;
         break;
       default:
         buttonColor = Colors.grey.shade300;
+        buttonForeground = const Color(0xFF6B7D87);
         buttonText = 'Status';
+        buttonIcon = Icons.info_outline_rounded;
         onPressed = null;
     }
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      elevation: 2,
-      child: InkWell(
-        onTap: () async {
-          // Buka detail, tunggu user kembali
-          final changed = await Navigator.of(context).push<bool>(
-            MaterialPageRoute(
-              builder: (_) => OrderDetailPage(orderId: order.id),
-            ),
-          );
-          // Kalau detail mengembalikan true (ada perubahan), atau default (null) -> tetap refresh
-          if (changed == true || changed == null) {
-            if (onRefresh != null) await onRefresh!.call();
-          }
-        },
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header + action
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // Info layanan
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          order.serviceName,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1A374D),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          order.serviceType == 'fixed'
-                              ? 'Tipe Layanan: Fixed'
-                              : 'Tipe Layanan: Survey',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.black,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+    if (hasActiveWarranty) {
+      buttonColor = const Color(0xFFE8F7EF);
+      buttonForeground = const Color(0xFF16835D);
+      buttonText = 'Tindak Lanjut';
+      buttonIcon = Icons.verified_user_outlined;
+      onPressed = () async {
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => OrderDetailPage(orderId: order.id)),
+        );
+        if (onRefresh != null) await onRefresh!.call();
+      };
+    }
 
-                  // Tombol aksi cepat
-                  ElevatedButton(
-                    onPressed: onPressed,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: buttonColor,
-                      foregroundColor: Colors.black87,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                    child: Text(buttonText),
-                  ),
-                ],
-              ),
+    final displayStatus = hasActiveWarranty
+        ? 'warranty:${order.warrantyStatus}'
+        : order.status;
 
-              const SizedBox(height: 8),
-
-              // Alamat
-              // Text(
-              //   order.customerAddress,
-              //   style: TextStyle(color: Colors.grey[600]),
-              // ),
-              const SizedBox(height: 4),
-
-              // Jadwal
-              Text(
-                order.formattedSchedule,
-                style: TextStyle(color: Colors.grey[600]),
-              ),
-
-              const Divider(height: 24),
-
-              // Time ago
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  const Icon(Icons.access_time, color: Colors.grey, size: 16),
-                  const SizedBox(width: 4),
-                  Text(
-                    order.timeAgo,
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
+    return OrderSummaryCard(
+      order: order,
+      status: OrderSummaryStatus(
+        label: _statusLabel(displayStatus),
+        color: _statusColor(displayStatus),
+        icon: _statusIcon(displayStatus),
       ),
+      onTap: () => _openOrderDetail(context),
+      action: OrderSummaryAction(
+        label: buttonText,
+        icon: buttonIcon,
+        onPressed: onPressed,
+        foregroundColor: buttonForeground,
+        backgroundColor: buttonColor,
+      ),
+      supportingLabel: hasActiveWarranty
+          ? _warrantyLabel(order.warrantyStatus!)
+          : 'Customer • ${order.customerName}',
+      supportingIcon: hasActiveWarranty
+          ? Icons.verified_user_outlined
+          : Icons.person_outline_rounded,
+      supportingColor: hasActiveWarranty
+          ? const Color(0xFF16835D)
+          : const Color(0xFF2B6478),
     );
+  }
+
+  Future<void> _openOrderDetail(BuildContext context) async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => OrderDetailPage(orderId: order.id)),
+    );
+    if (changed == true || changed == null) {
+      if (onRefresh != null) await onRefresh!.call();
+    }
+  }
+
+  Color _statusColor(String status) {
+    if (status.startsWith('warranty:')) {
+      return status == 'warranty:escalated'
+          ? const Color(0xFFB42318)
+          : const Color(0xFF16835D);
+    }
+    switch (status) {
+      case 'pending':
+      case 'completion_submitted':
+        return const Color(0xFFB76E00);
+      case 'accepted':
+      case 'quote_proposed':
+      case 'quote_accepted':
+        return const Color(0xFF2563EB);
+      case 'ready_to_start':
+        return const Color(0xFF0F766E);
+      case 'work_in_progress':
+        return const Color(0xFF7C3AED);
+      case 'completed':
+      case 'done':
+        return const Color(0xFF16835D);
+      case 'cancelled':
+      case 'quote_rejected':
+      case 'rejected':
+      case 'worker_acceptance_expired':
+        return const Color(0xFFB42318);
+      default:
+        return const Color(0xFF6B7D87);
+    }
+  }
+
+  IconData _statusIcon(String status) {
+    if (status.startsWith('warranty:')) {
+      return Icons.verified_user_outlined;
+    }
+    switch (status) {
+      case 'pending':
+        return Icons.notifications_active_outlined;
+      case 'accepted':
+        return Icons.check_circle_outline_rounded;
+      case 'quote_proposed':
+      case 'quote_accepted':
+        return Icons.request_quote_outlined;
+      case 'ready_to_start':
+        return Icons.play_circle_outline_rounded;
+      case 'work_in_progress':
+        return Icons.handyman_outlined;
+      case 'completion_submitted':
+        return Icons.fact_check_outlined;
+      case 'completed':
+      case 'done':
+        return Icons.verified_rounded;
+      case 'cancelled':
+      case 'quote_rejected':
+      case 'rejected':
+      case 'worker_acceptance_expired':
+        return Icons.cancel_outlined;
+      default:
+        return Icons.info_outline_rounded;
+    }
+  }
+
+  String _statusLabel(String status) {
+    if (status.startsWith('warranty:')) {
+      return _warrantyLabel(status.substring('warranty:'.length));
+    }
+    const labels = {
+      'pending': 'Pesanan Baru',
+      'accepted': 'Diterima',
+      'quote_proposed': 'Menunggu Penawaran',
+      'quote_accepted': 'Penawaran Disetujui',
+      'ready_to_start': 'Siap Dimulai',
+      'work_in_progress': 'Dalam Pengerjaan',
+      'completion_submitted': 'Menunggu Konfirmasi',
+      'completed': 'Selesai',
+      'done': 'Selesai',
+      'cancelled': 'Dibatalkan',
+      'quote_rejected': 'Penawaran Ditolak',
+      'rejected': 'Ditolak',
+      'worker_acceptance_expired': 'Waktu Respons Habis',
+    };
+    return labels[status] ?? 'Status Pesanan';
+  }
+
+  String _warrantyLabel(String status) {
+    const labels = {
+      'under_review': 'Garansi ditinjau Admin',
+      'more_evidence_required': 'Perlu bukti tambahan',
+      'awaiting_worker_response': 'Perlu tanggapan Anda',
+      'repair_scheduled': 'Perbaikan dijadwalkan',
+      'repair_in_progress': 'Perbaikan berlangsung',
+      'customer_confirmation': 'Menunggu Customer',
+      'escalated': 'Diperiksa Admin',
+    };
+    return labels[status] ?? 'Klaim garansi';
   }
 }

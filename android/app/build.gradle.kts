@@ -30,13 +30,20 @@ fun decodeDartDefines(raw: String?): Map<String, String> {
         .toMap()
 }
 
+val runtimeDartDefines =
+    decodeDartDefines(project.findProperty("dart-defines") as String?)
+val runtimeAppEnv = runtimeDartDefines["APP_ENV"]?.lowercase() ?: "prod"
+val runtimeApplicationId =
+    if (runtimeAppEnv == "sandbox") {
+        "com.homeworkers.app.dev"
+    } else {
+        "com.homeworkers.app"
+    }
+
 tasks.matching { task ->
     task.name.contains("GoogleServices", ignoreCase = true)
 }.configureEach {
     doFirst {
-        val runtimeDartDefines =
-            decodeDartDefines(project.findProperty("dart-defines") as String?)
-        val runtimeAppEnv = runtimeDartDefines["APP_ENV"]?.lowercase() ?: "prod"
         val runtimeGoogleServicesSourceFileName =
             if (runtimeAppEnv == "sandbox") {
                 "google-services-dev.json"
@@ -77,6 +84,35 @@ if (localPropertiesFile.exists()) {
     localProperties.load(FileInputStream(localPropertiesFile))
 }
 
+// Maps SDK membaca key dari AndroidManifest, bukan dari flutter_dotenv.
+// Gunakan environment yang sama dengan APP_ENV agar build dev/prod konsisten.
+val runtimeEnvProperties = Properties()
+val runtimeEnvFile =
+    rootProject.file(
+        if (runtimeAppEnv == "sandbox") {
+            "../.env.sandbox"
+        } else {
+            "../.env"
+        }
+    )
+if (runtimeEnvFile.exists()) {
+    runtimeEnvProperties.load(FileInputStream(runtimeEnvFile))
+}
+
+val mapsApiKey =
+    (
+        localProperties.getProperty("MAPS_API_KEY")
+            ?: runtimeDartDefines["GOOGLE_MAPS_API_KEY"]
+            ?: runtimeEnvProperties.getProperty("GOOGLE_MAPS_API_KEY")
+            ?: ""
+    ).trim().removeSurrounding("\"").removeSurrounding("'")
+
+require(mapsApiKey.isNotBlank()) {
+    "Google Maps API key tidak ditemukan untuk APP_ENV=$runtimeAppEnv. " +
+        "Isi GOOGLE_MAPS_API_KEY di file environment terkait, berikan lewat " +
+        "--dart-define, atau set MAPS_API_KEY di android/local.properties."
+}
+
 android {
     namespace = "com.homeworkers.app"
     compileSdk = 36
@@ -98,15 +134,15 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.homeworkers.app"
+        applicationId = runtimeApplicationId
         minSdk = flutter.minSdkVersion
         targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         multiDexEnabled = true
-        // Inject Google Maps API Key dari local.properties (jangan commit ke repo)
+        // Inject Google Maps API key ke AndroidManifest tanpa hardcode.
         manifestPlaceholders += mapOf(
-            "MAPS_API_KEY" to (localProperties.getProperty("MAPS_API_KEY") ?: "")
+            "MAPS_API_KEY" to mapsApiKey
         )
     }
 

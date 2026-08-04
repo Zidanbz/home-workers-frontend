@@ -20,6 +20,8 @@ class AppFirebaseOptions {
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return androidSandbox;
+      case TargetPlatform.iOS:
+        return iosSandbox;
       default:
         return DefaultFirebaseOptions.currentPlatform;
     }
@@ -27,19 +29,33 @@ class AppFirebaseOptions {
 
   static String projectIdFor(String appEnv) {
     final normalizedEnv = appEnv.toLowerCase();
-    if (normalizedEnv == 'sandbox' &&
-        !kIsWeb &&
-        defaultTargetPlatform == TargetPlatform.android) {
-      return androidSandbox.projectId;
+    if (normalizedEnv == 'sandbox' && !kIsWeb) {
+      switch (defaultTargetPlatform) {
+        case TargetPlatform.android:
+          return androidSandbox.projectId;
+        case TargetPlatform.iOS:
+          return iosSandbox.projectId;
+        default:
+          break;
+      }
     }
     return DefaultFirebaseOptions.currentPlatform.projectId;
   }
 
   static const FirebaseOptions androidSandbox = FirebaseOptions(
     apiKey: 'AIzaSyAtKZk2rjKe-43RMGCSwe2HaQqDjOl_uoc',
-    appId: '1:132125085396:android:975700e2095b2e65017541',
+    appId: '1:132125085396:android:c5bc223718210931017541',
     messagingSenderId: '132125085396',
     projectId: 'howek-dev',
     storageBucket: 'howek-dev.firebasestorage.app',
+  );
+
+  static const FirebaseOptions iosSandbox = FirebaseOptions(
+    apiKey: 'AIzaSyAvVOgHj9vjQt6a64YejH20ungAHuV3BSA',
+    appId: '1:132125085396:ios:45e86576494f1b87017541',
+    messagingSenderId: '132125085396',
+    projectId: 'howek-dev',
+    storageBucket: 'howek-dev.firebasestorage.app',
+    iosBundleId: 'com.homeworkers.app',
   );
 }

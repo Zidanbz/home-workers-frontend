@@ -1,5 +1,3 @@
-
-
 class Transaction {
   final String id;
   final String type; // 'cash-in' atau 'cash-out'
@@ -40,9 +38,18 @@ class Transaction {
 
 class Wallet {
   final num currentBalance;
+  final num heldBalance;
+  final bool withdrawalBlocked;
+  final String? withdrawalBlockedReason;
   final List<Transaction> transactions;
 
-  Wallet({required this.currentBalance, required this.transactions});
+  Wallet({
+    required this.currentBalance,
+    required this.heldBalance,
+    this.withdrawalBlocked = false,
+    this.withdrawalBlockedReason,
+    required this.transactions,
+  });
 
   factory Wallet.fromJson(Map<String, dynamic> json) {
     var transactionsList = json['transactions'] as List<dynamic>? ?? [];
@@ -52,6 +59,9 @@ class Wallet {
 
     return Wallet(
       currentBalance: json['currentBalance'] ?? 0,
+      heldBalance: json['heldBalance'] ?? 0,
+      withdrawalBlocked: json['withdrawalBlocked'] == true,
+      withdrawalBlockedReason: json['withdrawalBlockedReason']?.toString(),
       transactions: parsedTransactions,
     );
   }

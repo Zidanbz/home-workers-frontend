@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../core/api/api_service.dart';
 import '../../../core/models/chat_model.dart';
 import '../../../core/state/auth_provider.dart';
+import '../../../shared_widgets/content_loading_skeleton.dart';
 import 'chat_detail_page.dart';
 
 class ChatListPage extends StatefulWidget {
@@ -44,14 +45,16 @@ class _ChatListPageState extends State<ChatListPage> {
     final token = authProvider.token;
     final userId = authProvider.user?.uid;
 
-    if (token != null && userId != null) {
-      setState(() {
-        _chatsFuture = _apiService.getMyChats(token, userId);
-      });
-    } else {
-      setState(() {
-        _chatsFuture = Future.error('Anda tidak terautentikasi.');
-      });
+    final future = token != null && userId != null
+        ? _apiService.getMyChats(token, userId)
+        : Future<List<Chat>>.error('Anda tidak terautentikasi.');
+    setState(() {
+      _chatsFuture = future;
+    });
+    try {
+      await future;
+    } catch (_) {
+      // FutureBuilder menampilkan error; refresh indicator tetap ditutup rapi.
     }
   }
 
@@ -150,17 +153,13 @@ class _ChatListPageState extends State<ChatListPage> {
         child: FutureBuilder<List<Chat>>(
           future: _chatsFuture,
           builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: CircularProgressIndicator(
-                  color: primaryColor,
-                  strokeWidth: 3,
-                ),
-              );
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !snapshot.hasData) {
+              return const ContentLoadingSkeleton(itemCount: 4);
             }
             if (snapshot.hasError) {
-              return Center(
-                child: Container(
+              return _buildRefreshableState(
+                Container(
                   margin: const EdgeInsets.all(32),
                   padding: const EdgeInsets.all(32),
                   decoration: BoxDecoration(
@@ -213,8 +212,8 @@ class _ChatListPageState extends State<ChatListPage> {
             final filteredChats = _filterChats(allChats);
 
             if (allChats.isEmpty) {
-              return Center(
-                child: Container(
+              return _buildRefreshableState(
+                Container(
                   margin: const EdgeInsets.all(32),
                   padding: const EdgeInsets.all(32),
                   decoration: BoxDecoration(
@@ -269,8 +268,8 @@ class _ChatListPageState extends State<ChatListPage> {
             }
 
             if (filteredChats.isEmpty && _searchQuery.isNotEmpty) {
-              return Center(
-                child: Container(
+              return _buildRefreshableState(
+                Container(
                   margin: const EdgeInsets.all(32),
                   padding: const EdgeInsets.all(32),
                   decoration: BoxDecoration(
@@ -410,6 +409,7 @@ class _ChatListPageState extends State<ChatListPage> {
                 // List percakapan
                 Expanded(
                   child: ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     itemCount: filteredChats.length,
                     itemBuilder: (context, index) {
@@ -420,6 +420,18 @@ class _ChatListPageState extends State<ChatListPage> {
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRefreshableState(Widget child) {
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(child: child),
         ),
       ),
     );
@@ -483,7 +495,11 @@ class _ChatListPageState extends State<ChatListPage> {
                         : null,
                     backgroundColor: lightGray.withOpacity(0.3),
                     child: chat.otherUserAvatarUrl.isEmpty
-                        ? const Icon(Icons.person, color: primaryColor, size: 22)
+                        ? const Icon(
+                            Icons.person,
+                            color: primaryColor,
+                            size: 22,
+                          )
                         : null,
                   ),
                 ),
@@ -541,23 +557,20 @@ class _ChatListPageState extends State<ChatListPage> {
                       ],
                       const SizedBox(height: 12),
 
-                      // Time dan status
+                      // Waktu pesan terakhir dan jumlah pesan masuk.
+                      // Jangan gunakan ikon jam karena ikon tersebut khusus
+                      // menandakan pesan yang masih dikirim di detail chat.
                       Row(
                         children: [
-                          Icon(
-                            Icons.access_time_rounded,
-                            size: 14,
-                            color: primaryColor.withOpacity(0.5),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            chat.formattedTimestamp,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: primaryColor.withOpacity(0.5),
-                              fontWeight: FontWeight.w500,
+                          if (chat.formattedTimestamp.isNotEmpty)
+                            Text(
+                              'Terakhir ${chat.formattedTimestamp}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: primaryColor.withOpacity(0.5),
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
-                          ),
                           const Spacer(),
                           if (chat.unreadCount > 0)
                             Container(

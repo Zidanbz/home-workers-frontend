@@ -80,6 +80,11 @@ class RealtimeNotificationService extends ChangeNotifier {
 
   /// Initialize FCM
   Future<void> _initializeFCM() async {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      print('🔔 [FCM] Disabled on iOS for now');
+      return;
+    }
+
     // Request permission
     await _firebaseMessaging.requestPermission(
       alert: true,
@@ -145,10 +150,14 @@ class RealtimeNotificationService extends ChangeNotifier {
   }
 
   /// Stop listening to notifications
-  Future<void> stopListening() async {
+  Future<void> stopListening({bool clearData = false}) async {
     await _notificationSubscription?.cancel();
     _notificationSubscription = null;
     _currentUserId = null;
+    if (clearData && _notifications.isNotEmpty) {
+      _notifications = [];
+      notifyListeners();
+    }
     print(
       '🔔 [RealtimeNotificationService] Stopped listening to notifications',
     );
@@ -347,6 +356,8 @@ class RealtimeNotificationService extends ChangeNotifier {
 
   /// Get FCM token
   Future<String?> getFCMToken() async {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) return null;
+
     try {
       return await _firebaseMessaging.getToken();
     } catch (e) {

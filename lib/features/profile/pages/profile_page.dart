@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_storage/firebase_storage.dart';
@@ -5,13 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:home_workers_fe/core/api/api_service.dart';
 import 'package:home_workers_fe/core/models/user_model.dart';
 import 'package:home_workers_fe/features/auth/pages/login_page.dart';
-import 'package:home_workers_fe/features/costumer_flow/vouchers/pages/claim_voucher_page.dart';
-import 'package:home_workers_fe/features/costumer_flow/vouchers/pages/voucher_list_page.dart';
+import 'package:home_workers_fe/features/customer_flow/vouchers/pages/claim_voucher_page.dart';
 import 'package:home_workers_fe/features/notifications/pages/notification_page.dart';
 import 'package:home_workers_fe/features/profile/pages/address_management_page.dart';
 import 'package:home_workers_fe/features/profile/pages/edit_profile_page.dart';
 import 'package:home_workers_fe/features/profile/pages/faq_page.dart';
 import 'package:home_workers_fe/features/profile/pages/bookmarked_services_page.dart';
+import 'package:home_workers_fe/features/worker_flow/profile/pages/worker_operational_area_page.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
@@ -377,27 +378,43 @@ class _ProfilePageState extends State<ProfilePage>
         title: 'Edit Profil',
         subtitle: 'Kelola informasi pribadi',
         color: const Color(0xFF6C63FF),
-        onTap: () {
-          Navigator.of(context).push(
+        onTap: () async {
+          await Navigator.of(context).push(
             MaterialPageRoute(
               builder: (context) => EditProfilePage(user: user),
             ),
           );
+          if (mounted) await _refreshProfile();
         },
       ),
-      MenuItemData(
-        icon: Icons.location_on_outlined,
-        title: 'Alamat Tersimpan',
-        subtitle: 'Kelola alamat pengiriman',
-        color: const Color(0xFF4CAF50),
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => const AddressManagementPage(),
-            ),
-          );
-        },
-      ),
+      if (user.role.toLowerCase() == 'customer')
+        MenuItemData(
+          icon: Icons.location_on_outlined,
+          title: 'Alamat Tersimpan',
+          subtitle: 'Kelola alamat pengiriman',
+          color: const Color(0xFF4CAF50),
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const AddressManagementPage(),
+              ),
+            );
+          },
+        ),
+      if (user.role.toLowerCase() == 'worker')
+        MenuItemData(
+          icon: Icons.location_on_outlined,
+          title: 'Area Operasional',
+          subtitle: 'Kelola lokasi dan radius layanan',
+          color: const Color(0xFF0F8B78),
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const WorkerOperationalAreaPage(),
+              ),
+            );
+          },
+        ),
       MenuItemData(
         icon: Icons.notifications_outlined,
         title: 'Notifikasi',
@@ -629,20 +646,25 @@ class _ProfilePageState extends State<ProfilePage>
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: () async {
-                          Navigator.of(context).pop();
-                          await Provider.of<AuthProvider>(
-                            context,
-                            listen: false,
-                          ).logout();
-                          if (context.mounted) {
-                            Navigator.of(context).pushAndRemoveUntil(
+                        onPressed: () {
+                          final navigator = Navigator.of(context);
+                          final authProvider = context.read<AuthProvider>();
+
+                          navigator.pop();
+
+                          // logout() memutus sesi lokal secara sinkron sebelum
+                          // cleanup plugin/secure storage dimulai. Reset route
+                          // langsung agar MainPage yang dipush saat login tidak
+                          // tetap hidup dan melakukan fetch tanpa token.
+                          unawaited(authProvider.logout());
+                          unawaited(
+                            navigator.pushAndRemoveUntil(
                               MaterialPageRoute(
                                 builder: (_) => const LoginPage(),
                               ),
-                              (route) => false,
-                            );
-                          }
+                              (_) => false,
+                            ),
+                          );
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFFF6B6B),

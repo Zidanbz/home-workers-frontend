@@ -5,10 +5,13 @@ import 'package:provider/provider.dart';
 import '../../../../core/api/api_service.dart';
 import '../../../../core/models/service_model.dart';
 import '../../../../core/state/auth_provider.dart';
+import '../../../../shared_widgets/content_loading_skeleton.dart';
 import 'job_detail_page.dart';
 
 class MyJobsPage extends StatefulWidget {
-  const MyJobsPage({super.key});
+  final double bottomNavigationClearance;
+
+  const MyJobsPage({super.key, this.bottomNavigationClearance = 0});
 
   @override
   State<MyJobsPage> createState() => _MyJobsPageState();
@@ -51,9 +54,15 @@ class _MyJobsPageState extends State<MyJobsPage> with TickerProviderStateMixin {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.token != null) {
       if (mounted) {
+        final future = _apiService.getMyServices(authProvider.token!);
         setState(() {
-          _myServicesFuture = _apiService.getMyServices(authProvider.token!);
+          _myServicesFuture = future;
         });
+        try {
+          await future;
+        } catch (_) {
+          // FutureBuilder bertanggung jawab menampilkan error.
+        }
       }
     }
   }
@@ -69,25 +78,36 @@ class _MyJobsPageState extends State<MyJobsPage> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      body: CustomScrollView(
-        slivers: [
-          _buildSliverAppBar(),
-          SliverToBoxAdapter(
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  children: [
-                    _buildSearchAndStats(),
-                    const SizedBox(height: 24),
-                    _buildJobsList(),
-                  ],
+      body: RefreshIndicator(
+        onRefresh: _loadServices,
+        color: const Color(0xFF667EEA),
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            _buildSliverAppBar(),
+            SliverToBoxAdapter(
+              child: FadeTransition(
+                opacity: _fadeAnimation,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    20,
+                    20,
+                    widget.bottomNavigationClearance +
+                        MediaQuery.viewPaddingOf(context).bottom,
+                  ),
+                  child: Column(
+                    children: [
+                      _buildSearchAndStats(),
+                      const SizedBox(height: 24),
+                      _buildJobsList(),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       // Remove floatingActionButton here
       // floatingActionButton: _buildFloatingActionButton(),
@@ -123,7 +143,7 @@ class _MyJobsPageState extends State<MyJobsPage> with TickerProviderStateMixin {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(
@@ -158,7 +178,7 @@ class _MyJobsPageState extends State<MyJobsPage> with TickerProviderStateMixin {
                         icon: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
+                            color: Colors.white.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Icon(
@@ -174,7 +194,7 @@ class _MyJobsPageState extends State<MyJobsPage> with TickerProviderStateMixin {
                   Text(
                     'Kelola dan pantau semua layanan Anda',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.9),
+                      color: Colors.white.withValues(alpha: 0.9),
                       fontSize: 14,
                     ),
                   ),
@@ -199,8 +219,8 @@ class _MyJobsPageState extends State<MyJobsPage> with TickerProviderStateMixin {
             boxShadow: [
               BoxShadow(
                 color: _isSearchFocused
-                    ? const Color(0xFF1A374D).withOpacity(0.3)
-                    : Colors.black.withOpacity(0.1),
+                    ? const Color(0xFF1A374D).withValues(alpha: 0.3)
+                    : Colors.black.withValues(alpha: 0.1),
                 blurRadius: _isSearchFocused ? 20 : 10,
                 offset: const Offset(0, 5),
               ),
@@ -286,7 +306,7 @@ class _MyJobsPageState extends State<MyJobsPage> with TickerProviderStateMixin {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 5),
           ),
@@ -327,7 +347,7 @@ class _MyJobsPageState extends State<MyJobsPage> with TickerProviderStateMixin {
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, color: color, size: 20),
@@ -347,95 +367,69 @@ class _MyJobsPageState extends State<MyJobsPage> with TickerProviderStateMixin {
   }
 
   Widget _buildJobsList() {
-    return RefreshIndicator(
-      onRefresh: _loadServices,
-      color: const Color(0xFF667EEA),
-      child: FutureBuilder<List<Service>>(
-        future: _myServicesFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return _buildLoadingState();
-          }
-          if (snapshot.hasError) {
-            return _buildErrorState(
-              ApiService.readableError(
-                snapshot.error,
-                action: 'Gagal memuat layanan saya',
-              ),
-            );
-          }
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return _buildEmptyState();
-          }
-
-          final allServices = snapshot.data!;
-          final filteredServices = allServices.where((service) {
-            return service.namaLayanan.toLowerCase().contains(
-              _searchQuery.toLowerCase(),
-            );
-          }).toList();
-
-          if (filteredServices.isEmpty) {
-            return _buildNoResultsState();
-          }
-
-          return ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: filteredServices.length,
-            itemBuilder: (context, index) {
-              return TweenAnimationBuilder<double>(
-                duration: Duration(milliseconds: 300 + (index * 100)),
-                tween: Tween(begin: 0.0, end: 1.0),
-                builder: (context, value, child) {
-                  return Transform.translate(
-                    offset: Offset(0, 50 * (1 - value)),
-                    child: Opacity(
-                      opacity: value,
-                      child: _JobCard(
-                        service: filteredServices[index],
-                        onActionComplete: _loadServices,
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
+    return FutureBuilder<List<Service>>(
+      future: _myServicesFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return _buildLoadingState();
+        }
+        if (snapshot.hasError) {
+          return _buildErrorState(
+            ApiService.readableError(
+              snapshot.error,
+              action: 'Gagal memuat layanan saya',
+            ),
           );
-        },
-      ),
+        }
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return _buildEmptyState();
+        }
+
+        final allServices = snapshot.data!;
+        final filteredServices = allServices.where((service) {
+          return service.namaLayanan.toLowerCase().contains(
+            _searchQuery.toLowerCase(),
+          );
+        }).toList();
+
+        if (filteredServices.isEmpty) {
+          return _buildNoResultsState();
+        }
+
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          itemCount: filteredServices.length,
+          itemBuilder: (context, index) {
+            return TweenAnimationBuilder<double>(
+              duration: Duration(milliseconds: 300 + (index * 100)),
+              tween: Tween(begin: 0.0, end: 1.0),
+              builder: (context, value, child) {
+                return Transform.translate(
+                  offset: Offset(0, 50 * (1 - value)),
+                  child: Opacity(
+                    opacity: value,
+                    child: _JobCard(
+                      service: filteredServices[index],
+                      onActionComplete: _loadServices,
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 
   Widget _buildLoadingState() {
-    return SizedBox(
-      height: 300,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
-              ),
-              borderRadius: BorderRadius.circular(50),
-            ),
-            child: const CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'Memuat pekerjaan Anda...',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              color: Colors.grey,
-            ),
-          ),
-        ],
-      ),
+    return const ContentLoadingSkeleton(
+      itemCount: 3,
+      scrollable: false,
+      padding: EdgeInsets.zero,
     );
   }
 
@@ -449,7 +443,7 @@ class _MyJobsPageState extends State<MyJobsPage> with TickerProviderStateMixin {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Colors.red.withOpacity(0.1),
+              color: Colors.red.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(50),
             ),
             child: const Icon(Icons.error_outline, color: Colors.red, size: 40),
@@ -495,8 +489,8 @@ class _MyJobsPageState extends State<MyJobsPage> with TickerProviderStateMixin {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  const Color(0xFF667EEA).withOpacity(0.1),
-                  const Color(0xFF764BA2).withOpacity(0.1),
+                  const Color(0xFF667EEA).withValues(alpha: 0.1),
+                  const Color(0xFF764BA2).withValues(alpha: 0.1),
                 ],
               ),
               borderRadius: BorderRadius.circular(50),
@@ -535,8 +529,8 @@ class _MyJobsPageState extends State<MyJobsPage> with TickerProviderStateMixin {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  const Color(0xFF667EEA).withOpacity(0.1),
-                  const Color(0xFF764BA2).withOpacity(0.1),
+                  const Color(0xFF667EEA).withValues(alpha: 0.1),
+                  const Color(0xFF764BA2).withValues(alpha: 0.1),
                 ],
               ),
               borderRadius: BorderRadius.circular(50),
@@ -605,24 +599,8 @@ class _JobCard extends StatelessWidget {
       final surveyCost = service.biayaSurvei ?? 0;
       return 'Biaya Survei: ${formatCurrency.format(surveyCost)}';
     } else {
-      final price = service.harga ?? 0;
+      final price = service.harga;
       return formatCurrency.format(price);
-    }
-  }
-
-  // Metode untuk ikon kategori
-  IconData _getIconForCategory(String category) {
-    switch (category.toLowerCase()) {
-      case 'kebersihan':
-        return Icons.cleaning_services_outlined;
-      case 'perbaikan':
-        return Icons.build_outlined;
-      case 'konstruksi':
-        return Icons.construction_outlined;
-      case 'layanan elektronik':
-        return Icons.electrical_services_outlined;
-      default:
-        return Icons.work_outline;
     }
   }
 

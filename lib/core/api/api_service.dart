@@ -1,16 +1,21 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
+import 'dart:typed_data';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:home_workers_fe/core/models/address_model.dart';
 import 'package:home_workers_fe/core/models/chat_model.dart';
 import 'package:home_workers_fe/core/models/message_model.dart';
 import 'package:home_workers_fe/core/models/notification_model.dart';
 import 'package:home_workers_fe/core/models/order_model.dart';
+import 'package:home_workers_fe/core/models/operational_location_model.dart';
+import 'package:home_workers_fe/core/models/kyc_revision_model.dart';
+import 'package:home_workers_fe/core/models/payment_invoice_model.dart';
+import 'package:home_workers_fe/core/models/refund_model.dart';
+import 'package:home_workers_fe/core/models/service_catalog_model.dart';
 import 'package:home_workers_fe/core/models/user_model.dart';
 import 'package:home_workers_fe/core/models/wallet_model.dart';
+import 'package:home_workers_fe/core/models/warranty_model.dart';
 import 'package:home_workers_fe/core/models/worker_model.dart';
-import 'package:home_workers_fe/features/notifications/pages/notification_page.dart';
 import 'package:home_workers_fe/core/services/encryption_service.dart';
 import 'package:http/http.dart' as http;
 import '../models/service_model.dart'; // Impor model yang baru kita buat
@@ -25,9 +30,7 @@ class ApiService {
     required String password,
     String? fcmToken,
   }) async {
-    print('🔐 [loginUser] Starting login for email: $email');
     final url = Uri.parse('$_baseUrl/auth/login');
-    print('🌐 [loginUser] URL: $url');
 
     final response = await http.post(
       url,
@@ -39,16 +42,126 @@ class ApiService {
       }),
     );
 
-    print('📊 [loginUser] Response Status: ${response.statusCode}');
-    print('📝 [loginUser] Response Body: ${response.body}');
-
     if (response.statusCode == 200) {
-      print('✅ [loginUser] Login successful');
       return jsonDecode(response.body);
     } else {
-      print('❌ [loginUser] Login failed');
-      throw _asException('Gagal login: ${response.body}');
+      final message =
+          _extractStructuredErrorMessage(response.body) ??
+          'Email atau kata sandi salah.';
+      throw _asException(message);
     }
+  }
+
+  Future<Map<String, dynamic>> bootstrapGoogleAccount({
+    required String firebaseIdToken,
+    String? fcmToken,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/auth/google/bootstrap'),
+      headers: {
+        'Authorization': 'Bearer $firebaseIdToken',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'fcmToken': fcmToken}),
+    );
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200 || body['success'] != true) {
+      throw _asException(
+        body['message']?.toString() ?? 'Gagal memeriksa akun Google.',
+      );
+    }
+    return body;
+  }
+
+  Future<KycRevisionStatus> getMyKycRevision(String token) async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/workers/kyc-revision/me'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200 || body['success'] != true) {
+      throw _asException(
+        body['message']?.toString() ?? 'Gagal memuat permintaan perbaikan KYC.',
+      );
+    }
+    final data = body['data'];
+    if (data is! Map) throw _asException('Respons status KYC tidak valid.');
+    return KycRevisionStatus.fromJson(Map<String, dynamic>.from(data));
+  }
+
+  Future<void> resubmitMyKycRevision({
+    required String token,
+    required int reviewVersion,
+    File? ktpFile,
+    File? selfieFile,
+    String? portfolioLink,
+  }) async {
+    final encryptionService = EncryptionService();
+    final request =
+        http.MultipartRequest(
+            'POST',
+            Uri.parse('$_baseUrl/workers/kyc-revision/me/resubmit'),
+          )
+          ..headers['Authorization'] = 'Bearer $token'
+          ..fields['reviewVersion'] = reviewVersion.toString();
+
+    Future<void> addEncryptedFile(String field, File file) async {
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty || bytes.length > 8 * 1024 * 1024) {
+        throw _asException('File $field harus berukuran 1 byte sampai 8 MB.');
+      }
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          field,
+          encryptionService.encryptFileData(bytes),
+          filename: encryptionService.generateSecureFilename(file.path),
+        ),
+      );
+    }
+
+    if (ktpFile != null) await addEncryptedFile('ktp', ktpFile);
+    if (selfieFile != null) await addEncryptedFile('selfie', selfieFile);
+    if (portfolioLink != null) {
+      request.fields['portfolioLink'] = portfolioLink.trim();
+    }
+
+    final streamed = await request.send();
+    final responseBody = await streamed.stream.bytesToString();
+    final body = _decodeJsonObject(responseBody);
+    if (streamed.statusCode != 200 || body['success'] != true) {
+      throw _asException(
+        body['message']?.toString() ?? 'Gagal mengirim perbaikan KYC.',
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> registerGoogleCustomer({
+    required String firebaseIdToken,
+    required String nama,
+    required String contact,
+    String? fcmToken,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/auth/register/google/customer'),
+      headers: {
+        'Authorization': 'Bearer $firebaseIdToken',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'nama': nama,
+        'contact': contact,
+        'fcmToken': fcmToken,
+      }),
+    );
+    final body = _decodeJsonObject(response.body);
+    if ((response.statusCode != 200 && response.statusCode != 201) ||
+        body['success'] != true) {
+      throw _asException(
+        body['message']?.toString() ??
+            'Gagal registrasi Customer dengan Google.',
+      );
+    }
+    return body;
   }
 
   // Refresh ID token (untuk always login)
@@ -68,6 +181,32 @@ class ApiService {
     } else {
       throw _asException('Gagal refresh token: ${response.body}');
     }
+  }
+
+  Future<String> createFirebaseSessionCustomToken({
+    required String token,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/auth/session/custom-token'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+    final body = _decodeJsonObject(response.body);
+    final data = body['data'];
+    final customToken = data is Map ? data['customToken']?.toString() : null;
+
+    if (response.statusCode != 200 ||
+        body['success'] != true ||
+        customToken == null ||
+        customToken.isEmpty) {
+      throw _asException(
+        body['message']?.toString() ??
+            'Sesi upload tidak dapat dipulihkan. Silakan login kembali.',
+      );
+    }
+    return customToken;
   }
 
   Future<void> resendVerificationEmail({
@@ -298,7 +437,7 @@ class ApiService {
     }
   }
 
-  Future<void> sendMessage(String token, String chatId, String text) async {
+  Future<Message?> sendMessage(String token, String chatId, String text) async {
     final url = Uri.parse('$_baseUrl/chats/$chatId/messages');
     try {
       final response = await http.post(
@@ -315,6 +454,17 @@ class ApiService {
       if (response.statusCode != 201 || responseBody['success'] != true) {
         throw _asException(responseBody['message'] ?? 'Failed to send message');
       }
+
+      final data = responseBody['data'];
+      if (data is Map<String, dynamic>) {
+        return Message.fromJson(data);
+      }
+      if (data is Map) {
+        return Message.fromJson(Map<String, dynamic>.from(data));
+      }
+
+      // Kompatibilitas dengan backend versi lama yang mengembalikan data null.
+      return null;
     } catch (e) {
       if (e is Exception) {
         throw _asException(e.toString().replaceFirst('Exception: ', ''));
@@ -328,46 +478,39 @@ class ApiService {
     required Map<String, dynamic> serviceData,
   }) async {
     final url = Uri.parse('$_baseUrl/services');
-
-    // 1. Definisikan headers dan body sebagai variabel terpisah
-    final headers = {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $token',
-    };
-    final encodedBody = jsonEncode(serviceData);
-
-    // 2. Letakkan DEBUG PRINT di sini, SEBELUM mengirim permintaan
-    print('====================================');
-    print('MENGIRIM PERMINTAAN KE: $url');
-    print('HEADERS: $headers');
-    print('BODY: $encodedBody');
-    print('====================================');
-
-    try {
-      // 3. Gunakan variabel yang sudah dibuat di dalam http.post
-      final response = await http.post(
-        url,
-        headers: headers,
-        body: encodedBody,
-      );
-
-      final responseBody = jsonDecode(response.body);
-
-      // Anda bisa menambahkan print untuk melihat respons dari server
-      print('STATUS CODE: ${response.statusCode}');
-      print('RESPONSE BODY: ${response.body}');
-
-      if (response.statusCode == 201 && responseBody['success'] == true) {
-        return responseBody['data'] ?? {};
-      } else {
-        throw _asException(
-          responseBody['message'] ?? 'Failed to create service',
-        );
-      }
-    } catch (e) {
-      print('Error saat memanggil API: $e');
-      throw _asException('Failed to connect to the server.');
+    final response = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode(serviceData),
+    );
+    final responseBody = _decodeJsonObject(response.body);
+    if (response.statusCode == 201 && responseBody['success'] == true) {
+      final data = responseBody['data'];
+      return data is Map ? Map<String, dynamic>.from(data) : {};
     }
+    throw _asException(
+      _extractStructuredErrorMessage(response.body) ??
+          responseBody['message'] ??
+          'Gagal membuat layanan.',
+    );
+  }
+
+  Future<ServiceCatalog> getActiveServiceCatalog() async {
+    final response = await http.get(Uri.parse('$_baseUrl/service-catalog'));
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200 || body['success'] != true) {
+      throw _asException(
+        body['message']?.toString() ?? 'Gagal memuat katalog layanan.',
+      );
+    }
+    final data = body['data'];
+    if (data is! Map) {
+      throw _asException('Format katalog layanan tidak valid.');
+    }
+    return ServiceCatalog.fromJson(Map<String, dynamic>.from(data));
   }
 
   Future<List<Order>> getMyOrders(String token) async {
@@ -644,27 +787,21 @@ class ApiService {
     required Map<String, dynamic> dataToUpdate,
   }) async {
     final url = Uri.parse('$_baseUrl/services/$serviceId');
-    try {
-      final response = await http.put(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode(dataToUpdate),
+    final response = await http.put(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode(dataToUpdate),
+    );
+    final responseBody = _decodeJsonObject(response.body);
+    if (response.statusCode != 200 || responseBody['success'] != true) {
+      throw _asException(
+        _extractStructuredErrorMessage(response.body) ??
+            responseBody['message'] ??
+            'Gagal memperbarui layanan.',
       );
-
-      final responseBody = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && responseBody['success'] == true) {
-        // Update berhasil
-      } else {
-        throw _asException(
-          responseBody['message'] ?? 'Failed to update service',
-        );
-      }
-    } catch (e) {
-      throw _asException('Failed to connect to the server.');
     }
   }
 
@@ -693,6 +830,468 @@ class ApiService {
       }
     } catch (e) {
       throw _asException('Failed to connect to the server.');
+    }
+  }
+
+  Future<List<PaymentInvoice>> getOrderInvoices({
+    required String token,
+    required String orderId,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/payments/order/$orderId/invoices'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200 || body['success'] != true) {
+      throw _asException(
+        body['message']?.toString() ?? 'Gagal memuat invoice pembayaran.',
+      );
+    }
+    final data = body['data'];
+    if (data is! List) return [];
+    return data
+        .whereType<Map>()
+        .map((item) => PaymentInvoice.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
+  Future<Uint8List> downloadInvoicePdf({
+    required String token,
+    required String invoiceId,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/payments/invoices/$invoiceId/pdf'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode == 200 &&
+        response.headers['content-type']?.contains('application/pdf') == true) {
+      return response.bodyBytes;
+    }
+    final body = _decodeJsonObject(response.body);
+    throw _asException(
+      body['message']?.toString() ?? 'Gagal mengunduh PDF invoice.',
+    );
+  }
+
+  Future<RefundRequest?> getOrderRefund({
+    required String token,
+    required String orderId,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/refunds/order/$orderId'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200 || body['success'] != true) {
+      throw _asException(
+        body['message']?.toString() ?? 'Gagal memuat status refund.',
+      );
+    }
+    final data = body['data'];
+    if (data is! Map) return null;
+    return RefundRequest.fromJson(Map<String, dynamic>.from(data));
+  }
+
+  Future<Map<String, dynamic>> createAcceptanceTimeoutRefund({
+    required String token,
+    required String orderId,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/refunds/order/$orderId/acceptance-timeout'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    final body = _decodeJsonObject(response.body);
+    if (![200, 201].contains(response.statusCode) || body['success'] != true) {
+      throw _asException(
+        body['message']?.toString() ??
+            'Gagal mengajukan refund karena Worker tidak merespons.',
+      );
+    }
+    return Map<String, dynamic>.from(body['data'] as Map);
+  }
+
+  Future<RefundRequest> getRefundById({
+    required String token,
+    required String refundId,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/refunds/$refundId'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200 || body['success'] != true) {
+      throw _asException(
+        body['message']?.toString() ?? 'Gagal memuat detail refund.',
+      );
+    }
+    return RefundRequest.fromJson(
+      Map<String, dynamic>.from(body['data'] as Map),
+    );
+  }
+
+  Future<Map<String, dynamic>> createRefundRequest({
+    required String token,
+    required String orderId,
+    required String reasonCode,
+    required String resolutionRequested,
+    required String description,
+    required String paymentTarget,
+    required bool contactedWorker,
+    required bool declarationAccepted,
+    num? requestedAmount,
+    List<String> evidencePaths = const [],
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$_baseUrl/refunds'),
+    );
+    request.headers['Authorization'] = 'Bearer $token';
+    request.fields.addAll({
+      'orderId': orderId,
+      'reasonCode': reasonCode,
+      'resolutionRequested': resolutionRequested,
+      'description': description.trim(),
+      'paymentTarget': paymentTarget,
+      'contactedWorker': contactedWorker.toString(),
+      'declarationAccepted': declarationAccepted.toString(),
+      if (requestedAmount != null)
+        'requestedAmount': requestedAmount.round().toString(),
+    });
+    for (var index = 0; index < evidencePaths.length; index++) {
+      final path = evidencePaths[index];
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'evidence_$index',
+          path,
+          filename: path.split(RegExp(r'[/\\]')).last,
+        ),
+      );
+    }
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 201 || body['success'] != true) {
+      throw _asException(
+        body['message']?.toString() ?? 'Gagal mengajukan refund.',
+      );
+    }
+    return Map<String, dynamic>.from(body['data'] as Map);
+  }
+
+  Future<void> respondToRefund({
+    required String token,
+    required String refundId,
+    required String responseText,
+    required String proposedResolution,
+    List<String> evidencePaths = const [],
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$_baseUrl/refunds/$refundId/respond'),
+    );
+    request.headers['Authorization'] = 'Bearer $token';
+    request.fields.addAll({
+      'response': responseText.trim(),
+      'proposedResolution': proposedResolution,
+    });
+    for (var index = 0; index < evidencePaths.length; index++) {
+      final path = evidencePaths[index];
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'evidence_$index',
+          path,
+          filename: path.split(RegExp(r'[/\\]')).last,
+        ),
+      );
+    }
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200 || body['success'] != true) {
+      throw _asException(
+        body['message']?.toString() ?? 'Gagal mengirim tanggapan refund.',
+      );
+    }
+  }
+
+  Future<void> submitRefundAdditionalEvidence({
+    required String token,
+    required String refundId,
+    required String note,
+    required List<String> evidencePaths,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$_baseUrl/refunds/$refundId/evidence'),
+    );
+    request.headers['Authorization'] = 'Bearer $token';
+    request.fields['note'] = note.trim();
+    for (var index = 0; index < evidencePaths.length; index++) {
+      final path = evidencePaths[index];
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'evidence_$index',
+          path,
+          filename: path.split(RegExp(r'[/\\]')).last,
+        ),
+      );
+    }
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200 || body['success'] != true) {
+      throw _asException(
+        body['message']?.toString() ?? 'Gagal mengirim bukti tambahan refund.',
+      );
+    }
+  }
+
+  Future<void> submitManualRefundDestination({
+    required String token,
+    required String refundId,
+    required String destinationType,
+    required String providerName,
+    required String accountNumber,
+    required String accountHolder,
+  }) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/refunds/$refundId/manual-destination'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'destinationType': destinationType,
+        'providerName': providerName.trim(),
+        'accountNumber': accountNumber.trim(),
+        'accountHolder': accountHolder.trim(),
+      }),
+    );
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200 || body['success'] != true) {
+      throw _asException(
+        body['message']?.toString() ?? 'Gagal menyimpan tujuan refund.',
+      );
+    }
+  }
+
+  Future<void> respondToRefundRework({
+    required String token,
+    required String refundId,
+    required bool accept,
+  }) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/refunds/$refundId/rework/respond'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'action': accept ? 'accept' : 'reject'}),
+    );
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200 || body['success'] != true) {
+      throw _asException(
+        body['message']?.toString() ?? 'Gagal merespons perbaikan ulang.',
+      );
+    }
+  }
+
+  Future<OrderWarranty> getOrderWarranty({
+    required String token,
+    required String orderId,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/warranties/order/$orderId'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200 || body['success'] != true) {
+      throw _asException(
+        body['message']?.toString() ?? 'Gagal memuat informasi garansi.',
+      );
+    }
+    return OrderWarranty.fromJson(
+      Map<String, dynamic>.from(body['data'] as Map),
+    );
+  }
+
+  Future<List<WarrantyClaim>> getMyWarranties({required String token}) async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/warranties/mine'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200 || body['success'] != true) {
+      throw _asException(
+        body['message']?.toString() ?? 'Gagal memuat daftar garansi.',
+      );
+    }
+    final data = body['data'];
+    if (data is! List) return [];
+    return data
+        .whereType<Map>()
+        .map((item) => WarrantyClaim.fromJson(Map<String, dynamic>.from(item)))
+        .toList(growable: false);
+  }
+
+  Future<void> createWarrantyClaim({
+    required String token,
+    required String orderId,
+    required String issueType,
+    required String description,
+    required DateTime preferredVisitAt,
+    required bool declarationAccepted,
+    required List<String> evidencePaths,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$_baseUrl/warranties'),
+    );
+    request.headers['Authorization'] = 'Bearer $token';
+    request.fields.addAll({
+      'orderId': orderId,
+      'issueType': issueType,
+      'description': description.trim(),
+      'preferredVisitAt': preferredVisitAt.toUtc().toIso8601String(),
+      'declarationAccepted': declarationAccepted.toString(),
+    });
+    await _attachEvidenceFiles(request, evidencePaths);
+    await _ensureMultipartSuccess(
+      request,
+      expectedStatuses: const {201},
+      fallbackMessage: 'Gagal mengajukan klaim garansi.',
+    );
+  }
+
+  Future<void> submitWarrantyAdditionalEvidence({
+    required String token,
+    required String claimId,
+    required String note,
+    required List<String> evidencePaths,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$_baseUrl/warranties/$claimId/evidence'),
+    );
+    request.headers['Authorization'] = 'Bearer $token';
+    request.fields['note'] = note.trim();
+    await _attachEvidenceFiles(request, evidencePaths);
+    await _ensureMultipartSuccess(
+      request,
+      fallbackMessage: 'Gagal mengirim bukti tambahan garansi.',
+    );
+  }
+
+  Future<void> respondToWarranty({
+    required String token,
+    required String claimId,
+    required String responseText,
+    required DateTime scheduledAt,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/warranties/$claimId/respond'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'response': responseText.trim(),
+        'scheduledAt': scheduledAt.toUtc().toIso8601String(),
+      }),
+    );
+    _ensureJsonSuccess(response, 'Gagal menyimpan jadwal perbaikan garansi.');
+  }
+
+  Future<void> startWarrantyRepair({
+    required String token,
+    required String claimId,
+    required List<String> evidencePaths,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$_baseUrl/warranties/$claimId/repair/start'),
+    );
+    request.headers['Authorization'] = 'Bearer $token';
+    await _attachEvidenceFiles(request, evidencePaths);
+    await _ensureMultipartSuccess(
+      request,
+      fallbackMessage: 'Gagal memulai perbaikan garansi.',
+    );
+  }
+
+  Future<void> submitWarrantyRepair({
+    required String token,
+    required String claimId,
+    required String note,
+    required List<String> evidencePaths,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$_baseUrl/warranties/$claimId/repair/submit'),
+    );
+    request.headers['Authorization'] = 'Bearer $token';
+    request.fields['note'] = note.trim();
+    await _attachEvidenceFiles(request, evidencePaths);
+    await _ensureMultipartSuccess(
+      request,
+      fallbackMessage: 'Gagal mengirim hasil perbaikan garansi.',
+    );
+  }
+
+  Future<void> confirmWarrantyRepair({
+    required String token,
+    required String claimId,
+    required bool accepted,
+    String? note,
+  }) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/warranties/$claimId/confirm'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'accepted': accepted, 'note': note?.trim()}),
+    );
+    _ensureJsonSuccess(response, 'Gagal mengonfirmasi perbaikan garansi.');
+  }
+
+  Future<void> _attachEvidenceFiles(
+    http.MultipartRequest request,
+    List<String> evidencePaths,
+  ) async {
+    for (var index = 0; index < evidencePaths.length; index++) {
+      final path = evidencePaths[index];
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'evidence_$index',
+          path,
+          filename: path.split(RegExp(r'[/\\]')).last,
+        ),
+      );
+    }
+  }
+
+  Future<void> _ensureMultipartSuccess(
+    http.MultipartRequest request, {
+    Set<int> expectedStatuses = const {200},
+    required String fallbackMessage,
+  }) async {
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+    final body = _decodeJsonObject(response.body);
+    if (!expectedStatuses.contains(response.statusCode) ||
+        body['success'] != true) {
+      throw _asException(body['message']?.toString() ?? fallbackMessage);
+    }
+  }
+
+  void _ensureJsonSuccess(http.Response response, String fallbackMessage) {
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200 || body['success'] != true) {
+      throw _asException(body['message']?.toString() ?? fallbackMessage);
     }
   }
 
@@ -768,9 +1367,7 @@ class ApiService {
 
       final responseBody = jsonDecode(response.body);
       print('URL: $url');
-      print('Token: $token');
       print('Status code: ${response.statusCode}');
-      print('Body: ${response.body}');
 
       if (response.statusCode == 200 && responseBody['success'] == true) {
         return Map<String, dynamic>.from(responseBody['data'] ?? {});
@@ -870,13 +1467,43 @@ class ApiService {
     }
   }
 
+  Future<List<Service>> getNearbyApprovedServices({
+    required String token,
+    required String addressId,
+  }) async {
+    final uri = Uri.parse(
+      '$_baseUrl/services/nearby',
+    ).replace(queryParameters: {'addressId': addressId});
+    final response = await http.get(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+    final responseBody = _decodeJsonObject(response.body);
+    if (response.statusCode != 200 || responseBody['success'] != true) {
+      throw _asException(
+        responseBody['message'] ?? 'Gagal memuat layanan terdekat.',
+      );
+    }
+
+    final data = responseBody['data'];
+    if (data is! List) {
+      throw _asException('Format layanan terdekat tidak valid.');
+    }
+    return data
+        .whereType<Map>()
+        .map((item) => Service.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
+  }
+
   Future<Map<String, dynamic>> getCustomerDashboardSummary() async {
     final url = Uri.parse('$_baseUrl/dashboard/customer-summary');
     try {
       final response = await http.get(url);
 
       final responseBody = jsonDecode(response.body);
-      print("response body: ${response.body}");
       if (response.statusCode == 200 && responseBody['success'] == true) {
         return responseBody['data'];
       } else {
@@ -1105,6 +1732,7 @@ class ApiService {
     required String email,
     required String password,
     required String nama,
+    required String contact,
     String? fcmToken,
   }) async {
     final url = Uri.parse('$_baseUrl/auth/register/customer');
@@ -1115,6 +1743,7 @@ class ApiService {
         'email': email,
         'password': password,
         'nama': nama,
+        'contact': contact,
         'fcmToken': fcmToken,
       }),
     );
@@ -1131,13 +1760,18 @@ class ApiService {
     required String email,
     required String password,
     required String nama,
+    required String contact,
     required List<String> keahlian,
     required String deskripsi,
     required File ktpFile,
     required File fotoDiriFile,
+    File? certificateFile,
     String? portfolioLink,
     String? noKtp,
     String? fcmToken,
+    required OperationalLocation operationalLocation,
+    required String termsVersion,
+    required String registrationRequestId,
   }) async {
     final url = Uri.parse('$_baseUrl/auth/register/worker');
     final encryptionService = EncryptionService();
@@ -1165,14 +1799,25 @@ class ApiService {
           : '';
 
       final request = http.MultipartRequest('POST', url)
+        ..headers['Idempotency-Key'] = registrationRequestId
         ..fields['email'] = email
         ..fields['password'] = password
         ..fields['nama'] = nama
+        ..fields['contact'] = contact
         ..fields['deskripsi'] = deskripsi
         ..fields['keahlian'] = jsonEncode(keahlian)
         ..fields['linkPortofolio'] = portfolioLink ?? ''
         ..fields['noKtp'] = hashedNoKtp
         ..fields['fcmToken'] = fcmToken ?? ''
+        ..fields['operationalAreaLabel'] = operationalLocation.areaLabel
+        ..fields['operationalLatitude'] = operationalLocation.latitude
+            .toString()
+        ..fields['operationalLongitude'] = operationalLocation.longitude
+            .toString()
+        ..fields['serviceRadiusKm'] = operationalLocation.serviceRadiusKm
+            .toString()
+        ..fields['termsAccepted'] = 'true'
+        ..fields['termsVersion'] = termsVersion
         ..fields['isEncrypted'] =
             'true' // Flag to indicate encrypted files
         ..files.add(
@@ -1190,9 +1835,19 @@ class ApiService {
           ),
         );
 
-      print('🔐 [registerWorker] Uploading encrypted files');
-      print('🔐 [registerWorker] KTP filename: $secureKtpFilename');
-      print('🔐 [registerWorker] Foto diri filename: $secureFotoDiriFilename');
+      if (certificateFile != null) {
+        final bytes = await certificateFile.readAsBytes();
+        if (bytes.isEmpty || bytes.length > 8 * 1024 * 1024) {
+          throw _asException('Sertifikat harus berukuran 1 byte sampai 8 MB.');
+        }
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'certificate',
+            bytes,
+            filename: certificateFile.path.split(Platform.pathSeparator).last,
+          ),
+        );
+      }
 
       final response = await request.send();
       if (response.statusCode != 201) {
@@ -1202,14 +1857,106 @@ class ApiService {
             'Gagal registrasi worker.';
         throw _asException(message);
       }
-
-      print(
-        '✅ [registerWorker] Worker registered successfully with encrypted files',
-      );
     } catch (e) {
-      print('❌ [registerWorker] Failed to register worker: $e');
       rethrow;
     }
+  }
+
+  Future<Map<String, dynamic>> registerGoogleWorker({
+    required String firebaseIdToken,
+    required String nama,
+    required String contact,
+    required List<String> keahlian,
+    required String deskripsi,
+    required File ktpFile,
+    required File fotoDiriFile,
+    File? certificateFile,
+    String? portfolioLink,
+    String? noKtp,
+    String? fcmToken,
+    required OperationalLocation operationalLocation,
+    required String termsVersion,
+    required String registrationRequestId,
+  }) async {
+    final encryptionService = EncryptionService();
+    final ktpBytes = await ktpFile.readAsBytes();
+    final fotoDiriBytes = await fotoDiriFile.readAsBytes();
+    final encryptedKtpBytes = encryptionService.encryptFileData(ktpBytes);
+    final encryptedFotoDiriBytes = encryptionService.encryptFileData(
+      fotoDiriBytes,
+    );
+    final secureKtpFilename = encryptionService.generateSecureFilename(
+      ktpFile.path,
+    );
+    final secureFotoDiriFilename = encryptionService.generateSecureFilename(
+      fotoDiriFile.path,
+    );
+    final hashedNoKtp = noKtp != null
+        ? encryptionService.hashSensitiveData(noKtp)
+        : '';
+
+    final request =
+        http.MultipartRequest(
+            'POST',
+            Uri.parse('$_baseUrl/auth/register/google/worker'),
+          )
+          ..headers['Authorization'] = 'Bearer $firebaseIdToken'
+          ..headers['Idempotency-Key'] = registrationRequestId
+          ..fields['nama'] = nama
+          ..fields['contact'] = contact
+          ..fields['deskripsi'] = deskripsi
+          ..fields['keahlian'] = jsonEncode(keahlian)
+          ..fields['linkPortofolio'] = portfolioLink ?? ''
+          ..fields['noKtp'] = hashedNoKtp
+          ..fields['fcmToken'] = fcmToken ?? ''
+          ..fields['operationalAreaLabel'] = operationalLocation.areaLabel
+          ..fields['operationalLatitude'] = operationalLocation.latitude
+              .toString()
+          ..fields['operationalLongitude'] = operationalLocation.longitude
+              .toString()
+          ..fields['serviceRadiusKm'] = operationalLocation.serviceRadiusKm
+              .toString()
+          ..fields['termsAccepted'] = 'true'
+          ..fields['termsVersion'] = termsVersion
+          ..fields['isEncrypted'] = 'true'
+          ..files.add(
+            http.MultipartFile.fromBytes(
+              'ktp',
+              encryptedKtpBytes,
+              filename: secureKtpFilename,
+            ),
+          )
+          ..files.add(
+            http.MultipartFile.fromBytes(
+              'fotoDiri',
+              encryptedFotoDiriBytes,
+              filename: secureFotoDiriFilename,
+            ),
+          );
+
+    if (certificateFile != null) {
+      final bytes = await certificateFile.readAsBytes();
+      if (bytes.isEmpty || bytes.length > 8 * 1024 * 1024) {
+        throw _asException('Sertifikat harus berukuran 1 byte sampai 8 MB.');
+      }
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'certificate',
+          bytes,
+          filename: certificateFile.path.split(Platform.pathSeparator).last,
+        ),
+      );
+    }
+
+    final streamedResponse = await request.send();
+    final responseBody = await streamedResponse.stream.bytesToString();
+    final body = _decodeJsonObject(responseBody);
+    if (streamedResponse.statusCode != 201 || body['success'] != true) {
+      throw _asException(
+        body['message']?.toString() ?? 'Gagal registrasi Worker dengan Google.',
+      );
+    }
+    return body;
   }
 
   Future<void> proposeQuote({
@@ -1329,7 +2076,7 @@ class ApiService {
 
     final requestBody = {
       'serviceId': serviceId,
-      'jadwalPerbaikan': jadwalPerbaikan.toIso8601String(),
+      'jadwalPerbaikan': jadwalPerbaikan.toUtc().toIso8601String(),
       'catatan': catatan ?? '',
       if (voucherCode != null) 'voucherCode': voucherCode,
       if (locationMode != null) 'locationMode': locationMode,
@@ -1521,6 +2268,100 @@ class ApiService {
   // =============================
   // MISSING ORDER ENDPOINTS
   // =============================
+
+  /// Worker mengirim 1-3 foto before dan resmi memulai pekerjaan.
+  Future<void> startOrderWork({
+    required String token,
+    required String orderId,
+    required List<String> evidencePaths,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$_baseUrl/orders/$orderId/work/start'),
+    );
+    request.headers['Authorization'] = 'Bearer $token';
+
+    for (var i = 0; i < evidencePaths.length; i++) {
+      final filePath = evidencePaths[i];
+      final fileName = filePath.split(RegExp(r'[/\\]')).last;
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'evidence_$i',
+          filePath,
+          filename: fileName,
+        ),
+      );
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200 || body['success'] != true) {
+      throw _asException(body['message'] ?? 'Gagal memulai pekerjaan.');
+    }
+  }
+
+  /// Worker mengirim catatan dan 1-3 foto after.
+  Future<void> submitOrderCompletion({
+    required String token,
+    required String orderId,
+    required String note,
+    required List<String> evidencePaths,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$_baseUrl/orders/$orderId/completion/submit'),
+    );
+    request.headers['Authorization'] = 'Bearer $token';
+    request.fields['note'] = note.trim();
+
+    for (var i = 0; i < evidencePaths.length; i++) {
+      final filePath = evidencePaths[i];
+      final fileName = filePath.split(RegExp(r'[/\\]')).last;
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'evidence_$i',
+          filePath,
+          filename: fileName,
+        ),
+      );
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200 || body['success'] != true) {
+      throw _asException(
+        body['message'] ?? 'Gagal mengirim bukti penyelesaian.',
+      );
+    }
+  }
+
+  /// Customer menyetujui bukti; backend menyelesaikan order dan menahan payout.
+  Future<OrderCompletionConfirmation> confirmOrderCompletion({
+    required String token,
+    required String orderId,
+  }) async {
+    final response = await http
+        .put(
+          Uri.parse('$_baseUrl/orders/$orderId/completion/confirm'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+        )
+        .timeout(const Duration(seconds: 20));
+    final body = _decodeJsonObject(response.body);
+    if (response.statusCode != 200 || body['success'] != true) {
+      throw _asException(
+        body['message'] ?? 'Gagal mengonfirmasi penyelesaian.',
+      );
+    }
+    final data = body['data'];
+    return OrderCompletionConfirmation.fromJson(
+      data is Map ? Map<String, dynamic>.from(data) : const {},
+    );
+  }
 
   /// Complete order (Worker Only)
   Future<void> completeOrder({
@@ -1819,21 +2660,49 @@ class ApiService {
   Future<void> updateMyWorkerProfile({
     required String token,
     required Map<String, dynamic> dataToUpdate,
+    File? certificateFile,
+    File? portfolioFile,
   }) async {
     final url = Uri.parse('$_baseUrl/workers/profile/me');
     try {
-      final response = await http.put(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode(dataToUpdate),
-      );
+      final request = http.MultipartRequest('PUT', url)
+        ..headers['Authorization'] = 'Bearer $token';
+      for (final entry in dataToUpdate.entries) {
+        request.fields[entry.key] = entry.value is List
+            ? jsonEncode(entry.value)
+            : entry.value.toString();
+      }
+      if (certificateFile != null) {
+        final bytes = await certificateFile.readAsBytes();
+        if (bytes.isEmpty || bytes.length > 8 * 1024 * 1024) {
+          throw _asException('Sertifikat harus berukuran 1 byte sampai 8 MB.');
+        }
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'certificate',
+            bytes,
+            filename: certificateFile.path.split(Platform.pathSeparator).last,
+          ),
+        );
+      }
+      if (portfolioFile != null) {
+        final bytes = await portfolioFile.readAsBytes();
+        if (bytes.isEmpty || bytes.length > 8 * 1024 * 1024) {
+          throw _asException('Portofolio harus berukuran 1 byte sampai 8 MB.');
+        }
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'portfolio',
+            bytes,
+            filename: portfolioFile.path.split(Platform.pathSeparator).last,
+          ),
+        );
+      }
+      final streamed = await request.send();
+      final rawBody = await streamed.stream.bytesToString();
+      final responseBody = _decodeJsonObject(rawBody);
 
-      final responseBody = jsonDecode(response.body);
-
-      if (response.statusCode != 200 || responseBody['success'] != true) {
+      if (streamed.statusCode != 200 || responseBody['success'] != true) {
         throw _asException(
           responseBody['message'] ?? 'Failed to update worker profile',
         );
@@ -2138,6 +3007,20 @@ class ApiService {
 
   Exception _asException(dynamic message) {
     return AppException(readableError(message));
+  }
+
+  Map<String, dynamic> _decodeJsonObject(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } catch (_) {
+      // Ditangani sebagai respons server tidak valid di bawah.
+    }
+    return <String, dynamic>{
+      'success': false,
+      'message': 'Respons server tidak valid.',
+    };
   }
 
   String _friendlyMessage(String raw) {

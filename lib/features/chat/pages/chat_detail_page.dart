@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../../core/api/api_service.dart';
@@ -25,7 +28,8 @@ class ChatDetailPage extends StatefulWidget {
   State<ChatDetailPage> createState() => _ChatDetailPageState();
 }
 
-class _ChatDetailPageState extends State<ChatDetailPage> {
+class _ChatDetailPageState extends State<ChatDetailPage>
+    with WidgetsBindingObserver {
   static const Color primaryColor = Color(0xFF1A374D);
   static const Color backgroundGray = Color(0xFFF8F9FA);
   static const Color sentBubbleColor = Color(0xFF1A374D);
@@ -38,19 +42,48 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
   List<Message> _messages = [];
   bool _isInitialLoading = true;
   bool _isSending = false;
+  bool _isRefreshingMessages = false;
+  Timer? _messagePollingTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadMessages();
-    _markAsRead();
+    _startMessagePolling();
   }
 
-  void _markAsRead() {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    if (authProvider.token != null) {
-      _apiService.markChatAsRead(authProvider.token!, widget.chatId);
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _messagePollingTimer?.cancel();
+    _messageController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshMessagesSilently());
+      _startMessagePolling();
+      return;
     }
+
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached ||
+        state == AppLifecycleState.hidden) {
+      _messagePollingTimer?.cancel();
+      _messagePollingTimer = null;
+    }
+  }
+
+  void _startMessagePolling() {
+    _messagePollingTimer?.cancel();
+    _messagePollingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      unawaited(_refreshMessagesSilently());
+    });
   }
 
   void _showComingSoonDialog({String? featureLabel}) {
@@ -81,6 +114,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
           authProvider.token!,
           widget.chatId,
         );
+        await _markIncomingMessagesAsRead(result, authProvider);
         if (!mounted) return;
         setState(() {
           _messages = result;
@@ -134,8 +168,30 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
       _scrollToBottom();
 
       try {
-        await _apiService.sendMessage(token, widget.chatId, messageText);
-        _refreshMessagesSilently();
+        final confirmedMessage = await _apiService.sendMessage(
+          token,
+          widget.chatId,
+          messageText,
+        );
+        if (mounted) {
+          setState(() {
+            final confirmed =
+                confirmedMessage ??
+                Message(
+                  id: 'sent_${DateTime.now().microsecondsSinceEpoch}',
+                  text: messageText,
+                  senderId: senderId ?? 'unknown',
+                  timestamp: DateTime.now(),
+                );
+            _messages = _messages
+                .map(
+                  (message) =>
+                      message.id == optimisticMessage.id ? confirmed : message,
+                )
+                .toList();
+          });
+        }
+        await _refreshMessagesSilently(force: true);
       } catch (e) {
         if (mounted) {
           setState(() {
@@ -174,22 +230,65 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     });
   }
 
-  Future<void> _refreshMessagesSilently() async {
+  Future<void> _refreshMessagesSilently({bool force = false}) async {
+    if (_isRefreshingMessages || (_isSending && !force)) return;
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.token == null) return;
+    _isRefreshingMessages = true;
     try {
       final result = await _apiService.getMessages(
         authProvider.token!,
         widget.chatId,
       );
+      await _markIncomingMessagesAsRead(result, authProvider);
       if (!mounted) return;
-      setState(() {
-        _messages = result;
-      });
-      _scrollToBottom();
+      final hasNewMessage =
+          _messages.isEmpty ||
+          result.isEmpty ||
+          _messages.last.id != result.last.id;
+      if (_messagesChanged(result)) {
+        setState(() {
+          _messages = result;
+        });
+        if (hasNewMessage) _scrollToBottom();
+      }
     } catch (_) {
       // Silent refresh failure should not interrupt UI.
+    } finally {
+      _isRefreshingMessages = false;
     }
+  }
+
+  Future<void> _markIncomingMessagesAsRead(
+    List<Message> messages,
+    AuthProvider authProvider,
+  ) async {
+    final currentUserId = authProvider.user?.uid;
+    final token = authProvider.token;
+    if (currentUserId == null || token == null) return;
+
+    final hasUnreadIncoming = messages.any(
+      (message) => message.senderId != currentUserId && message.readAt == null,
+    );
+    if (hasUnreadIncoming) {
+      await _apiService.markChatAsRead(token, widget.chatId);
+    }
+  }
+
+  bool _messagesChanged(List<Message> next) {
+    if (_messages.length != next.length) return true;
+    for (var index = 0; index < next.length; index++) {
+      final current = _messages[index];
+      final candidate = next[index];
+      if (current.id != candidate.id ||
+          current.text != candidate.text ||
+          current.senderId != candidate.senderId ||
+          current.timestamp != candidate.timestamp ||
+          current.readAt != candidate.readAt) {
+        return true;
+      }
+    }
+    return false;
   }
 
   @override
@@ -288,28 +387,34 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
             ),
           ),
           const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.name,
-                style: const TextStyle(
-                  color: primaryColor,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.name,
+                  key: const ValueKey('chat-participant-name'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: primaryColor,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              Text(
-                widget.readOnly ? 'Read-only' : 'Online',
-                style: TextStyle(
-                  color: widget.readOnly
-                      ? Colors.orange.shade700
-                      : mutedTextColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+                Text(
+                  widget.readOnly ? 'Read-only' : 'Online',
+                  style: TextStyle(
+                    color: widget.readOnly
+                        ? Colors.orange.shade700
+                        : mutedTextColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
@@ -418,22 +523,39 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
                   ),
                   if (isSentByMe) ...[
                     const SizedBox(width: 6),
-                    if (message.id.startsWith('local_'))
-                      Icon(Icons.access_time, size: 13, color: mutedTextColor)
-                    else
-                      Icon(
-                        message.readAt != null ? Icons.done_all : Icons.check,
-                        size: 14,
-                        color: message.readAt != null
-                            ? primaryColor
-                            : mutedTextColor,
-                      ),
+                    _buildMessageStatus(message),
                   ],
                 ],
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMessageStatus(Message message) {
+    final isSending = message.id.startsWith('local_');
+    final isRead = message.readAt != null;
+    final label = isSending
+        ? 'Sedang dikirim'
+        : isRead
+        ? 'Dibaca'
+        : 'Terkirim';
+
+    return Tooltip(
+      message: label,
+      child: Semantics(
+        label: label,
+        child: Icon(
+          isSending
+              ? Icons.access_time
+              : isRead
+              ? Icons.done_all
+              : Icons.check,
+          size: isSending ? 13 : 14,
+          color: isSending ? mutedTextColor : primaryColor,
+        ),
       ),
     );
   }
@@ -476,6 +598,8 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
             Expanded(
               child: TextField(
                 controller: _messageController,
+                inputFormatters: [LengthLimitingTextInputFormatter(2000)],
+                textCapitalization: TextCapitalization.sentences,
                 decoration: InputDecoration(
                   hintText: 'Tulis pesan...',
                   filled: true,

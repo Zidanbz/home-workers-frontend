@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:home_workers_fe/features/auth/pages/login_page.dart';
-import 'package:home_workers_fe/features/onborading/pages/onboarding_page.dart';
+import 'package:home_workers_fe/features/onboarding/pages/onboarding_page.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -12,7 +11,10 @@ import 'core/services/encryption_service.dart';
 import 'core/services/realtime_notification_service.dart';
 import 'core/services/chat_service.dart';
 import 'features/auth/pages/welcome_page.dart';
+import 'features/auth/pages/worker_kyc_revision_page.dart';
+import 'features/auth/pages/worker_registration_status_page.dart';
 import 'features/main_page.dart';
+import 'features/profile/pages/address_management_page.dart';
 import 'firebase_env_options.dart';
 import 'core/widgets/app_version_gate.dart';
 
@@ -29,19 +31,25 @@ void main() async {
     '🔥 [main] Firebase project=${AppFirebaseOptions.projectIdFor(appEnv)}',
   );
   try {
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      // Android uses google-services*.json selected at build-time.
-      await Firebase.initializeApp();
-    } else {
-      await Firebase.initializeApp(options: firebaseOptions);
-    }
+    await Firebase.initializeApp(options: firebaseOptions);
     print('🔥 [main] Firebase initialized successfully');
   } on FirebaseException catch (e) {
     if (e.code != 'duplicate-app') rethrow;
     final existing = Firebase.app();
-    print(
-      '🔥 [main] Reusing existing Firebase app: ${existing.options.projectId}',
-    );
+    final expectedProjectId = firebaseOptions.projectId;
+    final actualProjectId = existing.options.projectId;
+    if (actualProjectId != expectedProjectId) {
+      await existing.delete();
+      await Firebase.initializeApp(options: firebaseOptions);
+      print(
+        '🔥 [main] Reinitialized Firebase project=$expectedProjectId '
+        'after duplicate app mismatch from $actualProjectId',
+      );
+    } else {
+      print(
+        '🔥 [main] Reusing existing Firebase app: ${existing.options.projectId}',
+      );
+    }
   }
 
   // Initialize services
@@ -82,6 +90,9 @@ class MyApp extends StatelessWidget {
         theme: ThemeData(/* ... */ fontFamily: 'OpenSans'),
         // Pembaruan wajib (Android): lihat docs/environment-and-mandatory-update.md
         home: const AppVersionGate(child: AuthWrapper()),
+        routes: {
+          '/address-management': (context) => const AddressManagementPage(),
+        },
         debugShowCheckedModeBanner: false,
       ),
     );
@@ -121,6 +132,27 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
         // Jika sudah login, langsung ke halaman utama
         if (auth.isLoggedIn) {
+          if (auth.user!.role.toUpperCase() == 'WORKER') {
+            final status = auth.user!.workerStatus?.toLowerCase();
+            if (status == 'revision_required') {
+              return const WorkerKycRevisionPage();
+            }
+            if (status == 'pending' || status == 'resubmitted') {
+              return WorkerRegistrationStatusPage(status: status!);
+            }
+            if (status == 'rejected') {
+              return WorkerRegistrationStatusPage(
+                status: status!,
+                rejectionReason: auth.user!.rejectionReason,
+              );
+            }
+            if (status != 'approved') {
+              return WorkerRegistrationStatusPage(
+                status: status ?? 'registration_incomplete',
+                rejectionReason: auth.user!.rejectionReason,
+              );
+            }
+          }
           return MainPage(userRole: auth.user!.role);
         }
 

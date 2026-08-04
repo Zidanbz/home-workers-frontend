@@ -63,7 +63,9 @@ class _NotificationPageState extends State<NotificationPage> {
       await _loadNotifications();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Semua notifikasi ditandai telah dibaca')),
+          const SnackBar(
+            content: Text('Semua notifikasi ditandai telah dibaca'),
+          ),
         );
       }
     } catch (e) {
@@ -93,7 +95,8 @@ class _NotificationPageState extends State<NotificationPage> {
 
     if (notif.type == 'service_approved') {
       Navigator.pushNamed(context, '/my-jobs');
-    } else if (notif.type == 'order_update') {
+    } else if (notif.type == 'order_update' ||
+        notif.type == 'warranty_update') {
       Navigator.pushNamed(context, '/order-detail', arguments: notif.relatedId);
     }
 

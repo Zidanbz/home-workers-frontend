@@ -9,7 +9,7 @@
 - [x] Added `hasCekDulu` variable that uses `.any()` method with `.toLowerCase()` for robust checking
 - [x] Added debug prints to track payment method detection
 
-**File: `lib/features/costumer_flow/booking/pages/booking_page.dart`**
+**File: `lib/features/customer_flow/booking/pages/booking_page.dart`**
 
 Changes:
 1. Added case-insensitive check for "cek dulu" payment method:
@@ -39,7 +39,7 @@ Changes:
 - [x] Updated payment flow to include voucher code
 - [x] Fixed model compatibility (used `quotedPrice` instead of `proposedPrice`)
 
-**File: `lib/features/costumer_flow/orders/pages/customer_order_detail_page.dart`**
+**File: `lib/features/customer_flow/orders/pages/customer_order_detail_page.dart`**
 
 Changes:
 1. Added voucher state variables

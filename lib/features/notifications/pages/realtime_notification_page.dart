@@ -10,7 +10,8 @@ class RealtimeNotificationPage extends StatefulWidget {
   const RealtimeNotificationPage({super.key});
 
   @override
-  State<RealtimeNotificationPage> createState() => _RealtimeNotificationPageState();
+  State<RealtimeNotificationPage> createState() =>
+      _RealtimeNotificationPageState();
 }
 
 class _RealtimeNotificationPageState extends State<RealtimeNotificationPage> {
@@ -67,8 +68,13 @@ class _RealtimeNotificationPageState extends State<RealtimeNotificationPage> {
         break;
       case 'new_order':
       case 'order_update':
+      case 'warranty_update':
         if (notif.relatedId != null) {
-          Navigator.pushNamed(context, '/order-detail', arguments: notif.relatedId);
+          Navigator.pushNamed(
+            context,
+            '/order-detail',
+            arguments: notif.relatedId,
+          );
         } else {
           Navigator.pushNamed(context, '/orders');
         }

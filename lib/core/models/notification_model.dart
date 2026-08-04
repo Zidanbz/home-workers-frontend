@@ -9,7 +9,7 @@ class NotificationItem {
   final DateTime timestamp;
   final bool isRead;
   final String type;
-  final String? relatedId; 
+  final String? relatedId;
 
   NotificationItem({
     required this.id,
@@ -22,7 +22,8 @@ class NotificationItem {
   });
 
   factory NotificationItem.fromJson(Map<String, dynamic> json) {
-    final parsedTimestamp = _parseTimestamp(json['timestamp']) ?? DateTime.now();
+    final parsedTimestamp =
+        _parseTimestamp(json['timestamp']) ?? DateTime.now();
     return NotificationItem(
       id: json['id'] ?? '',
       title: json['title'] ?? '',
@@ -79,6 +80,8 @@ class NotificationItem {
         return Icons.receipt_long_outlined;
       case 'order_update':
         return Icons.receipt_long_outlined;
+      case 'warranty_update':
+        return Icons.verified_user_outlined;
       case 'promo':
         return Icons.campaign_outlined;
       default:
@@ -96,6 +99,8 @@ class NotificationItem {
         return Colors.deepPurple;
       case 'order_update':
         return Colors.deepPurple;
+      case 'warranty_update':
+        return Colors.green.shade700;
       case 'promo':
         return Colors.blue.shade700;
       default:

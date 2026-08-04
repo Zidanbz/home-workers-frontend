@@ -1,35 +1,17 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:home_workers_fe/core/models/category_model.dart';
+import 'package:home_workers_fe/core/models/service_catalog_model.dart';
 import 'package:home_workers_fe/core/services/storage_service_page.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/api/api_service.dart';
 import '../../../../core/models/service_model.dart';
 import '../../../../core/state/auth_provider.dart';
+import '../../profile/pages/worker_operational_area_page.dart';
+import '../utils/service_availability_form.dart';
 
 enum ServiceType { fixed, survey }
-
-final List<CategoryItem> categories = [
-  CategoryItem("Kebersihan", Icons.cleaning_services, Colors.blue),
-  CategoryItem("Perbaikan", Icons.handyman, Colors.orange),
-  CategoryItem("Instalasi", Icons.download, Colors.green),
-  CategoryItem("Renovasi", Icons.home_repair_service, Colors.purple),
-  CategoryItem("Elektronik", Icons.electrical_services, Colors.amber),
-  CategoryItem("Otomotif", Icons.directions_car, Colors.red),
-  CategoryItem("Perawatan Taman", Icons.local_florist, Colors.teal),
-  CategoryItem("Pembangunan", Icons.construction, Colors.brown),
-  CategoryItem("Gadget", Icons.phone_android, Colors.indigo),
-];
-
-class CategoryItem {
-  final String name;
-  final IconData icon;
-  final Color color;
-
-  CategoryItem(this.name, this.icon, this.color);
-}
 
 class CreateEditJobPage extends StatefulWidget {
   final Service? service;
@@ -41,8 +23,6 @@ class CreateEditJobPage extends StatefulWidget {
 
 enum PaymentMethod { cashless, cash }
 
-PaymentMethod _selectedPaymentMethod = PaymentMethod.cashless;
-
 const int _thumbnailCacheSize = 512;
 
 class _CreateEditJobPageState extends State<CreateEditJobPage>
@@ -51,7 +31,6 @@ class _CreateEditJobPageState extends State<CreateEditJobPage>
   final ApiService _apiService = ApiService();
   final StorageService _storageService = StorageService();
 
-  final _namaLayananController = TextEditingController();
   final _hargaController = TextEditingController();
   final _biayaSurveiController = TextEditingController();
   final _deskripsiController = TextEditingController();
@@ -64,9 +43,18 @@ class _CreateEditJobPageState extends State<CreateEditJobPage>
   bool _isLoading = false;
   bool _isUploading = false;
   ServiceType _serviceType = ServiceType.fixed;
-  String? _selectedCategory;
+  PaymentMethod _selectedPaymentMethod = PaymentMethod.cashless;
+  ServiceCatalog? _catalog;
+  String? _selectedCatalogGroupId;
+  String? _selectedCatalogAssetId;
+  String? _selectedCatalogItemId;
+  bool _isLoadingCatalog = true;
+  String? _catalogError;
   List<File> _pickedImages = [];
   List<String> _existingImageUrls = [];
+  String? _operationalAreaLabel;
+  int? _serviceRadiusKm;
+  bool _isLoadingOperationalArea = true;
 
   final List<String> _jamPilihan = [
     'Pagi 09.00 - 11.00',
@@ -74,25 +62,10 @@ class _CreateEditJobPageState extends State<CreateEditJobPage>
     'Sore 16.00 - 18.00',
   ];
 
-  Map<String, Set<String>> _selectedAvailability = {
-    'Senin': {},
-    'Selasa': {},
-    'Rabu': {},
-    'Kamis': {},
-    'Jumat': {},
-    'Sabtu': {},
-    'Minggu': {},
-  };
+  Map<String, Set<String>> _selectedAvailability =
+      buildServiceAvailabilitySelection(const []);
 
-  final List<String> _hari = [
-    'Senin',
-    'Selasa',
-    'Rabu',
-    'Kamis',
-    'Jumat',
-    'Sabtu',
-    'Minggu',
-  ];
+  final List<String> _hari = serviceAvailabilityDays;
 
   @override
   void initState() {
@@ -114,9 +87,10 @@ class _CreateEditJobPageState extends State<CreateEditJobPage>
 
     _isEditMode = widget.service != null;
     if (_isEditMode) {
-      _namaLayananController.text = widget.service!.namaLayanan;
       _deskripsiController.text = widget.service!.deskripsiLayanan;
-      _selectedCategory = widget.service!.category;
+      _selectedCatalogGroupId = widget.service!.catalogGroupId;
+      _selectedCatalogAssetId = widget.service!.catalogAssetId;
+      _selectedCatalogItemId = widget.service!.catalogItemId;
       _serviceType = widget.service!.tipeLayanan == 'survey'
           ? ServiceType.survey
           : ServiceType.fixed;
@@ -127,14 +101,26 @@ class _CreateEditJobPageState extends State<CreateEditJobPage>
             widget.service!.biayaSurvei?.toString() ?? '';
       }
       _existingImageUrls = List<String>.from(widget.service!.photoUrls);
+      _selectedAvailability = buildServiceAvailabilitySelection(
+        widget.service!.availability,
+      );
+      if (_serviceType == ServiceType.survey) {
+        _selectedPaymentMethod =
+            widget.service!.metodePembayaran.any(
+              (method) => method.toString().toLowerCase() == 'cek dulu',
+            )
+            ? PaymentMethod.cash
+            : PaymentMethod.cashless;
+      }
     }
     _animationController.forward();
+    _loadOperationalArea();
+    _loadServiceCatalog();
   }
 
   @override
   void dispose() {
     _animationController.dispose();
-    _namaLayananController.dispose();
     _hargaController.dispose();
     _biayaSurveiController.dispose();
     _deskripsiController.dispose();
@@ -145,6 +131,181 @@ class _CreateEditJobPageState extends State<CreateEditJobPage>
     final hour = time.hour.toString().padLeft(2, '0');
     final minute = time.minute.toString().padLeft(2, '0');
     return '$hour:$minute';
+  }
+
+  Future<void> _loadOperationalArea() async {
+    final token = context.read<AuthProvider>().token;
+    if (token == null) {
+      if (mounted) setState(() => _isLoadingOperationalArea = false);
+      return;
+    }
+    try {
+      final profile = await _apiService.getMyWorkerProfile(token);
+      if (!mounted) return;
+      setState(() {
+        _operationalAreaLabel = profile['operationalAreaLabel']
+            ?.toString()
+            .trim();
+        _serviceRadiusKm = int.tryParse(
+          profile['serviceRadiusKm']?.toString() ?? '',
+        );
+        _isLoadingOperationalArea = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingOperationalArea = false);
+    }
+  }
+
+  Future<void> _loadServiceCatalog() async {
+    try {
+      final catalog = await _apiService.getActiveServiceCatalog();
+      if (!mounted) return;
+
+      String? groupId = _selectedCatalogGroupId;
+      String? assetId = _selectedCatalogAssetId;
+      String? itemId = _selectedCatalogItemId;
+      ServiceCatalogItem? selectedItem;
+
+      if (itemId != null) {
+        selectedItem = catalog.items
+            .where((item) => item.id == itemId)
+            .firstOrNull;
+      }
+      if (selectedItem == null && _isEditMode) {
+        final legacyName = widget.service!.namaLayanan.trim().toLowerCase();
+        final legacyCategory = widget.service!.category.trim().toLowerCase();
+        selectedItem = catalog.items.where((item) {
+          final group = catalog.groups
+              .where((entry) => entry.id == item.groupId)
+              .firstOrNull;
+          return item.name.trim().toLowerCase() == legacyName &&
+              group?.name.trim().toLowerCase() == legacyCategory;
+        }).firstOrNull;
+      }
+      if (selectedItem != null) {
+        itemId = selectedItem.id;
+        groupId = selectedItem.groupId;
+        assetId = selectedItem.assetId;
+      } else {
+        itemId = null;
+        groupId = null;
+        assetId = null;
+      }
+
+      setState(() {
+        _catalog = catalog;
+        _selectedCatalogGroupId = groupId;
+        _selectedCatalogAssetId = assetId;
+        _selectedCatalogItemId = itemId;
+        _isLoadingCatalog = false;
+        _catalogError = catalog.items.isEmpty
+            ? 'Katalog layanan belum diisi oleh Admin.'
+            : null;
+      });
+      _ensureAllowedServiceType();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingCatalog = false;
+        _catalogError = ApiService.readableError(
+          error,
+          action: 'Katalog gagal dimuat',
+        );
+      });
+    }
+  }
+
+  Future<void> _openOperationalAreaSettings() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const WorkerOperationalAreaPage()),
+    );
+    if (mounted) {
+      setState(() => _isLoadingOperationalArea = true);
+      await _loadOperationalArea();
+    }
+  }
+
+  Widget _buildOperationalAreaConfirmation() {
+    final hasArea =
+        _operationalAreaLabel?.isNotEmpty == true && _serviceRadiusKm != null;
+    return _buildModernSection(
+      'Area Layanan',
+      Icons.location_on_outlined,
+      Colors.teal,
+      _isLoadingOperationalArea
+          ? const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          : Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: hasArea ? Colors.teal.shade50 : Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: hasArea
+                      ? Colors.teal.shade200
+                      : Colors.orange.shade200,
+                ),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        hasArea
+                            ? Icons.check_circle_rounded
+                            : Icons.warning_amber_rounded,
+                        color: hasArea
+                            ? Colors.teal.shade700
+                            : Colors.orange.shade700,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              hasArea
+                                  ? _operationalAreaLabel!
+                                  : 'Area operasional belum lengkap',
+                              style: TextStyle(
+                                color: hasArea
+                                    ? Colors.teal.shade900
+                                    : Colors.orange.shade900,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              hasArea
+                                  ? 'Melayani hingga $_serviceRadiusKm km'
+                                  : 'Lengkapi area sebelum layanan dipublikasi.',
+                              style: TextStyle(
+                                color: hasArea
+                                    ? Colors.teal.shade700
+                                    : Colors.orange.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _openOperationalAreaSettings,
+                      icon: const Icon(Icons.edit_location_alt_outlined),
+                      label: Text(hasArea ? 'Ubah di Profil' : 'Lengkapi Area'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+    );
   }
 
   Widget _buildAvailabilitySection() {
@@ -283,122 +444,215 @@ class _CreateEditJobPageState extends State<CreateEditJobPage>
     );
   }
 
-  void _showCategoryPicker() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.7,
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+  ServiceCatalogItem? get _selectedCatalogItem => _catalog?.items
+      .where((item) => item.id == _selectedCatalogItemId)
+      .firstOrNull;
+
+  List<ServiceCatalogItem> get _itemsForSelectedGroup {
+    final groupId = _selectedCatalogGroupId;
+    if (groupId == null) return const [];
+    return _catalog?.items
+            .where((item) => item.groupId == groupId)
+            .toList(growable: false) ??
+        const [];
+  }
+
+  List<ServiceCatalogAsset> get _assetsForSelectedGroup {
+    final assetIds = _itemsForSelectedGroup.map((item) => item.assetId).toSet();
+    return _catalog?.assets
+            .where((asset) => assetIds.contains(asset.id))
+            .toList(growable: false) ??
+        const [];
+  }
+
+  List<ServiceCatalogItem> get _itemsForSelectedAsset {
+    final assetId = _selectedCatalogAssetId;
+    if (assetId == null) return const [];
+    return _itemsForSelectedGroup
+        .where((item) => item.assetId == assetId)
+        .toList(growable: false);
+  }
+
+  void _ensureAllowedServiceType() {
+    final item = _selectedCatalogItem;
+    if (item == null || item.allows(_serviceType.name)) return;
+    final nextType = item.allows(ServiceType.fixed.name)
+        ? ServiceType.fixed
+        : ServiceType.survey;
+    if (mounted) setState(() => _serviceType = nextType);
+  }
+
+  Widget _buildCatalogSelection() {
+    if (_isLoadingCatalog) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 22),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_catalogError != null) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.orange.shade50,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.orange.shade200),
+        ),
+        child: Column(
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  color: Colors.orange.shade800,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _catalogError!,
+                    style: TextStyle(color: Colors.orange.shade900),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _isLoadingCatalog = true;
+                  _catalogError = null;
+                });
+                _loadServiceCatalog();
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('Coba Lagi'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    InputDecoration decoration(String label, IconData icon) {
+      return InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: Colors.orange.shade700),
+        filled: true,
+        fillColor: Colors.orange.shade50,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.orange.shade200),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.orange.shade200),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Nama layanan ditentukan dari katalog resmi agar mudah ditemukan '
+          'Customer dan dapat dibandingkan secara konsisten.',
+          style: TextStyle(
+            color: Colors.grey.shade600,
+            fontSize: 13,
+            height: 1.45,
           ),
-          child: Column(
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2),
+        ),
+        const SizedBox(height: 14),
+        DropdownButtonFormField<String>(
+          key: ValueKey('catalog-group-$_selectedCatalogGroupId'),
+          initialValue: _selectedCatalogGroupId,
+          isExpanded: true,
+          decoration: decoration('1. Kelompok pekerjaan', Icons.account_tree),
+          items: _catalog!.groups
+              .map(
+                (group) => DropdownMenuItem(
+                  value: group.id,
+                  child: Text(group.name, overflow: TextOverflow.ellipsis),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  children: [
-                    Icon(Icons.category, color: Colors.indigo.shade700),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Pilih Kategori',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.indigo.shade800,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: GridView.count(
-                  padding: const EdgeInsets.all(20),
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 16,
-                  crossAxisSpacing: 16,
-                  childAspectRatio: 1.2,
-                  children: categories.map((item) {
-                    final isSelected = _selectedCategory == item.name;
-                    return GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _selectedCategory = item.name;
-                        });
-                        Navigator.pop(context);
-                      },
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        decoration: BoxDecoration(
-                          gradient: isSelected
-                              ? LinearGradient(
-                                  colors: [
-                                    item.color.withOpacity(0.8),
-                                    item.color,
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                )
-                              : LinearGradient(
-                                  colors: [
-                                    Colors.grey.shade100,
-                                    Colors.grey.shade200,
-                                  ],
-                                ),
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: isSelected
-                                  ? item.color.withOpacity(0.3)
-                                  : Colors.grey.withOpacity(0.1),
-                              blurRadius: 10,
-                              offset: const Offset(0, 5),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              item.icon,
-                              size: 40,
-                              color: isSelected ? Colors.white : item.color,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              item.name,
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: isSelected
-                                    ? Colors.white
-                                    : Colors.grey.shade700,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ],
+              )
+              .toList(),
+          onChanged: (value) => setState(() {
+            _selectedCatalogGroupId = value;
+            _selectedCatalogAssetId = null;
+            _selectedCatalogItemId = null;
+          }),
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          key: ValueKey(
+            'catalog-asset-$_selectedCatalogGroupId-$_selectedCatalogAssetId',
           ),
-        );
-      },
+          initialValue: _selectedCatalogAssetId,
+          isExpanded: true,
+          decoration: decoration(
+            '2. Objek/peralatan',
+            Icons.home_repair_service,
+          ),
+          items: _assetsForSelectedGroup
+              .map(
+                (asset) => DropdownMenuItem(
+                  value: asset.id,
+                  child: Text(asset.name, overflow: TextOverflow.ellipsis),
+                ),
+              )
+              .toList(),
+          onChanged: _selectedCatalogGroupId == null
+              ? null
+              : (value) => setState(() {
+                  _selectedCatalogAssetId = value;
+                  _selectedCatalogItemId = null;
+                }),
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          key: ValueKey(
+            'catalog-item-$_selectedCatalogAssetId-$_selectedCatalogItemId',
+          ),
+          initialValue: _selectedCatalogItemId,
+          isExpanded: true,
+          decoration: decoration('3. Layanan standar', Icons.checklist_rounded),
+          items: _itemsForSelectedAsset
+              .map(
+                (item) => DropdownMenuItem(
+                  value: item.id,
+                  child: Text(item.name, overflow: TextOverflow.ellipsis),
+                ),
+              )
+              .toList(),
+          onChanged: _selectedCatalogAssetId == null
+              ? null
+              : (value) {
+                  setState(() => _selectedCatalogItemId = value);
+                  _ensureAllowedServiceType();
+                },
+        ),
+        if (_isEditMode && widget.service!.catalogItemId == null) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              _selectedCatalogItemId == null
+                  ? 'Layanan lama “${widget.service!.namaLayanan}” belum '
+                        'dipetakan. Pilih katalog saat ingin menstandarkan nama.'
+                  : 'Layanan lama akan dipetakan ke katalog dan kembali '
+                        'menunggu persetujuan Admin.',
+              style: TextStyle(
+                color: Colors.blue.shade800,
+                fontSize: 12.5,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -457,26 +711,21 @@ class _CreateEditJobPageState extends State<CreateEditJobPage>
 
       final allImageUrls = [..._existingImageUrls, ...uploadedImageUrls];
 
-      final serviceData = {
-        'namaLayanan': _namaLayananController.text,
-        'deskripsiLayanan': _deskripsiController.text,
-        'category': _selectedCategory,
-        'tipeLayanan': _serviceType == ServiceType.fixed ? 'fixed' : 'survey',
-        'harga': _serviceType == ServiceType.fixed
-            ? (double.tryParse(_hargaController.text) ?? 0)
-            : null,
-        'biayaSurvei': _serviceType == ServiceType.survey
-            ? (double.tryParse(_biayaSurveiController.text) ?? 0)
-            : null,
-        'photoUrls': allImageUrls,
-        'fotoUtamaUrl': allImageUrls.isNotEmpty ? allImageUrls.first : '',
-        'availability': _selectedAvailability.map(
-          (day, slots) => MapEntry(day, slots.toList()),
-        ),
-        'metodePembayaran': paymentMethods,
-      };
+      final serviceData = _buildServicePayload(
+        paymentMethods: paymentMethods,
+        allImageUrls: allImageUrls,
+      );
 
       if (_isEditMode) {
+        if (serviceData.isEmpty) {
+          scaffoldMessenger.showSnackBar(
+            const SnackBar(
+              content: Text('Tidak ada perubahan yang perlu disimpan.'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
         await _apiService.updateService(
           token: token,
           serviceId: widget.service!.id,
@@ -532,8 +781,92 @@ class _CreateEditJobPageState extends State<CreateEditJobPage>
     }
   }
 
+  Map<String, dynamic> _buildServicePayload({
+    required List<String> paymentMethods,
+    required List<String> allImageUrls,
+  }) {
+    final type = _serviceType == ServiceType.fixed ? 'fixed' : 'survey';
+    final price = double.tryParse(_hargaController.text.trim()) ?? 0;
+    final surveyFee = double.tryParse(_biayaSurveiController.text.trim()) ?? 0;
+    final description = _deskripsiController.text.trim();
+    final availability = serializeServiceAvailability(_selectedAvailability);
+
+    if (!_isEditMode) {
+      return {
+        if (_selectedCatalogItemId != null)
+          'catalogItemId': _selectedCatalogItemId,
+        'deskripsiLayanan': description,
+        'tipeLayanan': type,
+        'harga': type == 'fixed' ? price : null,
+        'biayaSurvei': type == 'survey' ? surveyFee : null,
+        'photoUrls': allImageUrls,
+        'fotoUtamaUrl': allImageUrls.isNotEmpty ? allImageUrls.first : '',
+        'availability': availability,
+        'metodePembayaran': paymentMethods,
+      };
+    }
+
+    final original = widget.service!;
+    final payload = <String, dynamic>{};
+
+    if (_selectedCatalogItemId != original.catalogItemId &&
+        _selectedCatalogItemId != null) {
+      payload['catalogItemId'] = _selectedCatalogItemId;
+    }
+    if (description != original.deskripsiLayanan.trim()) {
+      payload['deskripsiLayanan'] = description;
+    }
+    if (type != original.tipeLayanan) {
+      payload['tipeLayanan'] = type;
+    }
+    if (type == 'fixed' &&
+        (type != original.tipeLayanan || price != original.harga.toDouble())) {
+      payload['harga'] = price;
+    }
+    if (type == 'survey' &&
+        (type != original.tipeLayanan ||
+            surveyFee != (original.biayaSurvei ?? 0).toDouble())) {
+      payload['biayaSurvei'] = surveyFee;
+    }
+    if (_pickedImages.isNotEmpty) {
+      payload['photoUrls'] = allImageUrls;
+      payload['fotoUtamaUrl'] = allImageUrls.isNotEmpty
+          ? allImageUrls.first
+          : '';
+    }
+    if (!serviceAvailabilityMatches(
+      original.availability,
+      _selectedAvailability,
+    )) {
+      payload['availability'] = availability;
+    }
+    if (!_sameStringSet(paymentMethods, original.metodePembayaran)) {
+      payload['metodePembayaran'] = paymentMethods;
+    }
+
+    return payload;
+  }
+
+  bool _sameStringSet(List<String> left, List<dynamic> right) {
+    final leftSet = left.map((value) => value.trim().toLowerCase()).toSet();
+    final rightSet = right
+        .map((value) => value.toString().trim().toLowerCase())
+        .toSet();
+    return leftSet.length == rightSet.length && leftSet.containsAll(rightSet);
+  }
+
   String? _validateCreateFields() {
-    if (_selectedCategory == null) return 'Kategori wajib dipilih.';
+    if (_isLoadingOperationalArea) {
+      return 'Tunggu hingga area operasional selesai dimuat.';
+    }
+    if (_operationalAreaLabel?.isEmpty != false || _serviceRadiusKm == null) {
+      return 'Lengkapi area operasional sebelum membuat layanan.';
+    }
+    if (_isLoadingCatalog) return 'Tunggu katalog layanan selesai dimuat.';
+    if (_catalogError != null) return _catalogError;
+    if (_selectedCatalogItemId == null) {
+      return 'Pilih kelompok, objek, dan layanan standar.';
+    }
 
     final hasImages = _pickedImages.isNotEmpty || _existingImageUrls.isNotEmpty;
     if (!hasImages) return 'Foto utama wajib diisi.';
@@ -728,6 +1061,10 @@ class _CreateEditJobPageState extends State<CreateEditJobPage>
 
                   const SizedBox(height: 24),
 
+                  _buildOperationalAreaConfirmation(),
+
+                  const SizedBox(height: 20),
+
                   // Main Image Section
                   _buildModernSection(
                     'Foto Utama',
@@ -771,64 +1108,12 @@ class _CreateEditJobPageState extends State<CreateEditJobPage>
 
                   const SizedBox(height: 20),
 
-                  // Category Section
+                  // Service catalog mapping
                   _buildModernSection(
-                    'Kategori',
-                    Icons.category,
+                    'Pemetaan Layanan',
+                    Icons.account_tree_rounded,
                     Colors.orange,
-                    GestureDetector(
-                      onTap: _showCategoryPicker,
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.orange.shade50,
-                              Colors.orange.shade100,
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.orange.shade200),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.orange.shade200,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Icon(
-                                _selectedCategory != null
-                                    ? categories
-                                          .firstWhere(
-                                            (cat) =>
-                                                cat.name == _selectedCategory,
-                                          )
-                                          .icon
-                                    : Icons.category,
-                                color: Colors.orange.shade700,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                _selectedCategory ?? 'Pilih Kategori',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.orange.shade800,
-                                ),
-                              ),
-                            ),
-                            Icon(
-                              Icons.keyboard_arrow_down,
-                              color: Colors.orange.shade700,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                    _buildCatalogSelection(),
                   ),
 
                   const SizedBox(height: 20),
@@ -959,16 +1244,6 @@ class _CreateEditJobPageState extends State<CreateEditJobPage>
                         : Icons.assignment,
                     keyboardType: TextInputType.number,
                     color: Colors.green,
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Service Name Field
-                  _buildModernFormField(
-                    'Nama Layanan',
-                    _namaLayananController,
-                    icon: Icons.work,
-                    color: Colors.blue,
                   ),
 
                   const SizedBox(height: 16),
@@ -1180,8 +1455,11 @@ class _CreateEditJobPageState extends State<CreateEditJobPage>
     String description,
   ) {
     final isSelected = _serviceType == type;
+    final isAllowed =
+        _selectedCatalogItem?.allows(type.name) ??
+        (_selectedCatalogItemId == null);
     return GestureDetector(
-      onTap: () => setState(() => _serviceType = type),
+      onTap: isAllowed ? () => setState(() => _serviceType = type) : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(16),
@@ -1210,29 +1488,32 @@ class _CreateEditJobPageState extends State<CreateEditJobPage>
                 ]
               : [],
         ),
-        child: Column(
-          children: [
-            Icon(icon, size: 30, color: isSelected ? Colors.white : color),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-                color: isSelected ? Colors.white : Colors.grey.shade800,
+        child: Opacity(
+          opacity: isAllowed ? 1 : 0.42,
+          child: Column(
+            children: [
+              Icon(icon, size: 30, color: isSelected ? Colors.white : color),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: isSelected ? Colors.white : Colors.grey.shade800,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              description,
-              style: TextStyle(
-                fontSize: 12,
-                color: isSelected ? Colors.white70 : Colors.grey.shade600,
+              const SizedBox(height: 4),
+              Text(
+                isAllowed ? description : 'Tidak tersedia',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isSelected ? Colors.white70 : Colors.grey.shade600,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

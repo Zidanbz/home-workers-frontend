@@ -75,10 +75,10 @@ class _WorkerWalletPageState extends State<WorkerWalletPage>
 
           final wallet = snapshot.data!;
           final incomeTransactions = wallet.transactions
-              .where((t) => t.type == 'cash-in')
+              .where((t) => t.type == 'cash-in' || t.type == 'cash-in-hold')
               .toList();
           final expenseTransactions = wallet.transactions
-              .where((t) => t.type == 'cash-out')
+              .where((t) => t.type == 'cash-out' || t.type == 'refund-debit')
               .toList();
 
           return RefreshIndicator(
@@ -87,7 +87,12 @@ class _WorkerWalletPageState extends State<WorkerWalletPage>
               headerSliverBuilder: (context, innerBoxIsScrolled) {
                 return [
                   SliverToBoxAdapter(
-                    child: _buildBalanceCard(wallet.currentBalance),
+                    child: _buildBalanceCard(
+                      wallet.currentBalance,
+                      wallet.heldBalance,
+                      wallet.withdrawalBlocked,
+                      wallet.withdrawalBlockedReason,
+                    ),
                   ),
                   SliverPersistentHeader(
                     delegate: _SliverTabBarDelegate(
@@ -120,7 +125,12 @@ class _WorkerWalletPageState extends State<WorkerWalletPage>
     );
   }
 
-  Widget _buildBalanceCard(num balance) {
+  Widget _buildBalanceCard(
+    num balance,
+    num heldBalance,
+    bool withdrawalBlocked,
+    String? withdrawalBlockedReason,
+  ) {
     final formatCurrency = NumberFormat.currency(
       locale: 'id_ID',
       symbol: 'Rp ',
@@ -131,15 +141,17 @@ class _WorkerWalletPageState extends State<WorkerWalletPage>
       child: Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: const Color(0xFF3A3F51),
+          color: balance < 0
+              ? const Color(0xFF7A263A)
+              : const Color(0xFF3A3F51),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Saldo',
-              style: TextStyle(color: Colors.white70, fontSize: 16),
+            Text(
+              balance < 0 ? 'Kewajiban Saldo' : 'Saldo Tersedia',
+              style: const TextStyle(color: Colors.white70, fontSize: 16),
             ),
             const SizedBox(height: 8),
             Text(
@@ -150,20 +162,54 @@ class _WorkerWalletPageState extends State<WorkerWalletPage>
                 fontWeight: FontWeight.bold,
               ),
             ),
+            if (heldBalance > 0) ...[
+              const SizedBox(height: 12),
+              Text(
+                '${formatCurrency.format(heldBalance)} ditahan sementara',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Saldo tertahan lama sedang disinkronkan ke kebijakan payout langsung.',
+                style: TextStyle(color: Colors.white60, fontSize: 12),
+              ),
+            ],
+            if (balance < 0 || withdrawalBlocked) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  withdrawalBlockedReason ??
+                      'Pendapatan order berikutnya akan otomatis mengurangi kewajiban ini.',
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             Center(
               child: OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const WorkerWithdrawPage(),
-                    ),
-                  ).then((_) {
-                    // Refresh dompet setelah kembali dari halaman tarik
-                    _loadWalletData();
-                  });
-                },
+                onPressed: withdrawalBlocked || balance <= 0
+                    ? null
+                    : () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const WorkerWithdrawPage(),
+                          ),
+                        ).then((_) {
+                          // Refresh dompet setelah kembali dari halaman tarik
+                          _loadWalletData();
+                        });
+                      },
                 icon: const Icon(Icons.arrow_downward),
                 label: const Text('Tarik'),
                 style: OutlinedButton.styleFrom(
@@ -209,7 +255,13 @@ class _TransactionCard extends StatelessWidget {
     );
     final formatDate = DateFormat('dd MMM yyyy');
     final formatTime = DateFormat('HH:mm');
-    final isCashIn = transaction.type == 'cash-in';
+    final isCashIn =
+        transaction.type == 'cash-in' || transaction.type == 'cash-in-hold';
+    final isSuccess = const {
+      'success',
+      'confirmed',
+      'completed',
+    }.contains(transaction.status);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -265,7 +317,7 @@ class _TransactionCard extends StatelessWidget {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: transaction.status == 'confirmed'
+                    color: isSuccess
                         ? Colors.green.withOpacity(0.1)
                         : Colors.orange.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
@@ -273,9 +325,7 @@ class _TransactionCard extends StatelessWidget {
                   child: Text(
                     transaction.status,
                     style: TextStyle(
-                      color: transaction.status == 'confirmed'
-                          ? Colors.green
-                          : Colors.orange,
+                      color: isSuccess ? Colors.green : Colors.orange,
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
                     ),

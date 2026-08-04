@@ -6,6 +6,8 @@ class User {
   final String? avatarUrl;
   final String? contact;
   final bool emailVerified; // ✅ Tambahan
+  final String? workerStatus;
+  final String? rejectionReason;
 
   User({
     required this.uid,
@@ -15,6 +17,8 @@ class User {
     this.avatarUrl,
     this.contact,
     this.emailVerified = false, // default false
+    this.workerStatus,
+    this.rejectionReason,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -26,6 +30,8 @@ class User {
       avatarUrl: json['avatarUrl'],
       contact: json['contact'],
       emailVerified: json['emailVerified'] ?? false, // ✅ Ambil dari backend
+      workerStatus: json['workerStatus']?.toString(),
+      rejectionReason: json['rejectionReason']?.toString(),
     );
   }
 
@@ -38,6 +44,8 @@ class User {
       'avatarUrl': avatarUrl,
       'contact': contact,
       'emailVerified': emailVerified,
+      'workerStatus': workerStatus,
+      'rejectionReason': rejectionReason,
     };
   }
 
@@ -48,6 +56,8 @@ class User {
     String? avatarUrl,
     String? contact,
     bool? emailVerified,
+    String? workerStatus,
+    String? rejectionReason,
   }) {
     return User(
       uid: uid,
@@ -57,6 +67,8 @@ class User {
       avatarUrl: avatarUrl ?? this.avatarUrl,
       contact: contact ?? this.contact,
       emailVerified: emailVerified ?? this.emailVerified,
+      workerStatus: workerStatus ?? this.workerStatus,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
     );
   }
 }

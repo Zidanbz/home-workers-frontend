@@ -5,7 +5,7 @@ import '../../../core/models/bookmark_model.dart';
 import '../../../core/models/category_model.dart';
 import '../../../core/services/bookmark_service.dart';
 import '../../../core/state/auth_provider.dart';
-import '../../costumer_flow/marketplace/pages/marketplace_detail_page.dart';
+import '../../customer_flow/marketplace/pages/marketplace_detail_page.dart';
 
 class BookmarkedServicesPage extends StatefulWidget {
   const BookmarkedServicesPage({super.key});

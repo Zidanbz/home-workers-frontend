@@ -47,9 +47,20 @@ Register dibuat dalam 4 langkah (wizard): **Akun → Dokumen → Portofolio → 
 - Input opsional: `linkPortofolio`
 - Input bebas: `deskripsi`, `keahlian` (dipisah koma, contoh: `AC, Cleaning, Elektronik`)
 
-**Step 4 — Selesai**
-- Checkbox wajib: setuju S&K
-- Validasi (SnackBar): jika belum setuju → `Harap setujui Syarat & Ketentuan.`
+**Step 4 — Lokasi**
+- Worker wajib memilih area operasional dan radius layanan.
+- Titik dapat berasal dari lokasi perangkat atau dipilih melalui Google Maps.
+- Koordinat presisi disimpan privat; Customer hanya menerima label area dan
+  perkiraan jarak.
+
+**Step 5 — Selesai**
+- Worker membuka dokumen `Syarat & Ketentuan Worker Neo Formula` lengkap.
+- Dokumen menggunakan versi `worker-2026-07-28-v1`.
+- Checkbox persetujuan baru aktif setelah Worker menekan
+  `Saya Sudah Membaca` pada halaman dokumen lengkap.
+- Backend memvalidasi versi aktif dan mencatat waktu persetujuan dari server.
+- Validasi (SnackBar): jika dokumen belum dibuka atau belum disetujui,
+  registrasi tidak dapat dikirim.
 
 **Submit**
 - Sukses:
@@ -122,9 +133,13 @@ Mode:
 - **Edit**: `CreateEditJobPage(service: service)`
 
 Field & aturan (ringkas):
-- Wajib (semua mode, via `Form` validator): `Nama layanan`, `Deskripsi`
+- Nama layanan tidak dapat diketik bebas. Worker memilih master katalog:
+  `Kelompok pekerjaan → Objek/peralatan → Layanan standar`.
+- Nama layanan dan kategori publik diambil ulang oleh backend berdasarkan
+  `catalogItemId`; nilai nama/kategori dari client tidak dipercaya.
+- Wajib (semua mode, via `Form` validator): `Deskripsi`
 - Wajib (khusus create, via `_validateCreateFields()`):
-  - `Kategori` harus dipilih
+  - `catalogItemId` aktif harus dipilih
   - Minimal 1 foto layanan (jadi `fotoUtamaUrl`)
   - Minimal 1 slot `Jadwal Ketersediaan`
   - Jika `tipeLayanan = fixed` → `Harga > 0`
@@ -133,6 +148,13 @@ Field & aturan (ringkas):
 Tipe layanan:
 - `fixed`: user set harga, metode pembayaran dipaksa `Cashless`
 - `survey`: worker ajukan penawaran saat order; metode pembayaran bisa `Cashless` atau `Cek Dulu`
+- Pilihan tipe hanya aktif jika diizinkan oleh master layanan.
+
+Kompatibilitas:
+- Layanan lama tanpa `catalogItemId` tetap dapat dilihat dan diedit tanpa
+  mengubah nama/kategorinya.
+- Ketika layanan lama dipetakan atau Worker mengganti pemetaan, status layanan
+  kembali menjadi `pending` agar Admin memeriksa ulang.
 
 Output saat simpan:
 - Upload foto ke storage (service photo) → gabungkan dengan foto existing (edit mode)
@@ -223,4 +245,3 @@ Jika ingin alur lebih ringkas tanpa mengurangi kontrol:
 - **Order**: samakan alur fixed & survey jadi 1 state machine:
   - `pending → accepted → (quote_proposed → quote_accepted hanya untuk survey) → work_in_progress → completed`
   - Dengan ini, UI tombol aksi jadi lebih konsisten dan lebih mudah dipahami user.
-

@@ -213,6 +213,29 @@ class _WorkerProfilePageState extends State<WorkerProfilePage>
             children: worker.keahlian.map((e) => Chip(label: Text(e))).toList(),
           ),
           const SizedBox(height: 16),
+          if (worker.operationalAreaLabel?.isNotEmpty == true) ...[
+            const Text(
+              "Area Layanan",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.location_on_outlined, size: 20),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    worker.serviceRadiusKm == null
+                        ? worker.operationalAreaLabel!
+                        : '${worker.operationalAreaLabel} • hingga '
+                              '${worker.serviceRadiusKm} km',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
           if (worker.linkPortofolio != null)
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,

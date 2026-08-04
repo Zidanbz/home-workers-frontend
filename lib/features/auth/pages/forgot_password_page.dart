@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:home_workers_fe/core/state/auth_provider.dart';
 import 'package:home_workers_fe/core/api/api_service.dart';
+import 'package:home_workers_fe/features/auth/policies/password_reset_copy.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});
@@ -37,10 +38,8 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Email Terkirim'),
-          content: Text(
-            'Kami telah mengirim link reset password ke "$email".\nSilakan cek inbox atau folder spam.',
-          ),
+          title: const Text('Periksa Email Anda'),
+          content: Text(buildPasswordResetConfirmation(email)),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
@@ -56,10 +55,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         SnackBar(
           backgroundColor: Colors.red,
           content: Text(
-            ApiService.readableError(
-              e,
-              action: 'Gagal kirim reset password',
-            ),
+            ApiService.readableError(e, action: 'Gagal kirim reset password'),
           ),
         ),
       );
@@ -99,10 +95,13 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                   ),
                 ),
                 validator: (v) {
-                  if (v == null || v.trim().isEmpty) return 'Email wajib diisi';
+                  if (v == null || v.trim().isEmpty) {
+                    return 'Email wajib diisi';
+                  }
                   final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-                  if (!emailRegex.hasMatch(v.trim()))
+                  if (!emailRegex.hasMatch(v.trim())) {
                     return 'Format email tidak valid';
+                  }
                   return null;
                 },
               ),
@@ -243,9 +242,12 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                   ),
                 ),
                 validator: (v) {
-                  if (v == null || v.trim().isEmpty)
+                  if (v == null || v.trim().isEmpty) {
                     return 'Password wajib diisi';
-                  if (v.trim().length < 6) return 'Minimal 6 karakter';
+                  }
+                  if (v.trim().length < 6) {
+                    return 'Minimal 6 karakter';
+                  }
                   return null;
                 },
               ),
@@ -271,10 +273,12 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                   ),
                 ),
                 validator: (v) {
-                  if (v == null || v.trim().isEmpty)
+                  if (v == null || v.trim().isEmpty) {
                     return 'Konfirmasi password wajib diisi';
-                  if (v.trim() != _passController.text.trim())
+                  }
+                  if (v.trim() != _passController.text.trim()) {
                     return 'Password tidak cocok';
+                  }
                   return null;
                 },
               ),

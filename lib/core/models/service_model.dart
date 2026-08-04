@@ -16,6 +16,13 @@ class Service {
   final num? biayaSurvei;
   final Map<String, dynamic> workerInfo;
   final List<Availability> availability;
+  final String? catalogItemId;
+  final String? catalogGroupId;
+  final String? catalogAssetId;
+  final int? taxonomyVersion;
+  final double? distanceKm;
+  final String? operationalAreaLabel;
+  final bool isWithinServiceRadius;
 
   Service({
     required this.id,
@@ -32,6 +39,13 @@ class Service {
     this.biayaSurvei,
     required this.workerInfo,
     required this.availability,
+    this.catalogItemId,
+    this.catalogGroupId,
+    this.catalogAssetId,
+    this.taxonomyVersion,
+    this.distanceKm,
+    this.operationalAreaLabel,
+    this.isWithinServiceRadius = false,
   });
 
   factory Service.fromJson(Map<String, dynamic> json) {
@@ -68,6 +82,13 @@ class Service {
       biayaSurvei: json['biayaSurvei'] ?? 0,
       workerInfo: json['workerInfo'] as Map<String, dynamic>? ?? {},
       availability: availabilityList,
+      catalogItemId: json['catalogItemId']?.toString(),
+      catalogGroupId: json['catalogGroupId']?.toString(),
+      catalogAssetId: json['catalogAssetId']?.toString(),
+      taxonomyVersion: int.tryParse(json['taxonomyVersion']?.toString() ?? ''),
+      distanceKm: double.tryParse(json['distanceKm']?.toString() ?? ''),
+      operationalAreaLabel: json['operationalAreaLabel']?.toString(),
+      isWithinServiceRadius: json['isWithinServiceRadius'] == true,
     );
   }
 

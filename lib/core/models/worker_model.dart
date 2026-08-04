@@ -11,6 +11,8 @@ class Worker {
   final int totalReviews;
   final int totalOrders;
   final String bio;
+  final String? operationalAreaLabel;
+  final int? serviceRadiusKm;
 
   Worker({
     required this.id,
@@ -25,6 +27,8 @@ class Worker {
     required this.totalReviews,
     required this.totalOrders,
     required this.bio,
+    this.operationalAreaLabel,
+    this.serviceRadiusKm,
   });
 
   factory Worker.fromJson(Map<String, dynamic> json) {
@@ -34,7 +38,7 @@ class Worker {
       email: json['email'] ?? '',
       avatarUrl: json['fotoDiriUrl'],
       ktpUrl: json['ktpUrl'],
-      linkPortofolio: json['linkPortofolio'],
+      linkPortofolio: json['portfolioLink'] ?? json['linkPortofolio'],
       keahlian: List<String>.from(json['keahlian'] ?? []),
       // experience: (json['experience'] ?? 0) is int
       //     ? json['experience']
@@ -44,6 +48,8 @@ class Worker {
           json['totalReviews'] ?? 0, // Firestore tidak ada → default 0
       totalOrders: json['jumlahOrderSelesai'] ?? 0,
       bio: json['deskripsi'] ?? '',
+      operationalAreaLabel: json['operationalAreaLabel'],
+      serviceRadiusKm: int.tryParse(json['serviceRadiusKm']?.toString() ?? ''),
     );
   }
 }

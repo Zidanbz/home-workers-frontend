@@ -55,6 +55,19 @@ class _WorkerWithdrawPageState extends State<WorkerWithdrawPage> {
   }
 
   Future<void> _submitWithdrawal() async {
+    if (_wallet?.withdrawalBlocked == true ||
+        (_wallet?.currentBalance ?? 0) <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _wallet?.withdrawalBlockedReason ??
+                'Pencairan tidak tersedia karena saldo belum positif.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     if (!_formKey.currentState!.validate() || _selectedType == null) return;
 
     setState(() => _isLoading = true);
@@ -121,31 +134,49 @@ class _WorkerWithdrawPageState extends State<WorkerWithdrawPage> {
           BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 4)),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const CircleAvatar(
-            backgroundColor: Colors.white,
-            child: Icon(Icons.account_balance_wallet, color: Color(0xFF406882)),
-          ),
-          const SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
             children: [
-              const Text(
-                'Saldo Tersedia',
-                style: TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                formatCurrency.format(_wallet?.currentBalance ?? 0),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
+              const CircleAvatar(
+                backgroundColor: Colors.white,
+                child: Icon(
+                  Icons.account_balance_wallet,
+                  color: Color(0xFF406882),
                 ),
+              ),
+              const SizedBox(width: 16),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Saldo Tersedia',
+                    style: TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    formatCurrency.format(_wallet?.currentBalance ?? 0),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
+          if (_wallet?.withdrawalBlocked == true) ...[
+            const SizedBox(height: 12),
+            Text(
+              _wallet!.withdrawalBlockedReason ?? 'Pencairan sedang diblokir.',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -252,7 +283,12 @@ class _WorkerWithdrawPageState extends State<WorkerWithdrawPage> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: _isLoading ? null : _submitWithdrawal,
+                      onPressed:
+                          _isLoading ||
+                              _wallet?.withdrawalBlocked == true ||
+                              (_wallet?.currentBalance ?? 0) <= 0
+                          ? null
+                          : _submitWithdrawal,
                       icon: _isLoading
                           ? const SizedBox(
                               width: 20,

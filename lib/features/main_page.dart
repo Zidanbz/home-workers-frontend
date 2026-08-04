@@ -2,10 +2,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:home_workers_fe/features/costumer_flow/dashboard/pages/costumer_dashboard_page.dart';
-import 'package:home_workers_fe/features/costumer_flow/marketplace/pages/marketplace_page.dart';
-import 'package:home_workers_fe/features/costumer_flow/orders/pages/customer_orders_page.dart';
-import 'package:home_workers_fe/features/costumer_flow/chat/pages/customer_chat_list_page.dart';
+import 'package:home_workers_fe/features/customer_flow/dashboard/pages/costumer_dashboard_page.dart';
+import 'package:home_workers_fe/features/customer_flow/marketplace/pages/marketplace_page.dart';
+import 'package:home_workers_fe/features/customer_flow/orders/pages/customer_orders_page.dart';
+import 'package:home_workers_fe/features/customer_flow/chat/pages/customer_chat_list_page.dart';
 import 'package:home_workers_fe/features/profile/pages/profile_page.dart';
 import 'package:home_workers_fe/features/worker_flow/order_management/pages/worker_orders_page.dart';
 import '../core/services/chat_service.dart';
@@ -29,17 +29,21 @@ class OrdersPage extends StatelessWidget {
 class MainPage extends StatefulWidget {
   final String userRole;
   final int initialIndex;
-  const MainPage({
-    super.key,
-    required this.userRole,
-    this.initialIndex = 0,
-  });
+  const MainPage({super.key, required this.userRole, this.initialIndex = 0});
 
   @override
   State<MainPage> createState() => _MainPageState();
 }
 
 class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
+  static const double _bottomNavigationBarHeight = 65;
+  static const double _bottomNavigationBarBottomMargin = 8;
+  static const double _bottomNavigationContentGap = 16;
+  static const double _bottomNavigationContentClearance =
+      _bottomNavigationBarHeight +
+      _bottomNavigationBarBottomMargin +
+      _bottomNavigationContentGap;
+
   int _currentIndex = 0;
   late final List<Widget> _pages;
   late AnimationController _animationController;
@@ -68,16 +72,24 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     if (widget.userRole == 'WORKER') {
       _pages = [
         const WorkerDashboardPage(),
-        const MyJobsPage(),
-        const WorkerOrdersPage(),
+        const MyJobsPage(
+          bottomNavigationClearance: _bottomNavigationContentClearance,
+        ),
+        const WorkerOrdersPage(
+          bottomNavigationClearance: _bottomNavigationContentClearance,
+        ),
         const ChatListPage(showBackButton: false),
         const ProfilePage(),
       ];
     } else {
       _pages = [
         CustomerDashboardPage(onNavigateToOrders: () => jumpToPage(2)),
-        MarketplacePage(),
-        const CustomerOrdersPage(),
+        const MarketplacePage(
+          bottomNavigationClearance: _bottomNavigationContentClearance,
+        ),
+        const CustomerOrdersPage(
+          bottomNavigationClearance: _bottomNavigationContentClearance,
+        ),
         const CustomerChatListPage(showBackButton: false),
         const ProfilePage(),
       ];
@@ -178,13 +190,18 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       bottomNavigationBar: NoTapGuard(
         child: SafeArea(
           child: Container(
-            margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-            height: 65,
+            margin: const EdgeInsets.fromLTRB(
+              12,
+              0,
+              12,
+              _bottomNavigationBarBottomMargin,
+            ),
+            height: _bottomNavigationBarHeight,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
+                  color: Colors.black.withValues(alpha: 0.08),
                   blurRadius: 15,
                   offset: const Offset(0, 8),
                   spreadRadius: 0,
@@ -217,7 +234,6 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       ),
     );
   }
-
 
   Widget _buildNavItem(int index, NavItem item) {
     final isSelected = _currentIndex == index;
@@ -272,15 +288,15 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
                       color: isSelected
-                          ? item.color.withOpacity(0.12)
+                          ? item.color.withValues(alpha: 0.12)
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: iconWidget,
-                ),
-              ),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
+                      child: iconWidget,
+                    ),
+                  ),
 
                   const SizedBox(height: 1),
 

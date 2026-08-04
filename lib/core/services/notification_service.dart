@@ -16,7 +16,8 @@ class NotificationService extends ChangeNotifier {
   // Services
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
-  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
   final ApiService _apiService = ApiService();
 
   // State
@@ -41,13 +42,15 @@ class NotificationService extends ChangeNotifier {
 
   /// Initialize local notifications
   Future<void> _initializeLocalNotifications() async {
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
     );
-    
+
     const initSettings = InitializationSettings(
       android: androidSettings,
       iOS: iosSettings,
@@ -68,12 +71,19 @@ class NotificationService extends ChangeNotifier {
     );
 
     await _localNotifications
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
         ?.createNotificationChannel(androidChannel);
   }
 
   /// Initialize FCM
   Future<void> _initializeFCM() async {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      print('🔔 [FCM] Disabled on iOS for now');
+      return;
+    }
+
     // Request permission
     await _firebaseMessaging.requestPermission(
       alert: true,
@@ -86,7 +96,9 @@ class NotificationService extends ChangeNotifier {
     FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
 
     // Handle notification taps when app is in background/terminated
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleBackgroundNotificationTap);
+    FirebaseMessaging.onMessageOpenedApp.listen(
+      _handleBackgroundNotificationTap,
+    );
 
     // Handle initial message if app was opened from notification
     final initialMessage = await _firebaseMessaging.getInitialMessage();
@@ -108,7 +120,9 @@ class NotificationService extends ChangeNotifier {
     await stopListening();
 
     _currentUserId = userId;
-    print('🔔 [NotificationService] Starting real-time listener for user: $userId');
+    print(
+      '🔔 [NotificationService] Starting real-time listener for user: $userId',
+    );
 
     // Listen to Firestore notifications collection in real-time
     _notificationSubscription = _firestore
@@ -121,7 +135,9 @@ class NotificationService extends ChangeNotifier {
         .listen(
           (snapshot) => _handleNotificationSnapshot(snapshot, token),
           onError: (error) {
-            print('❌ [NotificationService] Error listening to notifications: $error');
+            print(
+              '❌ [NotificationService] Error listening to notifications: $error',
+            );
           },
         );
 
@@ -140,12 +156,12 @@ class NotificationService extends ChangeNotifier {
   void _handleNotificationSnapshot(QuerySnapshot snapshot, String? token) {
     try {
       final List<NotificationItem> newNotifications = [];
-      
+
       for (var doc in snapshot.docs) {
         try {
           final data = doc.data() as Map<String, dynamic>;
           data['id'] = doc.id; // Add document ID
-          
+
           final notification = NotificationItem.fromJson(data);
           newNotifications.add(notification);
         } catch (e) {
@@ -169,7 +185,9 @@ class NotificationService extends ChangeNotifier {
         }
       }
 
-      print('✅ [NotificationService] Updated ${newNotifications.length} notifications, ${addedIds.length} new');
+      print(
+        '✅ [NotificationService] Updated ${newNotifications.length} notifications, ${addedIds.length} new',
+      );
     } catch (e) {
       print('❌ [NotificationService] Error handling notification snapshot: $e');
     }
@@ -178,10 +196,10 @@ class NotificationService extends ChangeNotifier {
   /// Handle foreground FCM messages
   void _handleForegroundMessage(RemoteMessage message) {
     print('🔔 [FCM] Received foreground message: ${message.messageId}');
-    
+
     // Show local notification
     _showLocalNotificationFromFCM(message);
-    
+
     // The Firestore listener will automatically update the UI
     // when the notification is saved to Firestore by the backend
   }
@@ -195,7 +213,7 @@ class NotificationService extends ChangeNotifier {
   /// Handle local notification tap
   void _handleNotificationTap(NotificationResponse response) {
     print('🔔 [Local] Notification tapped: ${response.id}');
-    
+
     if (response.payload != null) {
       // Parse payload and navigate
       try {
@@ -262,7 +280,8 @@ class NotificationService extends ChangeNotifier {
           presentSound: true,
         ),
       ),
-      payload: '${message.data['type'] ?? 'general'}|${message.data['relatedId'] ?? ''}',
+      payload:
+          '${message.data['type'] ?? 'general'}|${message.data['relatedId'] ?? ''}',
     );
   }
 
@@ -288,6 +307,7 @@ class NotificationService extends ChangeNotifier {
         break;
       case 'new_order':
       case 'order_update':
+      case 'warranty_update':
         if (relatedId != null) {
           navigator.pushNamed('/order-detail', arguments: relatedId);
         } else {
@@ -344,7 +364,9 @@ class NotificationService extends ChangeNotifier {
         notifyListeners();
       }
 
-      print('✅ [NotificationService] Marked notification as read: $notificationId');
+      print(
+        '✅ [NotificationService] Marked notification as read: $notificationId',
+      );
     } catch (e) {
       print('❌ [NotificationService] Error marking notification as read: $e');
     }
@@ -365,7 +387,7 @@ class NotificationService extends ChangeNotifier {
             .doc(_currentUserId!)
             .collection('notifications')
             .doc(notification.id);
-        
+
         batch.update(docRef, {
           'isRead': true,
           'readAt': FieldValue.serverTimestamp(),
@@ -375,12 +397,16 @@ class NotificationService extends ChangeNotifier {
       await batch.commit();
       print('✅ [NotificationService] Marked all notifications as read');
     } catch (e) {
-      print('❌ [NotificationService] Error marking all notifications as read: $e');
+      print(
+        '❌ [NotificationService] Error marking all notifications as read: $e',
+      );
     }
   }
 
   /// Get FCM token
   Future<String?> getFCMToken() async {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) return null;
+
     try {
       return await _firebaseMessaging.getToken();
     } catch (e) {
