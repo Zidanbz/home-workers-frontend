@@ -57,6 +57,7 @@ void main() {
     await tester.tap(find.text('Lanjutkan'));
     await tester.pumpAndSettle();
     expect(find.text('Pilih solusi'), findsOneWidget);
+    expect(find.text('Perbaikan ulang pekerjaan'), findsNothing);
 
     await tester.tap(find.text('Lanjutkan'));
     await tester.pumpAndSettle();

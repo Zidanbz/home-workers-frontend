@@ -16,7 +16,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.9+23
+version: 1.0.13+27
 
 environment:
   sdk: ^3.8.1
@@ -69,9 +69,9 @@ dependencies:
   dio: ^5.8.0+1
   path: ^1.9.1
   firebase_messaging: ^15.2.9
-  firebase_remote_config: ^5.4.5
   package_info_plus: ^8.3.0
   url_launcher: ^6.3.1
+  youtube_player_iframe: ^6.0.2
   flutter_local_notifications: ^19.4.0
   encrypt: ^5.0.3
   crypto: ^3.0.3
@@ -135,18 +135,18 @@ flutter:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/logo_howe.png"
-  image_path_ios: "assets/logo_howe_ios.png"
+  image_path: "assets/logo.png"
+  image_path_ios: "assets/logo.png"
   remove_alpha_ios: true
-  background_color_ios: "#1A374D"
-  adaptive_icon_background: "#1A374D"
-  adaptive_icon_foreground: "assets/logo_howe.png"
+  background_color_ios: "#000000"
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: "assets/logo.png"
 
 flutter_native_splash:
   color: "#1A374D"
   color_dark: "#1A374D"
-  image: assets/logo_howe_splash.png
-  image_dark: assets/logo_howe_splash.png
+  image: assets/logo_splash_navy.png
+  image_dark: assets/logo_splash_navy.png
   android: true
   ios: true
   web: true
@@ -155,7 +155,7 @@ flutter_native_splash:
   android_screen_orientation: portrait
 
   android_12:
-    image: assets/logo_howe_splash_android12.png
-    image_dark: assets/logo_howe_splash_android12.png
+    image: assets/logo_splash_navy.png
+    image_dark: assets/logo_splash_navy.png
     icon_background_color: "#1A374D"
     icon_background_color_dark: "#1A374D"

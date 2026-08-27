@@ -38,15 +38,18 @@ class _ClaimVoucherPageState extends State<ClaimVoucherPage> {
         token: token,
         voucherCode: code,
       );
+      if (!mounted) return;
+      final userClaimCount = result['userClaimCount'];
+      final perUserClaimLimit = result['perUserClaimLimit'];
+      final claimProgress = userClaimCount != null && perUserClaimLimit != null
+          ? ' ($userClaimCount/$perUserClaimLimit klaim untuk akun ini)'
+          : '';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Voucher berhasil diklaim! Diskon: Rp ${result['discount'] ?? 0}',
-          ),
-        ),
+        SnackBar(content: Text('Voucher berhasil diklaim$claimProgress.')),
       );
       _controller.clear();
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -88,7 +91,7 @@ class _ClaimVoucherPageState extends State<ClaimVoucherPage> {
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
+                    color: Colors.black.withValues(alpha: 0.08),
                     blurRadius: 20,
                     offset: const Offset(0, 8),
                   ),
@@ -102,7 +105,7 @@ class _ClaimVoucherPageState extends State<ClaimVoucherPage> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF4CAF50).withOpacity(0.1),
+                          color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(
@@ -227,7 +230,7 @@ class _ClaimVoucherPageState extends State<ClaimVoucherPage> {
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF6C63FF).withOpacity(0.3),
+                    color: const Color(0xFF6C63FF).withValues(alpha: 0.3),
                     blurRadius: 15,
                     offset: const Offset(0, 8),
                   ),
@@ -252,7 +255,7 @@ class _ClaimVoucherPageState extends State<ClaimVoucherPage> {
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
+                            color: Colors.white.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: const Icon(
@@ -288,7 +291,7 @@ class _ClaimVoucherPageState extends State<ClaimVoucherPage> {
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
+                            color: Colors.white.withValues(alpha: 0.2),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
@@ -310,10 +313,7 @@ class _ClaimVoucherPageState extends State<ClaimVoucherPage> {
               decoration: BoxDecoration(
                 color: const Color(0xFFFFF9E6),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: const Color(0xFFFFE082),
-                  width: 1,
-                ),
+                border: Border.all(color: const Color(0xFFFFE082), width: 1),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,

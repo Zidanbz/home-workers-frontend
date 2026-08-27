@@ -17,6 +17,8 @@ import 'features/main_page.dart';
 import 'features/profile/pages/address_management_page.dart';
 import 'firebase_env_options.dart';
 import 'core/widgets/app_version_gate.dart';
+import 'core/navigation/app_navigator.dart';
+import 'core/widgets/notification_order_detail_route.dart';
 
 void main() async {
   final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
@@ -85,6 +87,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (context) => ChatService()),
       ],
       child: MaterialApp(
+        navigatorKey: AppNavigator.navigatorKey,
         locale: const Locale('id', 'ID'),
         title: 'Home Workers',
         theme: ThemeData(/* ... */ fontFamily: 'OpenSans'),
@@ -92,6 +95,17 @@ class MyApp extends StatelessWidget {
         home: const AppVersionGate(child: AuthWrapper()),
         routes: {
           '/address-management': (context) => const AddressManagementPage(),
+        },
+        onGenerateRoute: (settings) {
+          if (settings.name == '/order-detail') {
+            final orderId = settings.arguments?.toString().trim() ?? '';
+            if (orderId.isEmpty) return null;
+            return MaterialPageRoute(
+              settings: settings,
+              builder: (_) => NotificationOrderDetailRoute(orderId: orderId),
+            );
+          }
+          return null;
         },
         debugShowCheckedModeBanner: false,
       ),
@@ -125,6 +139,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       builder: (context, auth, child) {
         // Saat aplikasi pertama kali dibuka dan sedang memeriksa semuanya
         if (auth.isLoading) {
+          AppNavigator.setAuthenticatedRouteReady(false);
           return const SizedBox.shrink();
         }
 
@@ -132,6 +147,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
         // Jika sudah login, langsung ke halaman utama
         if (auth.isLoggedIn) {
+          AppNavigator.setAuthenticatedRouteReady(false);
           if (auth.user!.role.toUpperCase() == 'WORKER') {
             final status = auth.user!.workerStatus?.toLowerCase();
             if (status == 'revision_required') {
@@ -153,10 +169,14 @@ class _AuthWrapperState extends State<AuthWrapper> {
               );
             }
           }
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            AppNavigator.setAuthenticatedRouteReady(true);
+          });
           return MainPage(userRole: auth.user!.role);
         }
 
         // Jika belum login, periksa status onboarding
+        AppNavigator.setAuthenticatedRouteReady(false);
         if (auth.hasSeenOnboarding) {
           // Jika sudah lihat onboarding, tampilkan halaman auth yang sesuai
           switch (auth.authScreen) {

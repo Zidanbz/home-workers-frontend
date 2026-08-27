@@ -3,10 +3,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:home_workers_fe/core/helper/voucher_helper.dart';
 import 'package:home_workers_fe/core/models/address_model.dart';
 import 'package:home_workers_fe/core/models/availability_model.dart';
+import 'package:home_workers_fe/core/services/reverse_geocoding_service.dart';
 import 'package:home_workers_fe/features/customer_flow/booking/pages/snapPayment_page.dart';
+import 'package:home_workers_fe/features/customer_flow/booking/utils/booking_location_policy.dart';
 import 'package:home_workers_fe/features/workerprofile/pages/worker_profile_page.dart';
 import 'package:home_workers_fe/shared_widgets/action_tap_guard.dart';
 import 'package:intl/intl.dart';
@@ -29,6 +32,8 @@ class BookingPage extends StatefulWidget {
 
 class _BookingPageState extends State<BookingPage> {
   final ApiService _apiService = ApiService();
+  final ReverseGeocodingService _reverseGeocodingService =
+      ReverseGeocodingService();
   bool _isLoading = false;
 
   DateTime _selectedDate = DateTime.now();
@@ -55,7 +60,15 @@ class _BookingPageState extends State<BookingPage> {
   List<dynamic> _locationPredictions = [];
   double? _otherLocationLatitude;
   double? _otherLocationLongitude;
+  GoogleMapController? _otherLocationMapController;
+  bool _isResolvingOtherLocation = false;
+  int _otherLocationSelectionRevision = 0;
   Timer? _slotRefreshTimer;
+
+  static const CameraPosition _kMakassarCameraPosition = CameraPosition(
+    target: LatLng(-5.147665, 119.432732),
+    zoom: 12,
+  );
 
   List<String> get _availableTimeSlots {
     final weekday = DateFormat(
@@ -89,6 +102,7 @@ class _BookingPageState extends State<BookingPage> {
   @override
   void dispose() {
     _slotRefreshTimer?.cancel();
+    _otherLocationMapController?.dispose();
     _otherLocationController.dispose();
     super.dispose();
   }
@@ -136,13 +150,18 @@ class _BookingPageState extends State<BookingPage> {
   }
 
   void _onOtherLocationQueryChanged(String input) {
-    _otherLocationLatitude = null;
-    _otherLocationLongitude = null;
-    if (input.trim().isEmpty) {
-      setState(() => _locationPredictions = []);
+    final query = input.trim();
+    _otherLocationSelectionRevision++;
+    setState(() {
+      _otherLocationLatitude = null;
+      _otherLocationLongitude = null;
+      _isResolvingOtherLocation = false;
+      if (query.isEmpty) _locationPredictions = [];
+    });
+    if (query.isEmpty) {
       return;
     }
-    _getLocationPredictions(input.trim());
+    _getLocationPredictions(query);
   }
 
   Future<void> _getLocationPredictions(String input) async {
@@ -162,6 +181,7 @@ class _BookingPageState extends State<BookingPage> {
       if (response.statusCode != 200) return;
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       if (!mounted) return;
+      if (_otherLocationController.text.trim() != input) return;
       setState(() {
         _locationPredictions = List<dynamic>.from(body['predictions'] ?? []);
       });
@@ -174,19 +194,22 @@ class _BookingPageState extends State<BookingPage> {
     final apiKey = _googlePlacesApiKey;
     if (apiKey.isEmpty) return;
 
-    final uri = Uri.https(
-      'maps.googleapis.com',
-      '/maps/api/place/details/json',
-      {
-        'place_id': placeId,
-        'key': apiKey,
-        'sessiontoken': _locationSessionToken,
-      },
-    );
+    final selectionRevision = ++_otherLocationSelectionRevision;
+    setState(() => _isResolvingOtherLocation = true);
+
+    final uri =
+        Uri.https('maps.googleapis.com', '/maps/api/place/details/json', {
+          'place_id': placeId,
+          'key': apiKey,
+          'sessiontoken': _locationSessionToken,
+          'fields': 'formatted_address,geometry',
+        });
 
     try {
-      final response = await http.get(uri);
-      if (response.statusCode != 200) return;
+      final response = await http.get(uri).timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) {
+        throw StateError('Detail alamat tidak tersedia.');
+      }
 
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       final result = body['result'] as Map<String, dynamic>?;
@@ -195,7 +218,13 @@ class _BookingPageState extends State<BookingPage> {
       final lat = (location?['lat'] as num?)?.toDouble();
       final lng = (location?['lng'] as num?)?.toDouble();
       final formattedAddress = (result?['formatted_address'] ?? '').toString();
-      if (!mounted) return;
+      if (!isValidBookingLocationCoordinates(lat, lng) ||
+          formattedAddress.trim().isEmpty) {
+        throw StateError('Koordinat alamat tidak tersedia.');
+      }
+      if (!mounted || selectionRevision != _otherLocationSelectionRevision) {
+        return;
+      }
 
       setState(() {
         _otherLocationController.text = formattedAddress;
@@ -204,9 +233,89 @@ class _BookingPageState extends State<BookingPage> {
         _locationPredictions = [];
         _locationSessionToken = const Uuid().v4();
       });
+      await _otherLocationMapController?.animateCamera(
+        CameraUpdate.newLatLngZoom(LatLng(lat!, lng!), 17),
+      );
+      if (mounted) FocusScope.of(context).unfocus();
     } catch (_) {
-      // Keep silent to avoid blocking booking flow.
+      if (mounted && selectionRevision == _otherLocationSelectionRevision) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Alamat tersebut belum dapat dipilih.')),
+        );
+      }
+    } finally {
+      if (mounted && selectionRevision == _otherLocationSelectionRevision) {
+        setState(() => _isResolvingOtherLocation = false);
+      }
     }
+  }
+
+  LatLng? get _otherLocationPoint {
+    if (!isValidBookingLocationCoordinates(
+      _otherLocationLatitude,
+      _otherLocationLongitude,
+    )) {
+      return null;
+    }
+    return LatLng(_otherLocationLatitude!, _otherLocationLongitude!);
+  }
+
+  CameraPosition get _otherLocationInitialCameraPosition {
+    final selectedPoint = _otherLocationPoint;
+    if (selectedPoint != null) {
+      return CameraPosition(target: selectedPoint, zoom: 17);
+    }
+
+    final savedLatitude = _defaultAddress?.latitude;
+    final savedLongitude = _defaultAddress?.longitude;
+    if (isValidBookingLocationCoordinates(savedLatitude, savedLongitude)) {
+      return CameraPosition(
+        target: LatLng(savedLatitude!, savedLongitude!),
+        zoom: 15,
+      );
+    }
+    return _kMakassarCameraPosition;
+  }
+
+  Future<void> _selectOtherLocationOnMap(LatLng point) async {
+    final selectionRevision = ++_otherLocationSelectionRevision;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _otherLocationLatitude = point.latitude;
+      _otherLocationLongitude = point.longitude;
+      _locationPredictions = [];
+      _otherLocationController.text = 'Mencari alamat titik ini…';
+      _isResolvingOtherLocation = true;
+    });
+
+    final resolvedAddress = await _reverseGeocodingService.resolve(
+      latitude: point.latitude,
+      longitude: point.longitude,
+    );
+    if (!mounted || selectionRevision != _otherLocationSelectionRevision) {
+      return;
+    }
+
+    setState(() {
+      _otherLocationController.text =
+          resolvedAddress ??
+          ReverseGeocodingService.coordinateFallback(
+            latitude: point.latitude,
+            longitude: point.longitude,
+          );
+      _isResolvingOtherLocation = false;
+    });
+  }
+
+  void _clearOtherLocation() {
+    _otherLocationSelectionRevision++;
+    setState(() {
+      _otherLocationController.clear();
+      _locationPredictions = [];
+      _otherLocationLatitude = null;
+      _otherLocationLongitude = null;
+      _isResolvingOtherLocation = false;
+    });
   }
 
   Future<void> _loadSavedAddresses() async {
@@ -342,6 +451,30 @@ class _BookingPageState extends State<BookingPage> {
       return;
     }
 
+    if (_locationMode == BookingLocationMode.other) {
+      if (_isResolvingOtherLocation) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Tunggu alamat lokasi selesai diproses.'),
+          ),
+        );
+        return;
+      }
+      if (!isValidBookingLocationCoordinates(
+        _otherLocationLatitude,
+        _otherLocationLongitude,
+      )) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Cari alamat lalu pilih hasilnya, atau tentukan titik pada peta.',
+            ),
+          ),
+        );
+        return;
+      }
+    }
+
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     setState(() => _isLoading = true);
@@ -430,7 +563,6 @@ class _BookingPageState extends State<BookingPage> {
       print('🎯 [BookingPage] Response keys: ${response.keys.toList()}');
 
       final snapToken = response['snapToken']?.toString();
-      print('🎯 [BookingPage] Snap Token: $snapToken');
 
       if (snapToken == null) {
         print('❌ [BookingPage] Snap token is null!');
@@ -479,7 +611,6 @@ class _BookingPageState extends State<BookingPage> {
         );
       }
 
-      print('🎯 [BookingPage] Redirect URL: $snapRedirectUrl');
       print('🎯 [BookingPage] Navigating to payment page...');
 
       Navigator.push(
@@ -858,17 +989,21 @@ class _BookingPageState extends State<BookingPage> {
                   filled: true,
                   fillColor: Colors.white,
                   suffixIcon: _otherLocationController.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () {
-                            setState(() {
-                              _otherLocationController.clear();
-                              _locationPredictions = [];
-                              _otherLocationLatitude = null;
-                              _otherLocationLongitude = null;
-                            });
-                          },
-                        )
+                      ? _isResolvingOtherLocation
+                            ? const Padding(
+                                padding: EdgeInsets.all(14),
+                                child: SizedBox.square(
+                                  dimension: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.2,
+                                  ),
+                                ),
+                              )
+                            : IconButton(
+                                tooltip: 'Hapus lokasi',
+                                icon: const Icon(Icons.close),
+                                onPressed: _clearOtherLocation,
+                              )
                       : null,
                 ),
               ),
@@ -905,6 +1040,72 @@ class _BookingPageState extends State<BookingPage> {
                   ),
                 ),
               ],
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: SizedBox(
+                  height: 240,
+                  width: double.infinity,
+                  child: GoogleMap(
+                    initialCameraPosition: _otherLocationInitialCameraPosition,
+                    myLocationButtonEnabled: false,
+                    mapToolbarEnabled: false,
+                    zoomControlsEnabled: false,
+                    compassEnabled: true,
+                    onMapCreated: (controller) {
+                      _otherLocationMapController = controller;
+                      final point = _otherLocationPoint;
+                      if (point != null) {
+                        controller.moveCamera(
+                          CameraUpdate.newLatLngZoom(point, 17),
+                        );
+                      }
+                    },
+                    onTap: _selectOtherLocationOnMap,
+                    markers: _otherLocationPoint == null
+                        ? <Marker>{}
+                        : {
+                            Marker(
+                              markerId: const MarkerId(
+                                'booking-other-location',
+                              ),
+                              position: _otherLocationPoint!,
+                              draggable: true,
+                              onDragEnd: _selectOtherLocationOnMap,
+                            ),
+                          },
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    _otherLocationPoint == null
+                        ? Icons.touch_app_outlined
+                        : Icons.check_circle_outline,
+                    size: 18,
+                    color: _otherLocationPoint == null
+                        ? subtitleColor
+                        : Colors.green.shade700,
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      _otherLocationPoint == null
+                          ? 'Cari alamat atau ketuk peta untuk menentukan titik pengerjaan.'
+                          : 'Titik lokasi sudah dipilih. Marker dapat digeser untuk menyesuaikan posisi.',
+                      style: TextStyle(
+                        color: _otherLocationPoint == null
+                            ? subtitleColor
+                            : Colors.green.shade700,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
       ],

@@ -133,6 +133,36 @@ class CompletionSubmission {
   }
 }
 
+class QuoteRevisionRequest {
+  const QuoteRevisionRequest({
+    required this.reason,
+    required this.status,
+    required this.requestedPrice,
+    required this.requestedQuoteRevision,
+    required this.requestNumber,
+    this.requestedAt,
+  });
+
+  final String reason;
+  final String status;
+  final num? requestedPrice;
+  final int requestedQuoteRevision;
+  final int requestNumber;
+  final DateTime? requestedAt;
+
+  factory QuoteRevisionRequest.fromJson(Map<String, dynamic> json) {
+    return QuoteRevisionRequest(
+      reason: json['reason']?.toString() ?? '',
+      status: json['status']?.toString() ?? 'pending',
+      requestedPrice: num.tryParse(json['requestedPrice']?.toString() ?? ''),
+      requestedQuoteRevision:
+          (json['requestedQuoteRevision'] as num?)?.toInt() ?? 0,
+      requestNumber: (json['requestNumber'] as num?)?.toInt() ?? 0,
+      requestedAt: _parseOptionalDateTime(json['requestedAt']),
+    );
+  }
+}
+
 class Order {
   final String id;
   final String status;
@@ -151,9 +181,15 @@ class Order {
   final String? workerId;
   final String? workerAvatar;
   final num? quotedPrice;
+  final int quoteRevision;
+  final QuoteRevisionRequest? quoteRevisionRequest;
   final LatLng? coordinates; // Koordinat untuk peta
   final String? paymentStatus;
+  final bool workerAccess;
   final String? finalPaymentStatus;
+  final num? finalPaymentAmount;
+  final num? finalDiscount;
+  final String? finalAppliedVoucher;
   final DateTime? completedAt;
   final DateTime? updatedAt;
   final WorkStartSubmission? workStartSubmission;
@@ -192,10 +228,16 @@ class Order {
     this.workerId,
     this.workerAvatar,
     this.quotedPrice,
+    this.quoteRevision = 0,
+    this.quoteRevisionRequest,
     required this.hasBeenReviewed,
     this.coordinates,
     this.paymentStatus,
+    this.workerAccess = false,
     this.finalPaymentStatus,
+    this.finalPaymentAmount,
+    this.finalDiscount,
+    this.finalAppliedVoucher,
     this.completedAt,
     this.updatedAt,
     this.workStartSubmission,
@@ -236,9 +278,15 @@ class Order {
     String? workerId,
     String? workerAvatar,
     num? quotedPrice,
+    int? quoteRevision,
+    QuoteRevisionRequest? quoteRevisionRequest,
     LatLng? coordinates,
     String? paymentStatus,
+    bool? workerAccess,
     String? finalPaymentStatus,
+    num? finalPaymentAmount,
+    num? finalDiscount,
+    String? finalAppliedVoucher,
     DateTime? completedAt,
     DateTime? updatedAt,
     WorkStartSubmission? workStartSubmission,
@@ -277,10 +325,16 @@ class Order {
       workerId: workerId ?? this.workerId,
       workerAvatar: workerAvatar ?? this.workerAvatar,
       quotedPrice: quotedPrice ?? this.quotedPrice,
+      quoteRevision: quoteRevision ?? this.quoteRevision,
+      quoteRevisionRequest: quoteRevisionRequest ?? this.quoteRevisionRequest,
       hasBeenReviewed: hasBeenReviewed ?? this.hasBeenReviewed,
       coordinates: coordinates ?? this.coordinates,
       paymentStatus: paymentStatus ?? this.paymentStatus,
+      workerAccess: workerAccess ?? this.workerAccess,
       finalPaymentStatus: finalPaymentStatus ?? this.finalPaymentStatus,
+      finalPaymentAmount: finalPaymentAmount ?? this.finalPaymentAmount,
+      finalDiscount: finalDiscount ?? this.finalDiscount,
+      finalAppliedVoucher: finalAppliedVoucher ?? this.finalAppliedVoucher,
       completedAt: completedAt ?? this.completedAt,
       updatedAt: updatedAt ?? this.updatedAt,
       workStartSubmission: workStartSubmission ?? this.workStartSubmission,
@@ -410,12 +464,19 @@ class Order {
       category: json['category'] ?? 'lainnya',
       serviceType: json['serviceType'] ?? json['tipeLayanan'] ?? 'lainnya',
       quotedPrice: parsePrice(
-        json['harga'] ??
+        json['quotedPrice'] ??
+            json['proposedPrice'] ??
+            json['harga'] ??
             json['serviceHarga'] ??
             json['price'] ??
-            json['proposedPrice'] ??
-            json['quotedPrice'],
+            json['biayaSurvei'],
       ),
+      quoteRevision: (json['quoteRevision'] as num?)?.toInt() ?? 0,
+      quoteRevisionRequest: json['quoteRevisionRequest'] is Map
+          ? QuoteRevisionRequest.fromJson(
+              Map<String, dynamic>.from(json['quoteRevisionRequest']),
+            )
+          : null,
       customerId: json['customerId'] ?? '',
       workerId: json['workerId'],
       workerName: json['workerName'],
@@ -425,7 +486,11 @@ class Order {
       jadwalPerbaikan: parseFirestoreTimestamp(json['jadwalPerbaikan']),
       dibuatPada: parseFirestoreTimestamp(json['dibuatPada']),
       paymentStatus: json['paymentStatus'],
+      workerAccess: json['workerAccess'] == true,
       finalPaymentStatus: json['finalPaymentStatus'],
+      finalPaymentAmount: parsePrice(json['finalPaymentAmount']),
+      finalDiscount: parsePrice(json['finalDiscount']),
+      finalAppliedVoucher: json['finalAppliedVoucher']?.toString(),
       completedAt: parseOptionalTimestamp(json['completedAt']),
       updatedAt: parseOptionalTimestamp(json['updatedAt']),
       workStartSubmission: json['workStartSubmission'] is Map

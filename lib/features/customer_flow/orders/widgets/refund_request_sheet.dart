@@ -51,6 +51,20 @@ class _RefundRequestSheetState extends State<RefundRequestSheet> {
 
   bool get _hasFinalPayment => widget.order.finalPaymentStatus == 'paid';
 
+  bool get _canRequestRework {
+    final fullyPaid =
+        widget.order.paymentStatus == 'paid' &&
+        (!_isSurvey || _hasFinalPayment);
+    final workStarted = {
+      'work_in_progress',
+      'completion_submitted',
+    }.contains(widget.order.status);
+    final hasBeforeEvidence =
+        widget.order.workStartSubmission?.beforeEvidence.isNotEmpty == true;
+    final hasPayout = widget.order.payoutStatus != null;
+    return fullyPaid && workStarted && hasBeforeEvidence && !hasPayout;
+  }
+
   bool get _evidenceRequired => {
     'work_not_as_agreed',
     'property_damage',
@@ -67,9 +81,7 @@ class _RefundRequestSheetState extends State<RefundRequestSheet> {
   void initState() {
     super.initState();
     _paymentTarget = _isSurvey && _hasFinalPayment ? 'final_quote' : 'initial';
-    if (widget.order.status == 'work_in_progress' ||
-        widget.order.status == 'completion_submitted' ||
-        widget.order.status == 'completed') {
+    if (_canRequestRework) {
       _reasonCode = 'work_not_as_agreed';
       _resolution = 'rework';
     }
@@ -411,13 +423,15 @@ class _RefundRequestSheetState extends State<RefundRequestSheet> {
           'Tentukan penyelesaian yang Anda harapkan dan lampirkan bukti bila diperlukan.',
         ),
         const SizedBox(height: 18),
-        _resolutionOption(
-          value: 'rework',
-          icon: Icons.handyman_outlined,
-          title: 'Perbaikan ulang',
-          subtitle: 'Worker memperbaiki hasil pekerjaan.',
-        ),
-        const SizedBox(height: 10),
+        if (_canRequestRework) ...[
+          _resolutionOption(
+            value: 'rework',
+            icon: Icons.handyman_outlined,
+            title: 'Perbaikan ulang pekerjaan',
+            subtitle: 'Worker memperbaiki hasil kerja sebelum dikonfirmasi.',
+          ),
+          const SizedBox(height: 10),
+        ],
         _resolutionOption(
           value: 'partial_refund',
           icon: Icons.pie_chart_outline_rounded,

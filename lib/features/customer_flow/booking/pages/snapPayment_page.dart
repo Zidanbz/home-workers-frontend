@@ -5,10 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:home_workers_fe/features/main_page.dart';
 import 'package:home_workers_fe/core/state/auth_provider.dart';
 import 'package:home_workers_fe/core/api/api_service.dart';
+import 'package:home_workers_fe/core/utils/payment_redirect_policy.dart';
+import 'package:home_workers_fe/core/utils/payment_status_policy.dart';
 import 'package:home_workers_fe/features/customer_flow/booking/pages/payment_success_page.dart';
 
 class SnapPaymentPage extends StatefulWidget {
@@ -21,21 +24,106 @@ class SnapPaymentPage extends StatefulWidget {
   State<SnapPaymentPage> createState() => _SnapPaymentPageState();
 }
 
-class _SnapPaymentPageState extends State<SnapPaymentPage> {
+class _SnapPaymentPageState extends State<SnapPaymentPage>
+    with WidgetsBindingObserver {
+  static const _stuckLoaderTimeout = Duration(seconds: 15);
+
   late final WebViewController _controller;
+  late final Uri? _redirectUri;
   final WebViewCookieManager _cookieManager = WebViewCookieManager();
   final ApiService _apiService = ApiService();
 
   bool _transactionFinished = false;
   bool _pendingRedirectBlockedOnce = false;
   bool _insecureRedirectBlockedOnce = false;
-  WebResourceError? _lastWebError;
+  String? _webErrorMessage;
   Timer? _statusTimer;
+  Timer? _stuckLoaderTimer;
+  bool _showStuckLoaderRecovery = false;
   bool _navigatingToSuccess = false;
   String? _midtransOrderIdFromRedirect;
   bool _finishRedirectSeen = false;
   bool _isHandlingFinishRedirect = false;
   bool _isSuccessProbeRunning = false;
+
+  void _armStuckLoaderDetection() {
+    _stuckLoaderTimer?.cancel();
+    _stuckLoaderTimer = Timer(_stuckLoaderTimeout, _detectStuckLoader);
+  }
+
+  Future<void> _detectStuckLoader() async {
+    if (!mounted || _navigatingToSuccess || _transactionFinished) return;
+
+    var loaderIsStillVisible = false;
+    try {
+      final raw = await _controller.runJavaScriptReturningResult(
+        "document.body ? (document.body.innerText || '') : ''",
+      );
+      final bodyText = _normalizeJsStringResult(raw).toLowerCase();
+      loaderIsStillVisible =
+          bodyText.contains('tunggu sebentar') ||
+          bodyText.contains('please wait') ||
+          bodyText.contains('just a moment');
+    } catch (_) {
+      // Error utama akan ditangani NavigationDelegate. Jangan membuka browser
+      // secara otomatis karena perpindahan aplikasi harus tetap pilihan user.
+    }
+
+    if (!mounted || !loaderIsStillVisible) return;
+    setState(() {
+      _showStuckLoaderRecovery = true;
+    });
+  }
+
+  Future<void> _reloadPaymentPage() async {
+    final uri = _redirectUri;
+    if (uri == null) return;
+
+    setState(() {
+      _webErrorMessage = null;
+      _showStuckLoaderRecovery = false;
+    });
+    _armStuckLoaderDetection();
+
+    try {
+      // Memuat URL Snap yang sama, bukan meminta transaksi/token baru.
+      await _controller.loadRequest(uri);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _webErrorMessage = 'Halaman pembayaran tidak dapat dimuat ulang.';
+      });
+    }
+  }
+
+  Future<void> _openInExternalBrowser() async {
+    final uri = _redirectUri;
+    if (uri == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('URL pembayaran tidak valid.')),
+      );
+      return;
+    }
+
+    try {
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Browser tidak dapat membuka halaman pembayaran.'),
+          ),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Browser tidak dapat membuka halaman pembayaran.'),
+        ),
+      );
+    }
+  }
 
   Map<String, String> _extractQueryParams(String url) {
     final uri = Uri.tryParse(url);
@@ -69,14 +157,12 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
     );
   }
 
-  bool _isPaidStatus(String? txStatus) {
-    final v = (txStatus ?? '').toLowerCase();
-    return v == 'settlement' || v == 'capture' || v == 'paid';
-  }
-
-  bool _isFailedStatus(String? txStatus) {
-    final v = (txStatus ?? '').toLowerCase();
-    return v == 'deny' || v == 'expire' || v == 'cancel';
+  void _acceptRedirectOrderId(String? redirectOrderId) {
+    if (redirectOrderId == null || redirectOrderId.isEmpty) return;
+    final expectedOrderId = widget.orderId;
+    if (expectedOrderId == null || redirectOrderId == expectedOrderId) {
+      _midtransOrderIdFromRedirect = redirectOrderId;
+    }
   }
 
   Future<void> _checkAndHandlePaymentStatus() async {
@@ -94,11 +180,10 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
       );
 
       if (!mounted) return;
-      final txStatus = status['transaction_status']?.toString();
-
-      if (_isPaidStatus(txStatus)) {
+      if (isVerifiedPaidPayment(requestedOrderId: orderId, response: status)) {
         _navigatingToSuccess = true;
         _statusTimer?.cancel();
+        _stuckLoaderTimer?.cancel();
         await Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (_) => PaymentSuccessPage(orderId: orderId),
@@ -107,11 +192,16 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
         return;
       }
 
-      if (_isFailedStatus(txStatus) && !_transactionFinished) {
+      if (isVerifiedFailedPayment(
+            requestedOrderId: orderId,
+            response: status,
+          ) &&
+          !_transactionFinished) {
         setState(() {
           _transactionFinished = true;
         });
         _statusTimer?.cancel();
+        _stuckLoaderTimer?.cancel();
         _showPaymentFailureDialog(context);
       }
     } catch (_) {
@@ -124,11 +214,11 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
     Duration timeout = const Duration(seconds: 15),
     Duration interval = const Duration(seconds: 2),
   }) async {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
     final startedAt = DateTime.now();
     while (mounted &&
         !_navigatingToSuccess &&
         DateTime.now().difference(startedAt) < timeout) {
-      final auth = Provider.of<AuthProvider>(context, listen: false);
       final token = auth.token;
       final orderId = _midtransOrderIdFromRedirect ?? widget.orderId;
       if (token == null || orderId == null || orderId.isEmpty) return false;
@@ -140,18 +230,24 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
         );
         if (!mounted) return false;
 
-        final txStatus = status['transaction_status']?.toString();
-        if (_isPaidStatus(txStatus)) {
+        if (isVerifiedPaidPayment(
+          requestedOrderId: orderId,
+          response: status,
+        )) {
           await _goToSuccessPage(params: params);
           return true;
         }
-        if (_isFailedStatus(txStatus)) {
+        if (isVerifiedFailedPayment(
+          requestedOrderId: orderId,
+          response: status,
+        )) {
           if (!_transactionFinished) {
             setState(() {
               _transactionFinished = true;
             });
           }
           _statusTimer?.cancel();
+          _stuckLoaderTimer?.cancel();
           _showPaymentFailureDialog(context);
           return false;
         }
@@ -201,8 +297,8 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
       );
       if (!mounted || _navigatingToSuccess || didNavigate) return;
 
-      // Fail-open untuk kasus Midtrans simulator yang sukses tapi redirect tidak terjadi.
-      await _goToSuccessPage(params: const {});
+      // Teks pada WebView bukan bukti pembayaran. Status tetap harus
+      // terverifikasi server-to-server sebelum membuka halaman sukses.
     } catch (_) {
       // Best-effort probe only.
     } finally {
@@ -214,6 +310,7 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
     if (_navigatingToSuccess || !mounted) return;
     _navigatingToSuccess = true;
     _statusTimer?.cancel();
+    _stuckLoaderTimer?.cancel();
 
     final orderId =
         _midtransOrderIdFromRedirect ?? widget.orderId ?? params['order_id'];
@@ -232,41 +329,9 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
 
     try {
       final params = _extractQueryParams(url);
-      final transactionStatus = params['transaction_status'];
       final redirectOrderId =
           params['order_id'] ?? params['orderId'] ?? params['orderid'];
-      if (redirectOrderId != null && redirectOrderId.isNotEmpty) {
-        _midtransOrderIdFromRedirect = redirectOrderId;
-      }
-
-      if (_isPaidStatus(transactionStatus)) {
-        await _goToSuccessPage(params: params);
-        return;
-      }
-
-      if (_isFailedStatus(transactionStatus)) {
-        if (!_transactionFinished && mounted) {
-          setState(() {
-            _transactionFinished = true;
-          });
-        }
-        _statusTimer?.cancel();
-        if (mounted) {
-          _showPaymentFailureDialog(context);
-        }
-        return;
-      }
-
-      // Optimistic UX:
-      // Jika sudah benar-benar redirect ke endpoint merchant `/finish`,
-      // langsung anggap sukses dan bawa user ke halaman sukses.
-      // Ini menghindari kasus Midtrans sandbox yang kadang tidak melampirkan
-      // query status/terlambat sinkron, padahal transaksi sudah selesai.
-      final finishPath = Uri.tryParse(url)?.path.toLowerCase() ?? '';
-      if (finishPath.endsWith('/finish')) {
-        await _goToSuccessPage(params: params);
-        return;
-      }
+      _acceptRedirectOrderId(redirectOrderId);
 
       final didNavigate = await _waitForPaidAndNavigate(params: params);
       if (!mounted || _navigatingToSuccess || didNavigate) return;
@@ -323,6 +388,8 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _redirectUri = parseTrustedMidtransRedirectUrl(widget.redirectUrl);
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
@@ -330,8 +397,10 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
           onPageStarted: (url) {
             if (!mounted) return;
             setState(() {
-              _lastWebError = null;
+              _webErrorMessage = null;
+              _showStuckLoaderRecovery = false;
             });
+            _armStuckLoaderDetection();
             // Setelah WebView instance terbentuk.
             Future.microtask(_enableThirdPartyCookiesIfPossible);
             Future.microtask(_startStatusPolling);
@@ -339,13 +408,8 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
             final lowerUrl = url.toLowerCase();
             if (!_finishRedirectSeen && lowerUrl.contains('/finish')) {
               _finishRedirectSeen = true;
-              final params = _extractQueryParams(url);
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (!mounted) return;
-                if (_isPaidStatus(params['transaction_status'])) {
-                  _goToSuccessPage(params: params);
-                  return;
-                }
                 _handleFinishRedirect(url);
               });
             }
@@ -357,16 +421,17 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
           },
           onNavigationRequest: (request) {
             final url = request.url;
-            print('🌐 Navigated to: $url');
+            final navigationHost = Uri.tryParse(url)?.host;
+            debugPrint(
+              '🌐 Payment navigation host: ${navigationHost ?? 'invalid'}',
+            );
 
             final params = _extractQueryParams(url);
             final statusCode = params['status_code'];
             final transactionStatus = params['transaction_status'];
             final redirectOrderId =
                 params['order_id'] ?? params['orderId'] ?? params['orderid'];
-            if (redirectOrderId != null && redirectOrderId.isNotEmpty) {
-              _midtransOrderIdFromRedirect = redirectOrderId;
-            }
+            _acceptRedirectOrderId(redirectOrderId);
 
             final lowerUrl = url.toLowerCase();
             final isFinishRedirect = lowerUrl.contains('/finish');
@@ -376,10 +441,6 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
               // Jangan tampilkan halaman HTML /finish di WebView; validasi status dulu.
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (!mounted) return;
-                if (_isPaidStatus(transactionStatus)) {
-                  _goToSuccessPage(params: params);
-                  return;
-                }
                 _handleFinishRedirect(url);
               });
               return NavigationDecision.prevent;
@@ -391,7 +452,7 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
                     transactionStatus == 'capture')) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (!mounted) return;
-                _goToSuccessPage(params: params);
+                _waitForPaidAndNavigate(params: params);
               });
               return NavigationDecision.prevent;
             }
@@ -449,25 +510,23 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
             if (transactionStatus == 'deny' ||
                 transactionStatus == 'expire' ||
                 transactionStatus == 'cancel') {
-              setState(() {
-                _transactionFinished = true;
-              });
-              Future.delayed(Duration.zero, () {
-                _showPaymentFailureDialog(context);
-              });
+              Future.microtask(_checkAndHandlePaymentStatus);
               return NavigationDecision.prevent;
             }
 
             return NavigationDecision.navigate;
           },
           onWebResourceError: (error) {
+            // Kegagalan gambar/analytics pihak ketiga tidak boleh menutupi form
+            // pembayaran utama dengan pesan error.
+            if (error.isForMainFrame == false) return;
             // Ini membantu diagnosa jika yang terlihat user adalah halaman "error" setelah pilih bank.
-            print(
+            debugPrint(
               '❌ WebView error: ${error.errorCode} ${error.description} (${error.errorType})',
             );
             if (!mounted) return;
             setState(() {
-              _lastWebError = error;
+              _webErrorMessage = error.description;
             });
             final desc = error.description.toLowerCase();
             final isCleartextBlocked = desc.contains(
@@ -483,7 +542,7 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
                 ),
                 action: SnackBarAction(
                   label: 'Reload',
-                  onPressed: () => _controller.reload(),
+                  onPressed: _reloadPaymentPage,
                 ),
               ),
             );
@@ -494,12 +553,27 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
     // Best-effort: allow cookies/resources that some payment flows rely on,
     // then load the payment page.
     Future.microtask(() async {
+      if (_redirectUri == null) {
+        if (!mounted) return;
+        setState(() {
+          _webErrorMessage =
+              'URL pembayaran ditolak karena bukan halaman HTTPS Midtrans yang valid.';
+        });
+        return;
+      }
       try {
         await _configurePlatformWebView();
       } catch (_) {}
       if (!mounted) return;
-      await _controller.loadRequest(Uri.parse(widget.redirectUrl));
+      await _controller.loadRequest(_redirectUri);
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      Future.microtask(_checkAndHandlePaymentStatus);
+    }
   }
 
   void _showPaymentFailureDialog(BuildContext context) {
@@ -549,23 +623,30 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _statusTimer?.cancel();
+    _stuckLoaderTimer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
-        if (_transactionFinished) {
-          _navigateToDashboard(context);
-          return false;
-        }
-        return true;
+    return PopScope(
+      canPop: !_transactionFinished,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop || !_transactionFinished) return;
+        _navigateToDashboard(context);
       },
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Pembayaran'),
+          actions: [
+            IconButton(
+              tooltip: 'Buka di browser',
+              onPressed: _redirectUri == null ? null : _openInExternalBrowser,
+              icon: const Icon(Icons.open_in_browser),
+            ),
+          ],
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () {
@@ -580,38 +661,75 @@ class _SnapPaymentPageState extends State<SnapPaymentPage> {
         body: Stack(
           children: [
             WebViewWidget(controller: _controller),
-            if (_lastWebError != null)
+            if (_webErrorMessage != null || _showStuckLoaderRecovery)
               Positioned(
                 left: 12,
                 right: 12,
                 bottom: 12,
-                child: Material(
-                  elevation: 4,
-                  borderRadius: BorderRadius.circular(12),
-                  color: Colors.red.shade700,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.wifi_off, color: Colors.white),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Gagal memuat halaman. Coba reload atau buka di browser.',
-                            style: const TextStyle(color: Colors.white),
+                child: SafeArea(
+                  top: false,
+                  child: Material(
+                    elevation: 6,
+                    borderRadius: BorderRadius.circular(12),
+                    color: Theme.of(context).colorScheme.surface,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 10, 8, 8),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                _webErrorMessage == null
+                                    ? Icons.hourglass_top
+                                    : Icons.error_outline,
+                                color: _webErrorMessage == null
+                                    ? Colors.orange.shade800
+                                    : Theme.of(context).colorScheme.error,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  _webErrorMessage == null
+                                      ? 'Midtrans masih memuat. Coba muat ulang atau lanjutkan di browser.'
+                                      : 'Halaman pembayaran gagal dimuat. Coba muat ulang atau lanjutkan di browser.',
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Tutup',
+                                onPressed: () {
+                                  setState(() {
+                                    _webErrorMessage = null;
+                                    _showStuckLoaderRecovery = false;
+                                  });
+                                },
+                                icon: const Icon(Icons.close),
+                              ),
+                            ],
                           ),
-                        ),
-                        TextButton(
-                          onPressed: () => _controller.reload(),
-                          child: const Text(
-                            'Reload',
-                            style: TextStyle(color: Colors.white),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Wrap(
+                              spacing: 8,
+                              children: [
+                                TextButton.icon(
+                                  onPressed: _reloadPaymentPage,
+                                  icon: const Icon(Icons.refresh),
+                                  label: const Text('Muat ulang'),
+                                ),
+                                FilledButton.icon(
+                                  onPressed: _redirectUri == null
+                                      ? null
+                                      : _openInExternalBrowser,
+                                  icon: const Icon(Icons.open_in_browser),
+                                  label: const Text('Buka browser'),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),

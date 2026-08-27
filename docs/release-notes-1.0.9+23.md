@@ -33,6 +33,14 @@
 - Memperbaiki alur konfirmasi pekerjaan selesai, logout, pengiriman ulang KYC, loading dokumen Admin, dan avatar publik Worker.
 - Pendapatan Worker langsung masuk ke saldo setelah Customer mengonfirmasi pekerjaan selesai. Klaim aktif memblokir pencairan, sedangkan refund yang benar-benar disetujui dicatat sebagai debit dan dapat membuat saldo negatif.
 
+## Artefak Android
+
+- **AAB:** `build/app/outputs/bundle/release/home-workers-1.0.9-build23.aab`
+- **SHA-256:** `953648104e841b4e9e58afca965913b0ad5454459ce32266e80309aa85900409`
+- **Package:** `com.homeworkers.app`
+- **Environment:** `prod`
+- **Verifikasi:** build sukses, ZIP integrity lulus, dan tanda tangan upload terverifikasi.
+
 ## Checklist sebelum rilis Production
 
 - Deploy backend yang satu kontrak dengan aplikasi sebelum mempromosikan AAB ini. Perubahan registrasi, kontak WhatsApp, rating, profil Worker, dan wallet bergantung pada endpoint terbaru.

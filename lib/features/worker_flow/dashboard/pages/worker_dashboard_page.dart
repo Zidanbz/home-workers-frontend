@@ -1,82 +1,81 @@
 import 'package:flutter/material.dart';
-import 'package:home_workers_fe/features/chat/pages/chat_list_page.dart';
+import 'package:flutter/services.dart';
+import 'package:home_workers_fe/core/api/api_service.dart';
+import 'package:home_workers_fe/core/models/content_video_model.dart';
+import 'package:home_workers_fe/core/state/auth_provider.dart';
 import 'package:home_workers_fe/features/notifications/pages/notification_page.dart';
+import 'package:home_workers_fe/features/worker_flow/dashboard/widgets/worker_dashboard_overview.dart';
+import 'package:home_workers_fe/features/worker_flow/dashboard/widgets/worker_review_section.dart';
 import 'package:home_workers_fe/features/worker_flow/wallet/worker_wallet_page.dart';
+import 'package:home_workers_fe/shared_widgets/content_loading_skeleton.dart';
+import 'package:home_workers_fe/shared_widgets/content_video_section.dart';
 import 'package:provider/provider.dart';
-import '../../../../core/api/api_service.dart';
-import '../../../../core/state/auth_provider.dart';
-import '../../../../shared_widgets/content_loading_skeleton.dart';
 
 class WorkerDashboardPage extends StatefulWidget {
-  const WorkerDashboardPage({super.key});
+  const WorkerDashboardPage({super.key, this.bottomNavigationClearance = 0});
+
+  final double bottomNavigationClearance;
 
   @override
   State<WorkerDashboardPage> createState() => _WorkerDashboardPageState();
 }
 
-class _WorkerDashboardPageState extends State<WorkerDashboardPage>
-    with TickerProviderStateMixin {
+class _WorkerDashboardPageState extends State<WorkerDashboardPage> {
+  static const _navy = Color(0xFF12364D);
+  static const _teal = Color(0xFF00897B);
+  static const _surface = Color(0xFFF5F7F8);
+
   final ApiService _apiService = ApiService();
   Future<Map<String, dynamic>>? _summaryFuture;
-  late AnimationController _animationController;
-  late AnimationController _pulseController;
-  late Animation<double> _fadeAnimation;
-  late Animation<double> _slideAnimation;
-  late Animation<double> _pulseAnimation;
+  Future<List<ContentVideo>>? _contentVideosFuture;
+  bool _initialized = false;
 
   @override
-  void initState() {
-    super.initState();
-    _setupAnimations();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
     _loadDashboardData();
   }
 
-  void _setupAnimations() {
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 1200),
-      vsync: this,
-    );
-
-    _pulseController = AnimationController(
-      duration: const Duration(seconds: 2),
-      vsync: this,
-    );
-
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
-    );
-
-    _slideAnimation = Tween<double>(begin: 50.0, end: 0.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.elasticOut),
-    );
-
-    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.1).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
-
-    _animationController.forward();
-    _pulseController.repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    _pulseController.dispose();
-    super.dispose();
-  }
-
   Future<void> _loadDashboardData() async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    if (authProvider.token != null) {
-      final future = _apiService.getDashboardSummary(authProvider.token!);
-      setState(() {
-        _summaryFuture = future;
-      });
-      try {
-        await future;
-      } catch (_) {
-        // FutureBuilder bertanggung jawab menampilkan error.
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    if (token == null || token.isEmpty) {
+      final summaryFuture = Future<Map<String, dynamic>>.error(
+        Exception('Sesi Anda sudah berakhir. Silakan masuk kembali.'),
+      );
+      if (mounted) {
+        setState(() {
+          _summaryFuture = summaryFuture;
+          _contentVideosFuture = Future.value(const <ContentVideo>[]);
+        });
       }
+      try {
+        await summaryFuture;
+      } catch (_) {
+        // FutureBuilder menampilkan pesan sesi pada area konten.
+      }
+      return;
+    }
+
+    final summaryFuture = _apiService.getDashboardSummary(token);
+    final contentVideosFuture = _apiService.getContentVideos(token);
+    if (mounted) {
+      setState(() {
+        _summaryFuture = summaryFuture;
+        _contentVideosFuture = contentVideosFuture;
+      });
+    }
+
+    try {
+      await summaryFuture;
+    } catch (_) {
+      // Error dashboard ditampilkan oleh FutureBuilder utama.
+    }
+    try {
+      await contentVideosFuture;
+    } catch (_) {
+      // Konten tambahan tidak boleh menggagalkan dashboard utama.
     }
   }
 
@@ -86,60 +85,40 @@ class _WorkerDashboardPageState extends State<WorkerDashboardPage>
       builder: (context, authProvider, child) {
         final user = authProvider.user;
         if (user == null) {
-          return Scaffold(
-            body: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF1A374D), Color(0xFF2A4A5F)],
-                ),
-              ),
-              child: const Center(
+          return const AnnotatedRegion<SystemUiOverlayStyle>(
+            value: SystemUiOverlayStyle.light,
+            child: Scaffold(
+              backgroundColor: _navy,
+              body: Center(
                 child: CircularProgressIndicator(color: Colors.white),
               ),
             ),
           );
         }
 
-        return Scaffold(
-          body: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF1A374D),
-                  Color(0xFF2A4A5F),
-                  Color(0xFF1A374D),
-                ],
-                stops: [0.0, 0.5, 1.0],
-              ),
-            ),
-            child: SafeArea(
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: SystemUiOverlayStyle.light.copyWith(
+            statusBarColor: Colors.transparent,
+          ),
+          child: Scaffold(
+            backgroundColor: _navy,
+            body: SafeArea(
+              bottom: false,
               child: RefreshIndicator(
                 onRefresh: _loadDashboardData,
-                color: const Color(0xFF1A374D),
+                color: _teal,
                 backgroundColor: Colors.white,
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  child: AnimatedBuilder(
-                    animation: _animationController,
-                    builder: (context, child) {
-                      return Transform.translate(
-                        offset: Offset(0, _slideAnimation.value),
-                        child: Opacity(
-                          opacity: _fadeAnimation.value,
-                          child: Column(
-                            children: [
-                              _buildModernHeader(context, userName: user.nama),
-                              const SizedBox(height: 20),
-                              _buildMainContent(),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
+                  child: Column(
+                    children: [
+                      _buildHeader(
+                        context,
+                        name: user.nama,
+                        avatarUrl: user.avatarUrl,
+                      ),
+                      _buildDashboardBody(context),
+                    ],
                   ),
                 ),
               ),
@@ -150,154 +129,146 @@ class _WorkerDashboardPageState extends State<WorkerDashboardPage>
     );
   }
 
-  Widget _buildModernHeader(BuildContext context, {required String userName}) {
-    return Consumer<AuthProvider>(
-      builder: (context, authProvider, child) {
-        final user = authProvider.user;
-        final bool hasAvatar =
-            user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty;
-
-        return Container(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Row(
-                      children: [
-                        Hero(
-                          tag: 'profile_avatar',
-                          child: Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.3),
-                                  blurRadius: 15,
-                                  offset: const Offset(0, 8),
-                                ),
-                              ],
-                            ),
-                            child: CircleAvatar(
-                              radius: 28,
-                              backgroundColor: Colors.grey[200],
-                              backgroundImage: hasAvatar
-                                  ? NetworkImage(user!.avatarUrl!)
-                                  : null,
-                              child: !hasAvatar
-                                  ? Icon(
-                                      Icons.person,
-                                      size: 32,
-                                      color: Colors.grey[600],
-                                    )
-                                  : null,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Selamat datang! 👋',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.9),
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                userName,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.location_on,
-                                    size: 14,
-                                    color: Colors.white.withOpacity(0.8),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Makassar',
-                                    style: TextStyle(
-                                      color: Colors.white.withOpacity(0.8),
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+  Widget _buildHeader(
+    BuildContext context, {
+    required String name,
+    required String? avatarUrl,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [_navy, Color(0xFF006879), Color(0xFF00897B)],
+          stops: [0, 0.62, 1],
+        ),
+      ),
+      child: Row(
+        children: [
+          _buildAvatar(avatarUrl),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Selamat datang kembali',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.76),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  name.trim().isEmpty ? 'Worker' : name.trim(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: const Text(
+                    'Mitra Home Workers',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  Row(
-                    children: [
-                      _buildHeaderIconButton(
-                        Icons.account_balance_wallet_rounded,
-                        () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const WorkerWalletPage(),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      _buildHeaderIconButton(
-                        Icons.notifications_rounded,
-                        () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const NotificationPage(),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      _buildHeaderIconButton(
-                        Icons.chat_bubble_rounded,
-                        () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const ChatListPage(),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
-        );
-      },
+          const SizedBox(width: 10),
+          _buildHeaderAction(
+            tooltip: 'Wallet',
+            icon: Icons.account_balance_wallet_outlined,
+            onTap: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const WorkerWalletPage())),
+          ),
+          const SizedBox(width: 8),
+          _buildHeaderAction(
+            tooltip: 'Notifikasi',
+            icon: Icons.notifications_none_rounded,
+            onTap: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const NotificationPage())),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildHeaderIconButton(IconData icon, VoidCallback onPressed) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
+  Widget _buildAvatar(String? avatarUrl) {
+    final normalizedUrl = avatarUrl?.trim() ?? '';
+    final uri = Uri.tryParse(normalizedUrl);
+    final hasSafeAvatar =
+        uri?.scheme == 'https' && uri?.host.isNotEmpty == true;
+    const fallback = ColoredBox(
+      color: Color(0xFFE8EFF2),
+      child: Center(
+        child: Icon(Icons.person_rounded, color: Color(0xFF607D8B), size: 28),
       ),
+    );
+
+    return Container(
+      width: 52,
+      height: 52,
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.92),
+        shape: BoxShape.circle,
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x2912364D),
+            blurRadius: 12,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+      child: ClipOval(
+        child: hasSafeAvatar
+            ? Image.network(
+                normalizedUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => fallback,
+              )
+            : fallback,
+      ),
+    );
+  }
+
+  Widget _buildHeaderAction({
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
       child: Material(
-        color: Colors.transparent,
+        color: Colors.white.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(14),
         child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.all(10),
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: SizedBox.square(
+            dimension: 43,
             child: Icon(icon, color: Colors.white, size: 22),
           ),
         ),
@@ -305,58 +276,85 @@ class _WorkerDashboardPageState extends State<WorkerDashboardPage>
     );
   }
 
-  Widget _buildMainContent() {
+  Widget _buildDashboardBody(BuildContext context) {
+    final bottomInset =
+        widget.bottomNavigationClearance.clamp(0, 300).toDouble() +
+        MediaQuery.viewPaddingOf(context).bottom +
+        24;
+
     return Container(
+      key: const ValueKey('worker-dashboard-content'),
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(20, 24, 20, bottomInset),
       decoration: const BoxDecoration(
-        color: Color(0xFFFFFFFF),
+        color: _surface,
         borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(32),
-          topRight: Radius.circular(32),
+          topLeft: Radius.circular(28),
+          topRight: Radius.circular(28),
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: FutureBuilder<Map<String, dynamic>>(
-          future: _summaryFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting &&
-                !snapshot.hasData) {
-              return _buildLoadingState();
-            }
-            if (snapshot.hasError) {
-              return _buildErrorState(
-                ApiService.readableError(
-                  snapshot.error,
-                  action: 'Gagal memuat dashboard',
-                ),
-              );
-            }
-            if (!snapshot.hasData) {
-              return _buildEmptyState();
-            }
-
-            final summaryData = snapshot.data!;
-            final List<dynamic> reviews = summaryData['reviews'] ?? [];
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildGlassActionCards(summaryData),
-                const SizedBox(height: 32),
-                _buildModernSectionHeader("📊 Statistik Pesanan"),
-                const SizedBox(height: 16),
-                _buildModernCompletedOrdersList(
-                  summaryData['completedOrdersCount'] ?? 0,
-                ),
-                const SizedBox(height: 32),
-                _buildModernSectionHeader("⭐ Ulasan Terbaru"),
-                const SizedBox(height: 16),
-                _buildModernReviewList(reviews),
-              ],
+      child: FutureBuilder<Map<String, dynamic>>(
+        future: _summaryFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
+            return _buildLoadingState();
+          }
+          if (snapshot.hasError) {
+            return _buildErrorState(
+              ApiService.readableError(
+                snapshot.error,
+                action: 'Gagal memuat dashboard',
+              ),
             );
-          },
-        ),
+          }
+          final summary = snapshot.data;
+          if (summary == null) return _buildEmptyState();
+          return _buildLoadedContent(summary);
+        },
       ),
+    );
+  }
+
+  Widget _buildLoadedContent(Map<String, dynamic> summary) {
+    final rawWorker = summary['worker'];
+    final worker = rawWorker is Map
+        ? Map<String, dynamic>.from(rawWorker)
+        : const <String, dynamic>{};
+    final rawReviews = summary['reviews'];
+    final reviews = rawReviews is List ? rawReviews : const <dynamic>[];
+    final operationalArea = worker['operationalAreaLabel']?.toString().trim();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        WorkerDashboardOverview(
+          pendingOrders: _asNonNegativeInt(summary['pendingOrdersCount']),
+          acceptedOrders: _asNonNegativeInt(summary['acceptedOrdersCount']),
+          completedOrders: _asNonNegativeInt(summary['completedOrdersCount']),
+          rating: _asRating(summary['ratingAverage']),
+          operationalArea: operationalArea,
+        ),
+        _buildContentVideos(),
+        const SizedBox(height: 30),
+        WorkerReviewSection(reviews: reviews),
+      ],
+    );
+  }
+
+  Widget _buildContentVideos() {
+    return FutureBuilder<List<ContentVideo>>(
+      future: _contentVideosFuture,
+      builder: (context, snapshot) {
+        final videos = snapshot.data ?? const <ContentVideo>[];
+        if (snapshot.hasError || videos.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        return Padding(
+          padding: const EdgeInsets.only(top: 30),
+          child: ContentVideoSection(videos: videos),
+        );
+      },
     );
   }
 
@@ -370,746 +368,92 @@ class _WorkerDashboardPageState extends State<WorkerDashboardPage>
 
   Widget _buildErrorState(String error) {
     return Container(
-      height: 300,
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 30),
       decoration: BoxDecoration(
-        color: Colors.red.withOpacity(0.1),
+        color: const Color(0xFFFFF1F2),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.red.withOpacity(0.3)),
+        border: Border.all(color: const Color(0xFFFFCDD2)),
       ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 64,
-              color: Colors.red.withOpacity(0.7),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.cloud_off_rounded,
+            color: Color(0xFFC62828),
+            size: 38,
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Dashboard belum dapat dimuat',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Color(0xFF8E2020),
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
             ),
-            const SizedBox(height: 16),
-            Text(
-              'Gagal memuat data',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.red.shade700,
-              ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            error,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Color(0xFF9F4747),
+              fontSize: 12,
+              height: 1.4,
             ),
-            const SizedBox(height: 8),
-            Text(
-              error,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.red.shade600, fontSize: 14),
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: _loadDashboardData,
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: const Text('Coba lagi'),
+            style: FilledButton.styleFrom(
+              backgroundColor: _navy,
+              foregroundColor: Colors.white,
             ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _loadDashboardData,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Coba Lagi'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1A374D),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildEmptyState() {
     return Container(
-      height: 300,
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 30),
       decoration: BoxDecoration(
-        color: const Color(0xFFD9D9D9).withOpacity(0.3),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE4EAED)),
       ),
-      child: const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.inbox_outlined, size: 64, color: Color(0xFF1A374D)),
-            SizedBox(height: 16),
-            Text(
-              'Tidak ada data tersedia',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1A374D),
-              ),
+      child: const Column(
+        children: [
+          Icon(Icons.inbox_outlined, color: Color(0xFF78909C), size: 38),
+          SizedBox(height: 10),
+          Text(
+            'Belum ada data aktivitas',
+            style: TextStyle(
+              color: _navy,
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildGlassActionCards(Map<String, dynamic> summary) {
-    int pendingOrders = summary['pendingOrdersCount'] ?? 0;
-    int acceptedOrders = summary['acceptedOrdersCount'] ?? 0;
-    int completedOrders = summary['completedOrdersCount'] ?? 0;
-    double rating = (summary['ratingAverage'] ?? 0).toDouble();
-
-    return Column(
-      children: [
-        // Main Card dengan Glass Effect
-        AnimatedBuilder(
-          animation: _pulseController,
-          builder: (context, child) {
-            return Transform.scale(
-              scale: pendingOrders > 0 ? _pulseAnimation.value : 1.0,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [const Color(0xFF1A374D), const Color(0xFF2A4A5F)],
-                  ),
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF1A374D).withOpacity(0.3),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Pesanan Baru',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                            Text(
-                              '$pendingOrders pesanan baru menunggu',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      const Icon(
-                        Icons.assignment_turned_in,
-                        size: 40,
-                        color: Colors.white,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-
-        const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            _buildStatCard('Diterima', acceptedOrders, const Color(0xFF1A374D)),
-            _buildStatCard('Selesai', completedOrders, const Color(0xFF4CAF50)),
-            _buildStatCard('Rating', rating, const Color(0xFFFFC107)),
-          ],
-        ),
-      ],
-    );
+  int _asNonNegativeInt(dynamic value) {
+    final number = value is num
+        ? value.toInt()
+        : int.tryParse(value?.toString() ?? '') ?? 0;
+    return number < 0 ? 0 : number;
   }
 
-  Widget _buildStatCard(String title, dynamic value, Color color) {
-    return Expanded(
-      child: Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        color: color.withOpacity(0.1),
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                value is double ? value.toStringAsFixed(1) : '$value',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(title, style: const TextStyle(fontSize: 14)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildModernSectionHeader(String title) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF1A374D),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildModernCompletedOrdersList(int completedCount) {
-    final categories = [
-      {
-        'icon': Icons.check_circle_outline,
-        'title': 'Total Selesai',
-        'count': completedCount,
-      },
-    ];
-
-    return SizedBox(
-      height: 130,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: categories.length,
-        itemBuilder: (context, index) {
-          final category = categories[index];
-          return Container(
-            width: 120,
-            margin: const EdgeInsets.only(right: 16),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFD9D9D9),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: const Color(0xFF1A374D).withOpacity(0.5),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  category['icon'] as IconData,
-                  color: const Color(0xFF1A374D),
-                  size: 30,
-                ),
-                const Spacer(),
-                Text(
-                  category['title'] as String,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  '${category['count']} Selesai',
-                  style: const TextStyle(color: Colors.grey, fontSize: 12),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildModernReviewList(List<dynamic> reviews) {
-    if (reviews.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFF1A374D).withOpacity(0.05),
-              const Color(0xFF2A4A5F).withOpacity(0.1),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: const Color(0xFF1A374D).withOpacity(0.1),
-            width: 1,
-          ),
-        ),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A374D).withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.star_outline,
-                size: 32,
-                color: Color(0xFF1A374D),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Belum Ada Ulasan',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1A374D),
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Ulasan dari pelanggan akan muncul di sini setelah Anda menyelesaikan pesanan',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey, fontSize: 14),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Column(
-      children: [
-        // Summary Card
-        Container(
-          padding: const EdgeInsets.all(20),
-          margin: const EdgeInsets.only(bottom: 20),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                const Color(0xFFFFC107).withOpacity(0.1),
-                const Color(0xFFFF9800).withOpacity(0.15),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: const Color(0xFFFFC107).withOpacity(0.3),
-              width: 1,
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFC107).withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.star,
-                  color: Color(0xFFFFC107),
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${reviews.length} Ulasan Terbaru',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1A374D),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        ...List.generate(5, (index) {
-                          final avgRating =
-                              reviews.fold<double>(
-                                0.0,
-                                (sum, review) =>
-                                    sum + ((review['rating'] ?? 0).toDouble()),
-                              ) /
-                              reviews.length;
-                          return Icon(
-                            index < avgRating.floor()
-                                ? Icons.star
-                                : (index < avgRating
-                                      ? Icons.star_half
-                                      : Icons.star_border),
-                            color: const Color(0xFFFFC107),
-                            size: 16,
-                          );
-                        }),
-                        const SizedBox(width: 8),
-                        Text(
-                          '${(reviews.fold<double>(0.0, (sum, review) => sum + ((review['rating'] ?? 0).toDouble())) / reviews.length).toStringAsFixed(1)}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1A374D),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        // Reviews List
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: reviews.length > 3
-              ? 3
-              : reviews.length, // Show max 3 reviews
-          itemBuilder: (context, index) {
-            final review = reviews[index];
-            final String customerName = review['customerName'] ?? 'Pelanggan';
-            final String comment = review['comment'] ?? 'Tidak ada komentar.';
-            final double rating = (review['rating'] ?? 0).toDouble();
-            final String createdAt = review['createdAt'] != null
-                ? (review['createdAt'] is String
-                      ? _formatDate(review['createdAt'])
-                      : _formatDateFromDateTime(review['createdAt']))
-                : 'Tanggal tidak diketahui';
-            final String customerAvatarUrl =
-                review['customerAvatarUrl'] ??
-                'https://i.pravatar.cc/150?img=${32 + index}';
-            final bool verified = review['verified'] ?? false;
-
-            return TweenAnimationBuilder<double>(
-              duration: Duration(milliseconds: 300 + (index * 100)),
-              tween: Tween(begin: 0.0, end: 1.0),
-              builder: (context, value, child) {
-                return Transform.translate(
-                  offset: Offset(30 * (1 - value), 0),
-                  child: Opacity(
-                    opacity: value,
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 16.0),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                        border: Border.all(
-                          color: Colors.grey.withOpacity(0.1),
-                          width: 1,
-                        ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(20.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: const Color(
-                                        0xFF1A374D,
-                                      ).withOpacity(0.2),
-                                      width: 2,
-                                    ),
-                                  ),
-                                  child: CircleAvatar(
-                                    radius: 22,
-                                    backgroundImage: NetworkImage(
-                                      customerAvatarUrl,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Text(
-                                            customerName,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 16,
-                                              color: Color(0xFF1A374D),
-                                            ),
-                                          ),
-                                          if (verified) ...[
-                                            const SizedBox(width: 6),
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 6,
-                                                    vertical: 2,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: Colors.green.withOpacity(
-                                                  0.1,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                              ),
-                                              child: const Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Icon(
-                                                    Icons.verified,
-                                                    color: Colors.green,
-                                                    size: 12,
-                                                  ),
-                                                  SizedBox(width: 2),
-                                                  Text(
-                                                    'Verified',
-                                                    style: TextStyle(
-                                                      color: Colors.green,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      fontSize: 10,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Row(
-                                        children: [
-                                          ...List.generate(5, (idx) {
-                                            return Icon(
-                                              idx < rating.floor()
-                                                  ? Icons.star
-                                                  : (idx < rating
-                                                        ? Icons.star_half
-                                                        : Icons.star_border),
-                                              color: const Color(0xFFFFC107),
-                                              size: 16,
-                                            );
-                                          }),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            createdAt,
-                                            style: const TextStyle(
-                                              color: Colors.grey,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: const Color(
-                                  0xFF1A374D,
-                                ).withOpacity(0.03),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: const Color(
-                                    0xFF1A374D,
-                                  ).withOpacity(0.1),
-                                  width: 1,
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        Icons.format_quote,
-                                        color: const Color(
-                                          0xFF1A374D,
-                                        ).withOpacity(0.6),
-                                        size: 20,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      const Text(
-                                        'Ulasan',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFF1A374D),
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    comment,
-                                    maxLines: 3,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.black87,
-                                      fontSize: 14,
-                                      height: 1.4,
-                                    ),
-                                  ),
-                                  if (comment.length > 100)
-                                    Align(
-                                      alignment: Alignment.centerRight,
-                                      child: TextButton(
-                                        onPressed: () {
-                                          showDialog(
-                                            context: context,
-                                            builder: (context) => AlertDialog(
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(20),
-                                              ),
-                                              title: Row(
-                                                children: [
-                                                  CircleAvatar(
-                                                    radius: 16,
-                                                    backgroundImage:
-                                                        NetworkImage(
-                                                          customerAvatarUrl,
-                                                        ),
-                                                  ),
-                                                  const SizedBox(width: 12),
-                                                  Text(
-                                                    'Ulasan dari $customerName',
-                                                  ),
-                                                ],
-                                              ),
-                                              content: SingleChildScrollView(
-                                                child: Text(
-                                                  comment,
-                                                  style: const TextStyle(
-                                                    height: 1.5,
-                                                  ),
-                                                ),
-                                              ),
-                                              actions: [
-                                                TextButton(
-                                                  onPressed: () =>
-                                                      Navigator.pop(context),
-                                                  child: const Text('Tutup'),
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                        },
-                                        style: TextButton.styleFrom(
-                                          foregroundColor: const Color(
-                                            0xFF1A374D,
-                                          ),
-                                        ),
-                                        child: const Text(
-                                          'Baca Selengkapnya',
-                                          style: TextStyle(fontSize: 12),
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            );
-          },
-        ),
-
-        // Show More Button if there are more than 3 reviews
-        if (reviews.length > 3)
-          Container(
-            margin: const EdgeInsets.only(top: 16),
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () {
-                // TODO: Navigate to full reviews page
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Fitur lihat semua ulasan akan segera hadir!',
-                    ),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.visibility),
-              label: Text('Lihat Semua ${reviews.length} Ulasan'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF1A374D),
-                side: const BorderSide(color: Color(0xFF1A374D)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  String _formatDate(String isoString) {
-    try {
-      final dateTime = DateTime.parse(isoString);
-      return '${dateTime.day} ${_getMonthAbbreviation(dateTime.month)}';
-    } catch (e) {
-      return isoString;
-    }
-  }
-
-  String _formatDateFromDateTime(DateTime dateTime) {
-    return '${dateTime.day} ${_getMonthAbbreviation(dateTime.month)}';
-  }
-
-  String _getMonthAbbreviation(int month) {
-    switch (month) {
-      case 1:
-        return 'Jan';
-      case 2:
-        return 'Feb';
-      case 3:
-        return 'Mar';
-      case 4:
-        return 'Apr';
-      case 5:
-        return 'Mei';
-      case 6:
-        return 'Jun';
-      case 7:
-        return 'Jul';
-      case 8:
-        return 'Agu';
-      case 9:
-        return 'Sep';
-      case 10:
-        return 'Okt';
-      case 11:
-        return 'Nov';
-      case 12:
-        return 'Des';
-      default:
-        return '';
-    }
+  double _asRating(dynamic value) {
+    final number = value is num
+        ? value.toDouble()
+        : double.tryParse(value?.toString() ?? '') ?? 0;
+    return number.clamp(0, 5).toDouble();
   }
 }

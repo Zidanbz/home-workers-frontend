@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:home_workers_fe/features/worker_flow/wallet/worker_withdraw_page.dart';
+import 'package:home_workers_fe/features/worker_flow/wallet/widgets/wallet_transaction_detail_sheet.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/api/api_service.dart';
@@ -184,7 +185,7 @@ class _WorkerWalletPageState extends State<WorkerWalletPage>
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.12),
+                  color: Colors.white.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
@@ -255,13 +256,16 @@ class _TransactionCard extends StatelessWidget {
     );
     final formatDate = DateFormat('dd MMM yyyy');
     final formatTime = DateFormat('HH:mm');
-    final isCashIn =
-        transaction.type == 'cash-in' || transaction.type == 'cash-in-hold';
+    final isCashIn = transaction.isIncome;
     final isSuccess = const {
       'success',
       'confirmed',
       'completed',
     }.contains(transaction.status);
+
+    final shortTransactionId = transaction.id.length > 10
+        ? '${transaction.id.substring(0, 10)}...'
+        : transaction.id;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -269,74 +273,104 @@ class _TransactionCard extends StatelessWidget {
       elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: (isCashIn ? Colors.green : Colors.red).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                isCashIn ? Icons.arrow_upward : Icons.arrow_downward,
-                color: isCashIn ? Colors.green : Colors.red,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    transaction.description,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Transaction ID: ${transaction.id.substring(0, 10)}...',
-                    style: const TextStyle(color: Colors.grey, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
+            Row(
               children: [
-                Text(
-                  formatCurrency.format(transaction.amount),
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: (isCashIn ? Colors.green : Colors.red).withValues(
+                      alpha: 0.1,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    isCashIn ? Icons.arrow_upward : Icons.arrow_downward,
                     color: isCashIn ? Colors.green : Colors.red,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isSuccess
-                        ? Colors.green.withOpacity(0.1)
-                        : Colors.orange.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    transaction.status,
-                    style: TextStyle(
-                      color: isSuccess ? Colors.green : Colors.orange,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        transaction.description,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Transaction ID: ${shortTransactionId.isEmpty ? '-' : shortTransactionId}',
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  '${formatDate.format(transaction.timestamp)} ${formatTime.format(transaction.timestamp)}',
-                  style: const TextStyle(color: Colors.grey, fontSize: 10),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      formatCurrency.format(transaction.amount),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: isCashIn ? Colors.green : Colors.red,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: (isSuccess ? Colors.green : Colors.orange)
+                            .withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        transaction.status,
+                        style: TextStyle(
+                          color: isSuccess ? Colors.green : Colors.orange,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${formatDate.format(transaction.timestamp)} ${formatTime.format(transaction.timestamp)}',
+                      style: const TextStyle(color: Colors.grey, fontSize: 10),
+                    ),
+                  ],
                 ),
               ],
+            ),
+            const Divider(height: 22),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () =>
+                    showWalletTransactionDetail(context, transaction),
+                icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                label: const Text(
+                  'Lihat detail',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF1A374D),
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                ),
+              ),
             ),
           ],
         ),

@@ -3,6 +3,7 @@ const customerOngoingOrderStatuses = {
   'pending',
   'accepted',
   'quote_proposed',
+  'quote_revision_requested',
   'quote_accepted',
   'ready_to_start',
   'work_in_progress',
@@ -13,6 +14,25 @@ const customerHistoryOrderStatuses = {
   'completed',
   'cancelled',
   'quote_rejected',
+  'worker_acceptance_expired',
+};
+
+const workerQueueOrderStatuses = {
+  'pending',
+  'accepted',
+  'quote_proposed',
+  'quote_revision_requested',
+  'quote_accepted',
+  'ready_to_start',
+  'work_in_progress',
+  'completion_submitted',
+};
+
+const workerHistoryOrderStatuses = {
+  'completed',
+  'cancelled',
+  'quote_rejected',
+  'rejected',
   'worker_acceptance_expired',
 };
 
@@ -47,6 +67,29 @@ bool shouldShowCustomerOrderInHistory({
 }) {
   return refundStatusesShownInHistory.contains(refundStatus) ||
       customerHistoryOrderStatuses.contains(orderStatus);
+}
+
+bool shouldShowWorkerOrderInQueue({
+  required String orderStatus,
+  String? refundStatus,
+}) {
+  if (refundStatus == 'rework_in_progress') {
+    return true;
+  }
+  return !refundStatusesShownInHistory.contains(refundStatus) &&
+      workerQueueOrderStatuses.contains(orderStatus);
+}
+
+bool shouldShowWorkerOrderInHistory({
+  required String orderStatus,
+  String? refundStatus,
+}) {
+  return refundStatusesShownInHistory.contains(refundStatus) ||
+      workerHistoryOrderStatuses.contains(orderStatus);
+}
+
+bool isOrderWorkflowBlockedByRefund(String? refundStatus) {
+  return refundStatusesShownInHistory.contains(refundStatus);
 }
 
 String effectiveCustomerOrderListStatus({

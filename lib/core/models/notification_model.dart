@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class NotificationItem {
@@ -10,6 +9,7 @@ class NotificationItem {
   final bool isRead;
   final String type;
   final String? relatedId;
+  final Map<String, dynamic> data;
 
   NotificationItem({
     required this.id,
@@ -19,6 +19,7 @@ class NotificationItem {
     required this.isRead,
     required this.type,
     this.relatedId,
+    this.data = const {},
   });
 
   factory NotificationItem.fromJson(Map<String, dynamic> json) {
@@ -32,6 +33,9 @@ class NotificationItem {
       isRead: json['isRead'] ?? false,
       type: json['type'] ?? '',
       relatedId: json['relatedId'],
+      data: json['data'] is Map
+          ? Map<String, dynamic>.from(json['data'])
+          : const {},
     );
   }
 

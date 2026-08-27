@@ -59,4 +59,50 @@ void main() {
       'refund:rework_in_progress',
     );
   });
+
+  test('refund selesai memindahkan order Worker dari antrean ke riwayat', () {
+    expect(
+      shouldShowWorkerOrderInQueue(
+        orderStatus: 'quote_accepted',
+        refundStatus: 'refunded',
+      ),
+      isFalse,
+    );
+    expect(
+      shouldShowWorkerOrderInHistory(
+        orderStatus: 'quote_accepted',
+        refundStatus: 'refunded',
+      ),
+      isTrue,
+    );
+    expect(isOrderWorkflowBlockedByRefund('refunded'), isTrue);
+  });
+
+  test('refund ditolak mengembalikan order Worker ke antrean', () {
+    expect(
+      shouldShowWorkerOrderInQueue(
+        orderStatus: 'quote_accepted',
+        refundStatus: 'rejected',
+      ),
+      isTrue,
+    );
+    expect(
+      shouldShowWorkerOrderInHistory(
+        orderStatus: 'quote_accepted',
+        refundStatus: 'rejected',
+      ),
+      isFalse,
+    );
+  });
+
+  test('permintaan revisi harga tetap aktif untuk Customer dan Worker', () {
+    expect(
+      shouldShowCustomerOrderInOngoing(orderStatus: 'quote_revision_requested'),
+      isTrue,
+    );
+    expect(
+      shouldShowWorkerOrderInQueue(orderStatus: 'quote_revision_requested'),
+      isTrue,
+    );
+  });
 }

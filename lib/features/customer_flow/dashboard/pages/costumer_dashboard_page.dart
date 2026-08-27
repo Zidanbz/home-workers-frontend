@@ -1,21 +1,32 @@
 // lib/features/customer_flow/dashboard/pages/customer_dashboard_page.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:home_workers_fe/core/models/category_model.dart';
+import 'package:home_workers_fe/core/models/content_video_model.dart';
 import 'package:home_workers_fe/core/models/performer_model.dart';
 import 'package:home_workers_fe/features/customer_flow/chat/pages/customer_chat_list_page.dart';
 import 'package:home_workers_fe/features/customer_flow/marketplace/pages/category_services_page.dart';
 import 'package:home_workers_fe/features/customer_flow/marketplace/pages/marketplace_page.dart';
+import 'package:home_workers_fe/features/customer_flow/dashboard/widgets/customer_quick_actions.dart';
+import 'package:home_workers_fe/features/customer_flow/dashboard/utils/customer_dashboard_layout.dart';
 import 'package:home_workers_fe/features/notifications/pages/notification_page.dart';
+import 'package:home_workers_fe/shared_widgets/content_video_section.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/api/api_service.dart';
 import '../../../../core/state/auth_provider.dart';
 
 class CustomerDashboardPage extends StatefulWidget {
-  // Callback ke MainPage untuk pindah ke tab Orders
   final VoidCallback onNavigateToOrders;
+  final VoidCallback onNavigateToNearbyWorkers;
+  final double bottomNavigationClearance;
 
-  const CustomerDashboardPage({super.key, required this.onNavigateToOrders});
+  const CustomerDashboardPage({
+    super.key,
+    required this.onNavigateToOrders,
+    required this.onNavigateToNearbyWorkers,
+    this.bottomNavigationClearance = 0,
+  });
 
   @override
   State<CustomerDashboardPage> createState() => _CustomerDashboardPageState();
@@ -24,6 +35,7 @@ class CustomerDashboardPage extends StatefulWidget {
 class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
   final ApiService _apiService = ApiService();
   late Future<Map<String, dynamic>> _dashboardFuture;
+  Future<List<ContentVideo>>? _contentVideosFuture;
 
   // Global keys for feature showcase
   final GlobalKey _notificationKey = GlobalKey();
@@ -59,6 +71,10 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
   void initState() {
     super.initState();
     _dashboardFuture = _apiService.getCustomerDashboardSummary();
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    _contentVideosFuture = token == null
+        ? Future.value(const <ContentVideo>[])
+        : _apiService.getContentVideos(token);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _showAddressHintIfNeeded();
@@ -76,127 +92,155 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
   }
 
   Future<void> _refreshDashboard() async {
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    final dashboardFuture = _apiService.getCustomerDashboardSummary();
+    final contentVideosFuture = token == null
+        ? Future.value(const <ContentVideo>[])
+        : _apiService.getContentVideos(token);
     setState(() {
-      _dashboardFuture = _apiService.getCustomerDashboardSummary();
+      _dashboardFuture = dashboardFuture;
+      _contentVideosFuture = contentVideosFuture;
     });
-    // Tunggu future selesai supaya RefreshIndicator berhenti setelah data baru didapat
-    await _dashboardFuture;
+    // Konten tambahan tidak boleh membuat refresh dashboard utama gagal.
+    await dashboardFuture;
+    try {
+      await contentVideosFuture;
+    } catch (_) {
+      // FutureBuilder video menyembunyikan section jika request gagal.
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).user;
 
-    return Scaffold(
-      backgroundColor: const Color(
-        0xFF1A374D,
-      ), // gelap di belakang header lengkung
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            // HEADER
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 20.0,
-                vertical: 16.0,
-              ),
-              child: _buildHeader(context, userName: user?.nama ?? 'Guest'),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light.copyWith(
+        statusBarColor: Colors.transparent,
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [Color(0xFF12364D), Color(0xFF006879), Color(0xFF00968D)],
+              stops: [0, 0.56, 1],
             ),
-
-            // KONTEN SCROLLABLE
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.only(top: 24.0),
-                decoration: const BoxDecoration(
-                  color: Color(0xFFF5F5F5),
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(30),
-                    topRight: Radius.circular(30),
+          ),
+          child: SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                // HEADER
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20.0,
+                    vertical: 16.0,
                   ),
+                  child: _buildHeader(context, userName: user?.nama ?? 'Guest'),
                 ),
-                child: RefreshIndicator(
-                  onRefresh: _refreshDashboard,
-                  // NOTE: kita taruh FutureBuilder langsung sebagai child dari RefreshIndicator
-                  child: FutureBuilder<Map<String, dynamic>>(
-                    future: _dashboardFuture,
-                    builder: (context, snapshot) {
-                      // --- LOADING STATE ---
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return _buildScrollablePlaceholder(
-                          context,
-                          const Center(
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 80),
-                              child: CircularProgressIndicator(),
-                            ),
-                          ),
-                        );
-                      }
 
-                      // --- ERROR STATE ---
-                      if (snapshot.hasError) {
-                        return _buildScrollablePlaceholder(
-                          context,
-                          Center(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 80),
-                              child: Text(
-                                ApiService.readableError(
-                                  snapshot.error,
-                                  action: 'Gagal memuat data dashboard',
+                // KONTEN SCROLLABLE
+                Expanded(
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.only(top: 24.0),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF5F5F5),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(30),
+                        topRight: Radius.circular(30),
+                      ),
+                    ),
+                    child: RefreshIndicator(
+                      onRefresh: _refreshDashboard,
+                      // NOTE: kita taruh FutureBuilder langsung sebagai child dari RefreshIndicator
+                      child: FutureBuilder<Map<String, dynamic>>(
+                        future: _dashboardFuture,
+                        builder: (context, snapshot) {
+                          // --- LOADING STATE ---
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return _buildScrollablePlaceholder(
+                              context,
+                              const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 80),
+                                  child: CircularProgressIndicator(),
                                 ),
                               ),
-                            ),
-                          ),
-                        );
-                      }
+                            );
+                          }
 
-                      // --- NO DATA STATE ---
-                      if (!snapshot.hasData) {
-                        return _buildScrollablePlaceholder(
-                          context,
-                          const Center(
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 80),
-                              child: Text('Tidak ada data.'),
-                            ),
-                          ),
-                        );
-                      }
+                          // --- ERROR STATE ---
+                          if (snapshot.hasError) {
+                            return _buildScrollablePlaceholder(
+                              context,
+                              Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 80,
+                                  ),
+                                  child: Text(
+                                    ApiService.readableError(
+                                      snapshot.error,
+                                      action: 'Gagal memuat data dashboard',
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
 
-                      // --- DATA STATE ---
-                      final summaryData = snapshot.data!;
-                      final List<Category> topCategories =
-                          (summaryData['topCategories'] as List)
-                              .map((c) => Category.fromJson(c))
-                              .toList();
-                      final List<Performer> allPerformers =
-                          (summaryData['bestPerformers'] as List)
-                              .map((p) => Performer.fromJson(p))
-                              .toList();
-                      // Filter rating 4.5–5.0, sort descending, take max 5
-                      final List<Performer> filteredAndSorted =
-                          allPerformers
-                              .where((p) => p.rating >= 4.5 && p.rating <= 5.0)
-                              .toList()
-                            ..sort((a, b) => b.rating.compareTo(a.rating));
-                      final List<Performer> bestPerformers = filteredAndSorted
-                          .take(5)
-                          .toList();
+                          // --- NO DATA STATE ---
+                          if (!snapshot.hasData) {
+                            return _buildScrollablePlaceholder(
+                              context,
+                              const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 80),
+                                  child: Text('Tidak ada data.'),
+                                ),
+                              ),
+                            );
+                          }
 
-                      return _buildScrollableContent(
-                        context,
-                        topCategories: topCategories,
-                        bestPerformers: bestPerformers,
-                      );
-                    },
+                          // --- DATA STATE ---
+                          final summaryData = snapshot.data!;
+                          final List<Category> topCategories =
+                              (summaryData['topCategories'] as List)
+                                  .map((c) => Category.fromJson(c))
+                                  .toList();
+                          final List<Performer> allPerformers =
+                              (summaryData['bestPerformers'] as List)
+                                  .map((p) => Performer.fromJson(p))
+                                  .toList();
+                          // Filter rating 4.5–5.0, sort descending, take max 5
+                          final List<Performer> filteredAndSorted =
+                              allPerformers
+                                  .where(
+                                    (p) => p.rating >= 4.5 && p.rating <= 5.0,
+                                  )
+                                  .toList()
+                                ..sort((a, b) => b.rating.compareTo(a.rating));
+                          final List<Performer> bestPerformers =
+                              filteredAndSorted.take(5).toList();
+
+                          return _buildScrollableContent(
+                            context,
+                            topCategories: topCategories,
+                            bestPerformers: bestPerformers,
+                          );
+                        },
+                      ),
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -210,8 +254,7 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
         left: 20,
         right: 20,
         top: 0,
-        // ruang bawah cukup besar supaya user merasa bisa scroll "lewat" bottom nav
-        bottom: MediaQuery.of(context).padding.bottom + 140,
+        bottom: _bottomContentInset(context),
       ),
       children: [child],
     );
@@ -229,8 +272,7 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
         top: 0,
         left: 0,
         right: 0,
-        // safeAreaBottom + extra agar jelas bisa scroll sampai bawah
-        bottom: MediaQuery.of(context).padding.bottom + 140,
+        bottom: _bottomContentInset(context),
       ),
       children: [
         // Action cards sudah punya padding internal sendiri
@@ -242,17 +284,44 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
         }),
         const SizedBox(height: 16),
         _buildCategoryList(topCategories),
-        const SizedBox(height: 24),
+
+        _buildContentVideos(),
 
         _buildSectionHeader("Best Performers", () {
           // TODO: implement "lihat semua performer"
         }),
         const SizedBox(height: 16),
         _buildPerformerList(bestPerformers),
-
-        // ruang ekstra akhir (opsional, keamanan ganda)
-        const SizedBox(height: 24),
       ],
+    );
+  }
+
+  Widget _buildContentVideos() {
+    return FutureBuilder<List<ContentVideo>>(
+      future: _contentVideosFuture,
+      builder: (context, snapshot) {
+        final videos = snapshot.data ?? const <ContentVideo>[];
+        if (snapshot.hasError || videos.isEmpty) {
+          return const SizedBox(height: 24);
+        }
+
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            _getResponsiveSpacing(context, 20),
+            28,
+            _getResponsiveSpacing(context, 20),
+            28,
+          ),
+          child: ContentVideoSection(videos: videos),
+        );
+      },
+    );
+  }
+
+  double _bottomContentInset(BuildContext context) {
+    return customerDashboardBottomInset(
+      bottomNavigationClearance: widget.bottomNavigationClearance,
+      safeAreaBottom: MediaQuery.viewPaddingOf(context).bottom,
     );
   }
 
@@ -347,58 +416,16 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
       padding: EdgeInsets.symmetric(
         horizontal: _getResponsiveSpacing(context, 20.0),
       ),
-      child: Column(
-        children: [
-          // Penyedia Jasa
-          _ActionCard(
-            key: _marketplaceKey,
-            title: 'Penyedia Jasa',
-            color: const Color(0xFFFFD465),
-            icon: Icons.person_search_outlined,
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const MarketplacePage(),
-                ),
-              );
-            },
-            fontSize: _getResponsiveFontSize(context, 18),
-            iconSize: _getResponsiveSpacing(context, 30),
-          ),
-          SizedBox(height: _getResponsiveSpacing(context, 16)),
-
-          // Row 2
-          Row(
-            children: [
-              Expanded(
-                child: _ActionCard(
-                  key: _ordersKey,
-                  title: 'Riwayat Pesanan',
-                  color: const Color(0xFF3A3F51),
-                  icon: Icons.work_history_outlined,
-                  textColor: Colors.white,
-                  onTap: widget.onNavigateToOrders, // callback ke MainPage
-                  fontSize: _getResponsiveFontSize(context, 16),
-                  iconSize: _getResponsiveSpacing(context, 28),
-                ),
-              ),
-              SizedBox(width: _getResponsiveSpacing(context, 16)),
-              Expanded(
-                child: _ActionCard(
-                  title: 'Cari Disekitar',
-                  color: const Color(0xFFFE6E6E),
-                  icon: Icons.location_on_outlined,
-                  textColor: Colors.white,
-                  onTap: () {
-                    _showComingSoonDialog(context);
-                  },
-                  fontSize: _getResponsiveFontSize(context, 16),
-                  iconSize: _getResponsiveSpacing(context, 28),
-                ),
-              ),
-            ],
-          ),
-        ],
+      child: CustomerQuickActions(
+        marketplaceKey: _marketplaceKey,
+        ordersKey: _ordersKey,
+        onMarketplaceTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (context) => const MarketplacePage()),
+          );
+        },
+        onOrdersTap: widget.onNavigateToOrders,
+        onNearbyTap: widget.onNavigateToNearbyWorkers,
       ),
     );
   }
@@ -609,162 +636,6 @@ class _CustomerDashboardPageState extends State<CustomerDashboardPage> {
         size: _getResponsiveSpacing(context, 40),
         color: Colors.grey,
       ),
-    );
-  }
-
-  void _showComingSoonDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          backgroundColor: Colors.white,
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.construction_rounded,
-                  size: 50,
-                  color: Colors.orange,
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Coming Soon!',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  'Fitur ini sedang dikembangkan dan akan segera tersedia.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, color: Colors.black54),
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFE6E6E),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    child: Text(
-                      'Oke',
-                      style: TextStyle(fontSize: 16, color: Colors.white),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Reusable Action Card
-// ---------------------------------------------------------------------------
-class _ActionCard extends StatelessWidget {
-  final String title;
-  final Color color;
-  final IconData icon;
-  final Color textColor;
-  final VoidCallback onTap;
-  final double? fontSize;
-  final double? iconSize;
-
-  const _ActionCard({
-    super.key,
-    required this.title,
-    required this.color,
-    required this.icon,
-    required this.onTap,
-    this.textColor = Colors.black,
-    this.fontSize,
-    this.iconSize,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isCompact = constraints.maxWidth < 180;
-        final baseFont = fontSize ?? 18;
-        final baseIcon = iconSize ?? 30;
-        final adjustedFont = isCompact ? (baseFont - 2) : baseFont;
-        final adjustedIcon = isCompact ? (baseIcon - 4) : baseIcon;
-        final padding = isCompact
-            ? const EdgeInsets.all(14.0)
-            : const EdgeInsets.all(20.0);
-
-        Widget iconChip() {
-          return Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, size: adjustedIcon, color: textColor),
-          );
-        }
-
-        Widget titleText() {
-          return Text(
-            title,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: adjustedFont,
-              fontWeight: FontWeight.bold,
-              color: textColor,
-              height: 1.2,
-            ),
-          );
-        }
-
-        return Card(
-          color: color,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(20),
-            child: Padding(
-              padding: padding,
-              child: isCompact
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        titleText(),
-                        const SizedBox(height: 12),
-                        Align(
-                          alignment: Alignment.bottomRight,
-                          child: iconChip(),
-                        ),
-                      ],
-                    )
-                  : Row(
-                      children: [
-                        Expanded(child: titleText()),
-                        iconChip(),
-                      ],
-                    ),
-            ),
-          ),
-        );
-      },
     );
   }
 }

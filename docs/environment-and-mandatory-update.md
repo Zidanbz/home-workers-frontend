@@ -65,45 +65,49 @@ Pengguna yang masih memasang APK/AAB dengan **build lama** melihat pesan bahwa v
 
 ### 4.2 Pola yang disarankan
 
-1. **Sumber kebenaran “versi minimum”** yang bisa diubah **tanpa** merilis ulang aplikasi:
-   - **Firebase Remote Config**, atau
-   - Dokumen **Firestore**, atau
-   - **Endpoint backend** (misalnya `GET /app/config`).
+Implementasi memakai satu sumber kebenaran:
 
-2. **Di aplikasi**, saat startup (setelah layanan siap):
-   - Baca **versi terpasang** (disarankan memakai **build number** / `versionCode` pada Android, yaitu angka setelah `+` di `pubspec`, contoh `1.0.2+13` → `13`).
-   - Bandingkan dengan **nilai minimum** dari Remote Config (atau sumber lain).
-   - Jika `build saat ini < minimum`: tampilkan layar atau dialog **non-dismissible** (pengguna tidak bisa kembali ke app utama) dan tombol **Buka Play Store**.
+```text
+Dashboard Admin → appConfig/adminSettings → GET /api/app/version-policy
+                                          → cache lokal Flutter → AppVersionGate
+```
 
-3. **URL Play Store** (ganti `applicationId` sesuai `android/app/build.gradle`):
+Saat startup, aplikasi membaca build number (`versionCode`) dan meminta policy
+backend dengan timeout 3 detik. Jika `build saat ini < build minimum`, aplikasi
+menampilkan layar **non-dismissible** dan tombol **Buka Play Store**.
+
+URL Play Store resmi:
 
    `https://play.google.com/store/apps/details?id=com.homeworkers.app`
 
-   Membuka URL ini dari app biasanya memakai paket seperti `url_launcher` dengan mode aplikasi eksternal.
+Backend dan frontend memvalidasi agar URL tetap menggunakan HTTPS, host Play
+Store, dan package ID resmi.
 
-### 4.3 Konvensi Remote Config (contoh)
+### 4.3 Konfigurasi Dashboard Admin
 
-Di Firebase Console: aktifkan **Remote Config** untuk project yang sama dengan app, lalu tambahkan parameter berikut (tipe sesuai nama di bawah).
+Buka **Pengaturan Sistem → Kebijakan versi Android**:
 
-- Kunci bilangan bulat, misalnya `force_update_min_build_android`.
-  - Nilai `0` (atau tidak mengaktifkan paksa) = **tidak** memblokir berdasarkan build.
-  - Nilai `15` = hanya app dengan **build number ≥ 15** yang boleh lanjut.
-- Opsional: kunci string untuk **pesan** yang ditampilkan ke pengguna (bahasa Indonesia, penjelasan singkat).
+- **Build minimum**: batas bawah yang boleh memakai aplikasi. `0` menonaktifkan
+  wajib update.
+- **Build terbaru**: build terbaru yang sudah tersedia dan tidak boleh lebih
+  kecil daripada build minimum.
+- **Pesan pembaruan**: teks yang tampil kepada pengguna.
+- **URL Play Store**: dibatasi ke package `com.homeworkers.app`.
 
-Setiap kali Anda merilis build baru ke Play Store, **naikkan build number** di `pubspec`, lalu di konsol Remote Config set **minimum** ke build yang Anda anggap paling rendah yang masih boleh dipakai (biasanya sama dengan build rilis terbaru, atau lebih tinggi jika Anda ingin memutus semua yang di bawahnya).
+Setiap kali merilis build baru, naikkan build number di `pubspec.yaml`, unggah
+ke Play Store, tunggu sampai tersedia, lalu baru naikkan build minimum jika
+versi lama harus dihentikan.
 
-**Implementasi di repo:** logika ini ada di `lib/core/widgets/app_version_gate.dart` dan `MaterialApp` memuat `AppVersionGate` mengelilingi `AuthWrapper` di `lib/main.dart`. Hanya **Android** yang dicek; gagal fetch Remote Config → app tetap jalan (kebijakan longgar).
+Panduan operasional lengkap: [`force-update-backend.md`](force-update-backend.md).
 
-**Panduan operasional Firebase (form parameter, arti angka, contoh):** [`force-update-remote-config.md`](force-update-remote-config.md).
+### 4.4 Kasus backend gagal dihubungi
 
-### 4.4 Kasus gagal fetch (offline / error jaringan)
-
-Kebijakan umum:
-
-- **Longgar**: jika gagal membaca config, biarkan app jalan (hindari “brick” total).
-- **Ketat**: tetap blokir (jarang dipakai kecuali kebutuhan compliance).
-
-Pilih satu dan dokumentasikan untuk tim.
+- Jika cache terakhir menyatakan build wajib update, aplikasi tetap diblokir.
+- Jika cache terakhir mengizinkan build, policy cache tersebut dipakai.
+- Jika belum ada cache, aplikasi dibuka agar gangguan backend tidak mengunci
+  instalasi baru.
+- Cache dipisahkan berdasarkan `API_BASE_URL` agar Development dan Production
+  tidak saling memengaruhi.
 
 ### 4.5 iOS
 
@@ -111,7 +115,8 @@ Jika nanti ada rilis App Store, pola sama (bandingkan build), dengan URL App Sto
 
 ### 4.6 Alternatif resmi Google: In-App Updates
 
-Google menyediakan **Play In-App Updates** (fleksibel atau langsung). Itu melengkapi, bukan mengganti, kebutuhan “versi minimum” dari server/Remote Config jika Anda ingin tetap bisa memutus klien yang sangat lama.
+Google menyediakan **Play In-App Updates** (fleksibel atau langsung). Itu dapat
+melengkapi, bukan mengganti, Backend Version Policy.
 
 ---
 
@@ -119,7 +124,7 @@ Google menyediakan **Play In-App Updates** (fleksibel atau langsung). Itu meleng
 
 - [ ] `pubspec.yaml`: `version` dan build number (`+`) sudah naik sesuai kebijakan rilis.
 - [ ] Build store memakai **base URL API produksi**.
-- [ ] Jika memakai paksa update: nilai minimum di Remote Config (atau sumber lain) selaras dengan build yang diunggah.
+- [ ] Jika memakai paksa update: build pengganti sudah tersedia sebelum build minimum dinaikkan di Dashboard Admin.
 - [ ] Uji satu perangkat dengan build lama (atau turunkan sementara minimum di RC untuk tes internal).
 
 ---

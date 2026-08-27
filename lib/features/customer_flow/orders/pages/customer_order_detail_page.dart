@@ -52,6 +52,7 @@ class CustomerOrderDetailPage extends StatefulWidget {
 class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
   late Order _order;
   bool _isLoading = false;
+  bool _isStartingPayment = false;
   late final ApiService _apiService;
   FirebaseFirestore? _firestore;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
@@ -77,6 +78,10 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
   void initState() {
     super.initState();
     _order = widget.initialOrder;
+    _discount = (_order.finalDiscount ?? 0).toInt();
+    _appliedVoucherCode = _order.finalAppliedVoucher;
+    _selectedVoucher = _order.finalAppliedVoucher;
+    _isVoucherValid = _appliedVoucherCode != null;
     _apiService = widget.apiService ?? ApiService();
     if (widget.enableRealtime) {
       _firestore = FirebaseFirestore.instance;
@@ -478,12 +483,21 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
   void _applyRealtimeUpdate(Map<String, dynamic> data) {
     final status = data['status'] as String?;
     final quotedPrice = _parseNum(data['quotedPrice'] ?? data['proposedPrice']);
+    final quoteRevision = (data['quoteRevision'] as num?)?.toInt();
+    final quoteRevisionRequest = data['quoteRevisionRequest'] is Map
+        ? QuoteRevisionRequest.fromJson(
+            Map<String, dynamic>.from(data['quoteRevisionRequest']),
+          )
+        : null;
     final workerId = data['workerId'] as String?;
     final workerName = data['workerName'] as String?;
     final workerAvatar = data['workerAvatar'] as String?;
     final hasBeenReviewed = data['hasBeenReviewed'] as bool?;
     final paymentStatus = data['paymentStatus'] as String?;
     final finalPaymentStatus = data['finalPaymentStatus'] as String?;
+    final finalPaymentAmount = _parseNum(data['finalPaymentAmount']);
+    final finalDiscount = _parseNum(data['finalDiscount']);
+    final finalAppliedVoucher = data['finalAppliedVoucher']?.toString();
     final refundStatus = data['refundStatus'] as String?;
     final disputeStatus = data['disputeStatus'] as String?;
     final completedAt = _parseOptionalTimestamp(data['completedAt']);
@@ -527,6 +541,9 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
       _order = _order.copyWith(
         status: status ?? _order.status,
         quotedPrice: quotedPrice ?? _order.quotedPrice,
+        quoteRevision: quoteRevision ?? _order.quoteRevision,
+        quoteRevisionRequest:
+            quoteRevisionRequest ?? _order.quoteRevisionRequest,
         workerId: workerId ?? _order.workerId,
         workerName: workerName ?? _order.workerName,
         workerAvatar: workerAvatar ?? _order.workerAvatar,
@@ -535,6 +552,9 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
         hasBeenReviewed: hasBeenReviewed ?? _order.hasBeenReviewed,
         paymentStatus: paymentStatus ?? _order.paymentStatus,
         finalPaymentStatus: finalPaymentStatus ?? _order.finalPaymentStatus,
+        finalPaymentAmount: finalPaymentAmount ?? _order.finalPaymentAmount,
+        finalDiscount: finalDiscount ?? _order.finalDiscount,
+        finalAppliedVoucher: finalAppliedVoucher ?? _order.finalAppliedVoucher,
         refundStatus: refundStatus ?? _order.refundStatus,
         disputeStatus: disputeStatus ?? _order.disputeStatus,
         completedAt: completedAt ?? _order.completedAt,
@@ -618,6 +638,7 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
         'pending',
         'accepted',
         'quote_proposed',
+        'quote_revision_requested',
         'ready_to_start',
         'work_in_progress',
         'completion_submitted',
@@ -666,6 +687,8 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
         return Icons.check_circle_rounded;
       case 'quote_proposed':
         return Icons.request_quote_rounded;
+      case 'quote_revision_requested':
+        return Icons.edit_note_rounded;
       case 'quote_accepted':
         return Icons.payment_rounded;
       case 'ready_to_start':
@@ -697,9 +720,9 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
       case 'completed':
       case 'done':
       case 'paid':
+      case 'quote_rejected':
         return Icons.verified_rounded;
       case 'cancelled':
-      case 'quote_rejected':
       case 'rejected':
       case 'worker_acceptance_expired':
         return Icons.cancel_rounded;
@@ -722,6 +745,8 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
         return 'Disetujui';
       case 'quote_proposed':
         return 'Penawaran Diajukan';
+      case 'quote_revision_requested':
+        return 'Menunggu Revisi Harga';
       case 'quote_accepted':
         return 'Siap Bayar';
       case 'ready_to_start':
@@ -762,7 +787,7 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
       case 'cancelled':
         return 'Dibatalkan';
       case 'quote_rejected':
-        return 'Penawaran Ditolak';
+        return 'Survei Selesai • Penawaran Ditolak';
       case 'rejected':
         return 'Ditolak';
       case 'worker_acceptance_expired':
@@ -948,10 +973,11 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
   }
 
   Future<void> _handlePayment() async {
+    if (_isStartingPayment) return;
     final auth = Provider.of<AuthProvider>(context, listen: false);
     if (auth.token == null) return;
 
-    setState(() => _isLoading = true);
+    setState(() => _isStartingPayment = true);
     try {
       final paymentData = await _apiService.startPaymentForQuote(
         token: auth.token!,
@@ -961,6 +987,34 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
       final snapToken = paymentData['snapToken']?.toString();
       if (snapToken == null || snapToken.isEmpty) {
         throw Exception('Token pembayaran tidak diterima dari server.');
+      }
+      final quotedAmount = (_order.quotedPrice ?? 0).toInt();
+      final serverSubtotal = num.tryParse(paymentData['subtotal'].toString());
+      final serverDiscount = num.tryParse(paymentData['discount'].toString());
+      final serverAmount = num.tryParse(paymentData['amount'].toString());
+      final serverVoucher = paymentData['appliedVoucher']?.toString();
+      if (serverSubtotal == null ||
+          serverDiscount == null ||
+          serverAmount == null ||
+          serverSubtotal.round() != quotedAmount ||
+          serverDiscount < 0 ||
+          serverDiscount > serverSubtotal ||
+          serverAmount.round() !=
+              serverSubtotal.round() - serverDiscount.round() ||
+          (_appliedVoucherCode != null &&
+              (serverVoucher != _appliedVoucherCode ||
+                  serverDiscount.round() != _discount))) {
+        throw Exception(
+          'Nominal pembayaran dari server tidak sesuai dengan rincian penawaran.',
+        );
+      }
+      if (mounted) {
+        setState(() {
+          _discount = serverDiscount.round();
+          _appliedVoucherCode = serverVoucher;
+          _selectedVoucher = serverVoucher;
+          _isVoucherValid = serverVoucher != null;
+        });
       }
 
       final redirectUrlFromServer = paymentData['redirectUrl']?.toString();
@@ -1028,18 +1082,26 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
         );
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _isStartingPayment = false);
     }
   }
 
   Future<void> _respondToQuote(String decision) async {
     final auth = Provider.of<AuthProvider>(context, listen: false);
+    final expectedPrice = _order.quotedPrice;
+    if (expectedPrice == null || expectedPrice <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Harga penawaran tidak valid.')),
+      );
+      return;
+    }
     setState(() => _isLoading = true);
     try {
       await _apiService.respondToQuote(
         token: auth.token!,
         orderId: _order.id,
         decision: decision,
+        expectedPrice: expectedPrice,
       );
 
       if (!mounted) return;
@@ -1061,7 +1123,105 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
             ),
           ),
         );
+        await _refreshOrderDetails(showError: false);
       }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _requestQuoteRevision() async {
+    final expectedPrice = _order.quotedPrice;
+    if (expectedPrice == null || expectedPrice <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Harga penawaran tidak valid.')),
+      );
+      return;
+    }
+
+    final formKey = GlobalKey<FormState>();
+    var draftReason = '';
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Minta Revisi Harga'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            minLines: 3,
+            maxLines: 6,
+            maxLength: 500,
+            textCapitalization: TextCapitalization.sentences,
+            onChanged: (value) => draftReason = value,
+            decoration: const InputDecoration(
+              labelText: 'Alasan revisi',
+              hintText:
+                  'Jelaskan bagian harga atau ruang lingkup yang perlu diperiksa ulang.',
+              border: OutlineInputBorder(),
+            ),
+            validator: (value) {
+              if ((value?.trim().length ?? 0) < 10) {
+                return 'Alasan revisi minimal 10 karakter.';
+              }
+              return null;
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState?.validate() != true) return;
+              Navigator.pop(dialogContext, draftReason.trim());
+            },
+            child: const Text('Kirim Permintaan'),
+          ),
+        ],
+      ),
+    );
+    if (reason == null || !mounted) return;
+
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    if (token == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sesi login telah berakhir.')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      await _apiService.requestQuoteRevision(
+        token: token,
+        orderId: _order.id,
+        reason: reason,
+        expectedPrice: expectedPrice,
+        expectedRevision: _order.quoteRevision,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Permintaan revisi harga berhasil dikirim.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      await _refreshOrderDetails();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ApiService.readableError(
+              error,
+              action: 'Gagal meminta revisi harga',
+            ),
+          ),
+        ),
+      );
+      await _refreshOrderDetails(showError: false);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -2165,7 +2325,7 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
   List<_ProgressStep> _buildProgressSteps() {
     final isSurvey = _order.serviceType == 'survey';
     if (isSurvey) {
-      return const [
+      return [
         _ProgressStep(
           id: 'awaiting_payment',
           title: 'Menunggu Pembayaran',
@@ -2189,10 +2349,14 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
         ),
         _ProgressStep(
           id: 'quote_proposed',
-          title: 'Penawaran Diajukan',
-          description: 'Estimasi harga sudah dikirim oleh worker.',
+          title: _order.status == 'quote_revision_requested'
+              ? 'Revisi Harga Diminta'
+              : 'Penawaran Diajukan',
+          description: _order.status == 'quote_revision_requested'
+              ? 'Worker sedang meninjau kembali harga penawaran.'
+              : 'Estimasi harga sudah dikirim oleh worker.',
           icon: Icons.request_quote_rounded,
-          activeStatuses: ['quote_proposed'],
+          activeStatuses: const ['quote_proposed', 'quote_revision_requested'],
         ),
         _ProgressStep(
           id: 'quote_accepted',
@@ -2295,24 +2459,38 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
 
   Widget _buildTerminalStatusBanner() {
     final statusLabel = _statusText(_order.status);
+    final surveyCompleted = _order.status == 'quote_rejected';
+    final backgroundColor = surveyCompleted
+        ? Colors.green.shade50
+        : Colors.red.shade50;
+    final borderColor = surveyCompleted
+        ? Colors.green.shade200
+        : Colors.red.shade200;
+    final foregroundColor = surveyCompleted
+        ? Colors.green.shade700
+        : Colors.red.shade700;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.red.shade50,
+        color: backgroundColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.red.shade200),
+        border: Border.all(color: borderColor),
       ),
       child: Row(
         children: [
-          Icon(Icons.info_outline, color: Colors.red.shade600, size: 20),
+          Icon(
+            surveyCompleted ? Icons.verified_outlined : Icons.info_outline,
+            color: foregroundColor,
+            size: 20,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               'Status akhir: $statusLabel',
               style: TextStyle(
-                color: Colors.red.shade700,
+                color: foregroundColor,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
@@ -3165,6 +3343,7 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
           'pending',
           'accepted',
           'quote_proposed',
+          'quote_revision_requested',
           'quote_accepted',
           'ready_to_start',
           'work_in_progress',
@@ -3326,6 +3505,7 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
                           'pending',
                           'accepted',
                           'quote_proposed',
+                          'quote_revision_requested',
                           'quote_accepted',
                           'ready_to_start',
                         }.contains(_order.status)
@@ -3867,6 +4047,20 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
             child: const Text('Terima Penawaran'),
           ),
           const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _isLoading ? null : _requestQuoteRevision,
+            icon: const Icon(Icons.edit_note_rounded),
+            label: const Text('Minta Revisi Harga'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFFB76E00),
+              side: const BorderSide(color: Color(0xFFB76E00)),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           OutlinedButton(
             onPressed: () {
               ActionTapGuard.run(
@@ -3889,12 +4083,46 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
       );
     }
 
+    if (_order.status == 'quote_revision_requested') {
+      final reason = _order.quoteRevisionRequest?.reason.trim();
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF7E6),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFFFD591)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.schedule_rounded, color: Color(0xFFB76E00)),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Menunggu revisi harga dari Worker',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+            if (reason != null && reason.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(reason, style: const TextStyle(height: 1.4)),
+            ],
+          ],
+        ),
+      );
+    }
+
     if (_order.status == 'quote_accepted') {
-      final isDisabled = _appliedVoucherCode != null && !_isVoucherValid;
+      final hasInvalidVoucher = _appliedVoucherCode != null && !_isVoucherValid;
+      final isDisabled = hasInvalidVoucher || _isStartingPayment;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (isDisabled)
+          if (hasInvalidVoucher)
             Container(
               padding: const EdgeInsets.all(12),
               margin: const EdgeInsets.only(bottom: 12),
@@ -3928,40 +4156,65 @@ class _CustomerOrderDetailPageState extends State<CustomerOrderDetailPage> {
             child: ElevatedButton(
               onPressed: isDisabled
                   ? null
-                  : () {
-                      ActionTapGuard.run(
-                        context,
-                        _handlePayment,
-                        label: 'Membuka pembayaran',
-                      );
-                    },
+                  // _handlePayment menunggu route Snap ditutup agar detail
+                  // dapat dimuat ulang. Jangan bungkus dengan ActionTapGuard:
+                  // overlay root-nya ikut terbawa ke route Snap dan baru akan
+                  // hilang setelah route tersebut ditutup.
+                  : _handlePayment,
               style: ElevatedButton.styleFrom(
-                backgroundColor: isDisabled
+                backgroundColor: hasInvalidVoucher
                     ? Colors.grey.shade400
                     : const Color(0xFF2196F3),
-                foregroundColor: isDisabled
+                foregroundColor: hasInvalidVoucher
                     ? Colors.grey.shade600
                     : Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-                elevation: isDisabled ? 0 : 2,
+                elevation: hasInvalidVoucher ? 0 : 2,
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(isDisabled ? Icons.block : Icons.payment, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    isDisabled ? 'Pembayaran Dinonaktifkan' : 'Bayar Sekarang',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
+              child: _isStartingPayment
+                  ? const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.4,
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(width: 10),
+                        Text(
+                          'Membuka pembayaran...',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          hasInvalidVoucher ? Icons.block : Icons.payment,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          hasInvalidVoucher
+                              ? 'Pembayaran Dinonaktifkan'
+                              : 'Bayar Sekarang',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
             ),
           ),
         ],

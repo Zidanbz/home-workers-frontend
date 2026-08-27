@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:home_workers_fe/features/customer_flow/dashboard/pages/costumer_dashboard_page.dart';
+import 'package:home_workers_fe/features/customer_flow/marketplace/controllers/marketplace_page_controller.dart';
 import 'package:home_workers_fe/features/customer_flow/marketplace/pages/marketplace_page.dart';
 import 'package:home_workers_fe/features/customer_flow/orders/pages/customer_orders_page.dart';
 import 'package:home_workers_fe/features/customer_flow/chat/pages/customer_chat_list_page.dart';
@@ -16,6 +17,7 @@ import '../shared_widgets/global_tap_guard.dart';
 import 'worker_flow/dashboard/pages/worker_dashboard_page.dart';
 import 'worker_flow/service_management/pages/my_jobs_page.dart';
 import 'chat/pages/chat_list_page.dart';
+import 'worker_flow/order_management/widgets/incoming_order_overlay.dart';
 
 class OrdersPage extends StatelessWidget {
   const OrdersPage({super.key});
@@ -46,6 +48,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
   int _currentIndex = 0;
   late final List<Widget> _pages;
+  late final MarketplacePageController _marketplaceController;
   late AnimationController _animationController;
   late Animation<double> _scaleAnimation;
 
@@ -53,6 +56,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
+    _marketplaceController = MarketplacePageController();
 
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 200),
@@ -69,9 +73,16 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       });
     }
 
+    void showNearbyWorkers() {
+      jumpToPage(1);
+      _marketplaceController.showNearestServices();
+    }
+
     if (widget.userRole == 'WORKER') {
       _pages = [
-        const WorkerDashboardPage(),
+        const WorkerDashboardPage(
+          bottomNavigationClearance: _bottomNavigationContentClearance,
+        ),
         const MyJobsPage(
           bottomNavigationClearance: _bottomNavigationContentClearance,
         ),
@@ -83,8 +94,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       ];
     } else {
       _pages = [
-        CustomerDashboardPage(onNavigateToOrders: () => jumpToPage(2)),
-        const MarketplacePage(
+        CustomerDashboardPage(
+          onNavigateToOrders: () => jumpToPage(2),
+          onNavigateToNearbyWorkers: showNearbyWorkers,
+          bottomNavigationClearance: _bottomNavigationContentClearance,
+        ),
+        MarketplacePage(
+          controller: _marketplaceController,
           bottomNavigationClearance: _bottomNavigationContentClearance,
         ),
         const CustomerOrdersPage(
@@ -98,6 +114,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _marketplaceController.dispose();
     _animationController.dispose();
     super.dispose();
   }
@@ -184,7 +201,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final scaffold = Scaffold(
       body: IndexedStack(index: _currentIndex, children: _pages),
       extendBody: true,
       bottomNavigationBar: NoTapGuard(
@@ -233,6 +250,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         ),
       ),
     );
+
+    if (widget.userRole.toUpperCase() != 'WORKER') return scaffold;
+    return Stack(children: [scaffold, const WorkerIncomingOrderOverlay()]);
   }
 
   Widget _buildNavItem(int index, NavItem item) {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -96,6 +98,43 @@ class _FakeApiService extends ApiService {
   }) async {
     events.add('review:$token:$rating:$comment');
   }
+
+  @override
+  Future<void> requestQuoteRevision({
+    required String token,
+    required String orderId,
+    required String reason,
+    required num expectedPrice,
+    required int expectedRevision,
+  }) async {
+    events.add(
+      'revision:$token:$orderId:$expectedPrice:$expectedRevision:$reason',
+    );
+  }
+}
+
+class _PendingPaymentApiService extends _FakeApiService {
+  _PendingPaymentApiService(super.order, super.events);
+
+  final paymentRequest = Completer<Map<String, dynamic>>();
+  int paymentStartCount = 0;
+
+  @override
+  Future<Map<String, dynamic>> getAvailableVouchers({
+    required String token,
+  }) async {
+    return const {'global': [], 'user': []};
+  }
+
+  @override
+  Future<Map<String, dynamic>> startPaymentForQuote({
+    required String token,
+    required String orderId,
+    String? voucherCode,
+  }) {
+    paymentStartCount += 1;
+    return paymentRequest.future;
+  }
 }
 
 Order _completionSubmittedOrder() {
@@ -145,6 +184,65 @@ void main() {
   setUpAll(() async {
     dotenv.testLoad(fileInput: 'API_BASE_URL=https://example.invalid/api');
     await initializeDateFormatting('id_ID');
+  });
+
+  testWidgets('Customer dapat meminta revisi harga dari detail quote terbaru', (
+    tester,
+  ) async {
+    final events = <String>[];
+    final order = Order(
+      id: 'order-survey',
+      status: 'quote_proposed',
+      jadwalPerbaikan: DateTime(2026, 8, 23, 9),
+      dibuatPada: DateTime(2026, 8, 23, 8),
+      serviceName: 'Servis Survey',
+      customerName: 'Customer',
+      customerAddress: 'Makassar',
+      customerId: 'customer-1',
+      category: 'Perbaikan',
+      serviceType: 'survey',
+      workerName: 'Worker',
+      workerId: 'worker-1',
+      quotedPrice: 100000,
+      quoteRevision: 2,
+      hasBeenReviewed: false,
+      paymentStatus: 'paid',
+    );
+    final api = _FakeApiService(order, events);
+    final auth = _FakeAuthProvider(events);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AuthProvider>.value(
+        value: auth,
+        child: MaterialApp(
+          home: CustomerOrderDetailPage(
+            initialOrder: order,
+            apiService: api,
+            enableRealtime: false,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final revisionButton = find.text('Minta Revisi Harga');
+    await tester.ensureVisible(revisionButton);
+    await tester.tap(revisionButton);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byType(TextFormField),
+      'Harga material perlu diperiksa ulang.',
+    );
+    await tester.tap(find.text('Kirim Permintaan'));
+    await tester.pumpAndSettle();
+
+    expect(
+      events,
+      contains(
+        'revision:token-lama:order-survey:100000:2:Harga material perlu diperiksa ulang.',
+      ),
+    );
   });
 
   testWidgets(
@@ -230,4 +328,55 @@ void main() {
     expect(find.byKey(const ValueKey('detail-review-button')), findsNothing);
     expect(find.text('Terima kasih, ulasan berhasil dikirim.'), findsOneWidget);
   });
+
+  testWidgets(
+    'pembayaran survey memakai loading tombol tanpa overlay lintas route',
+    (tester) async {
+      final events = <String>[];
+      final order = _completionSubmittedOrder().copyWith(
+        status: 'quote_accepted',
+        serviceType: 'survey',
+        quotedPrice: 10000,
+      );
+      final api = _PendingPaymentApiService(order, events);
+      final auth = _FakeAuthProvider(events);
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AuthProvider>.value(
+          value: auth,
+          child: MaterialApp(
+            home: CustomerOrderDetailPage(
+              initialOrder: order,
+              apiService: api,
+              enableRealtime: false,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final paymentButton = find.text('Bayar Sekarang');
+      await tester.ensureVisible(paymentButton);
+      await tester.tap(paymentButton);
+      await tester.pump();
+
+      expect(api.paymentStartCount, 1);
+      expect(find.text('Membuka pembayaran...'), findsOneWidget);
+      expect(find.text('Tunggu sebentar yaa'), findsNothing);
+
+      // Tombol nonaktif selama request agar tap ganda tidak membuat sesi baru.
+      await tester.tap(find.text('Membuka pembayaran...'));
+      await tester.pump();
+      expect(api.paymentStartCount, 1);
+
+      api.paymentRequest.complete(const {});
+      await tester.pumpAndSettle();
+
+      expect(find.text('Bayar Sekarang'), findsOneWidget);
+      expect(
+        find.textContaining('Token pembayaran tidak diterima'),
+        findsOneWidget,
+      );
+    },
+  );
 }

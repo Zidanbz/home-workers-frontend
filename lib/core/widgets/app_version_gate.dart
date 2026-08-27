@@ -1,26 +1,45 @@
 import 'dart:io';
 
-import 'package:firebase_remote_config/firebase_remote_config.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'package:home_workers_fe/core/models/app_version_policy.dart';
+import 'package:home_workers_fe/core/services/app_version_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-/// Harus sama dengan `applicationId` di android/app/build.gradle.kts
-const String _androidPackageId = 'com.homeworkers.app';
+typedef AppBuildNumberLoader = Future<int> Function();
+typedef AppExternalUrlLauncher = Future<bool> Function(Uri uri);
 
-/// Remote Config (Number): jika > 0, Android dengan buildNumber < nilai ini wajui update.
-/// Build number = angka setelah `+` di pubspec, contoh 1.0.2+13 → 13.
-const String _rcMinBuildAndroid = 'force_update_min_build_android';
+Future<int> _loadBuildNumber() async {
+  final info = await PackageInfo.fromPlatform();
+  final build = int.tryParse(info.buildNumber);
+  if (build == null || build < 1) {
+    throw const FormatException('Build aplikasi tidak valid.');
+  }
+  return build;
+}
 
-/// Remote Config (String): opsional, mengganti teks penjelasan.
-const String _rcUpdateMessage = 'force_update_message';
+Future<bool> _launchExternalUrl(Uri uri) {
+  return launchUrl(uri, mode: LaunchMode.externalApplication);
+}
 
 class AppVersionGate extends StatefulWidget {
-  const AppVersionGate({super.key, required this.child});
+  const AppVersionGate({
+    super.key,
+    required this.child,
+    this.versionRepository,
+    this.buildNumberLoader,
+    this.platformOverride,
+    this.externalUrlLauncher,
+    this.removeNativeSplash,
+  });
 
   final Widget child;
+  final AppVersionPolicyRepository? versionRepository;
+  final AppBuildNumberLoader? buildNumberLoader;
+  final String? platformOverride;
+  final AppExternalUrlLauncher? externalUrlLauncher;
+  final VoidCallback? removeNativeSplash;
 
   @override
   State<AppVersionGate> createState() => _AppVersionGateState();
@@ -29,80 +48,102 @@ class AppVersionGate extends StatefulWidget {
 class _AppVersionGateState extends State<AppVersionGate> {
   bool _loading = true;
   bool _forceUpdate = false;
-  String _message =
-      'Versi aplikasi Anda sudah tidak didukung. Silakan perbarui di Play Store.';
+  String _message = AppVersionPolicy.defaultMessage;
+  String _storeUrl = AppVersionPolicy.defaultStoreUrl;
 
   bool _splashRemovedForBlock = false;
+  late final AppVersionPolicyRepository _versionRepository;
 
   void _removeSplashForForceScreen() {
     if (_splashRemovedForBlock) return;
     _splashRemovedForBlock = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    final removeSplash = widget.removeNativeSplash;
+    if (removeSplash != null) {
+      removeSplash();
+    } else {
+      // preserve() menahan frame pertama. Menunggu post-frame callback di sini
+      // dapat membuat layar wajib update selamanya tertutup native splash.
       FlutterNativeSplash.remove();
-    });
+    }
   }
 
   @override
   void initState() {
     super.initState();
+    _versionRepository = widget.versionRepository ?? AppVersionService();
     _evaluateVersion();
   }
 
   Future<void> _evaluateVersion() async {
+    final platform =
+        widget.platformOverride ?? (Platform.isAndroid ? 'android' : 'other');
+    if (platform != 'android') {
+      _applyAllowed();
+      return;
+    }
+
+    AppVersionPolicy? cachedPolicy;
+    int? currentBuild;
     try {
-      final info = await PackageInfo.fromPlatform();
-      final currentBuild = int.tryParse(info.buildNumber) ?? 0;
+      currentBuild = await (widget.buildNumberLoader ?? _loadBuildNumber)();
+      cachedPolicy = await _versionRepository.readCachedPolicy();
 
-      final rc = FirebaseRemoteConfig.instance;
-      await rc.setConfigSettings(
-        RemoteConfigSettings(
-          fetchTimeout: const Duration(seconds: 30),
-          minimumFetchInterval:
-              kDebugMode ? Duration.zero : const Duration(hours: 1),
-        ),
+      if (cachedPolicy != null) {
+        _applyPolicy(cachedPolicy, currentBuild);
+      }
+
+      final freshPolicy = await _versionRepository.fetchPolicy(
+        platform: platform,
+        currentBuild: currentBuild,
       );
-      await rc.setDefaults(const {
-        _rcMinBuildAndroid: 0,
-        _rcUpdateMessage: '',
-      });
-
-      await rc.fetchAndActivate();
-
-      final minBuild = rc.getInt(_rcMinBuildAndroid);
-      final remoteMsg = rc.getString(_rcUpdateMessage).trim();
-
-      if (remoteMsg.isNotEmpty) {
-        _message = remoteMsg;
+      try {
+        await _versionRepository.savePolicy(freshPolicy);
+      } catch (_) {
+        // Policy fresh tetap dipakai walaupun cache lokal gagal ditulis.
       }
-
-      final blocked =
-          Platform.isAndroid && minBuild > 0 && currentBuild < minBuild;
-
-      if (!mounted) return;
-      setState(() {
-        _forceUpdate = blocked;
-        _loading = false;
-      });
-
-      if (blocked) {
-        _removeSplashForForceScreen();
-      }
+      _applyPolicy(freshPolicy, currentBuild);
     } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _forceUpdate = false;
-        _loading = false;
-      });
+      if (cachedPolicy != null && currentBuild != null) {
+        _applyPolicy(cachedPolicy, currentBuild);
+      } else {
+        _applyAllowed();
+      }
     }
   }
 
+  void _applyPolicy(AppVersionPolicy policy, int currentBuild) {
+    if (!mounted) return;
+    final blocked = policy.requiresUpdate(currentBuild);
+    setState(() {
+      _message = policy.message;
+      _storeUrl = policy.storeUrl;
+      _forceUpdate = blocked;
+      _loading = false;
+    });
+    if (blocked) _removeSplashForForceScreen();
+  }
+
+  void _applyAllowed() {
+    if (!mounted) return;
+    setState(() {
+      _forceUpdate = false;
+      _loading = false;
+    });
+  }
+
   Future<void> _openPlayStore() async {
-    final uri = Uri.parse(
-      'https://play.google.com/store/apps/details?id=$_androidPackageId',
-    );
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    final uri = Uri.parse(_storeUrl);
+    try {
+      final opened = await (widget.externalUrlLauncher ?? _launchExternalUrl)(
+        uri,
+      );
+      if (opened || !mounted) return;
+    } catch (_) {
+      if (!mounted) return;
     }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Tidak bisa membuka Play Store.')),
+    );
   }
 
   @override

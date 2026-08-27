@@ -8,6 +8,7 @@ import '../../../../core/models/order_model.dart';
 import '../../../../core/models/refund_model.dart';
 import '../../../../core/models/warranty_model.dart';
 import '../../../../core/state/auth_provider.dart';
+import '../../../../core/utils/order_list_policy.dart';
 import '../widgets/completion_submission_sheet.dart';
 import '../widgets/refund_response_sheet.dart';
 import '../../../../shared_widgets/refund_additional_evidence_sheet.dart';
@@ -153,16 +154,45 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   }
 
   Future<void> _handleSendQuote(Order order) async {
-    final TextEditingController priceController = TextEditingController();
+    final priceController = TextEditingController(
+      text:
+          {'quote_proposed', 'quote_revision_requested'}.contains(order.status)
+          ? order.quotedPrice?.round().toString() ?? ''
+          : '',
+    );
 
     final result = await showDialog<num>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Ajukan Penawaran'),
-        content: TextField(
-          controller: priceController,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Harga yang ditawarkan'),
+        title: Text(
+          order.status == 'quote_revision_requested'
+              ? 'Kirim Revisi Harga'
+              : order.status == 'quote_proposed'
+              ? 'Ubah Penawaran'
+              : 'Ajukan Penawaran',
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (order.status == 'quote_revision_requested' &&
+                (order.quoteRevisionRequest?.reason.isNotEmpty ?? false)) ...[
+              const Text(
+                'Catatan Customer',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 6),
+              Text(order.quoteRevisionRequest!.reason),
+              const SizedBox(height: 16),
+            ],
+            TextField(
+              controller: priceController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Harga yang ditawarkan',
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -171,8 +201,8 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           ),
           ElevatedButton(
             onPressed: () {
-              final price = num.tryParse(priceController.text);
-              if (price != null) {
+              final price = int.tryParse(priceController.text.trim());
+              if (price != null && price > 0) {
                 Navigator.pop(context, price);
               }
             },
@@ -181,6 +211,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         ],
       ),
     );
+    priceController.dispose();
 
     if (result != null) {
       if (!mounted) return;
@@ -407,16 +438,26 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                     _buildInfoRow(Icons.schedule, order.formattedSchedule),
                     _buildInfoRow(
                       Icons.receipt_long_outlined,
-                      'Status: ${_getFormattedStatus(order.status)}',
+                      'Status: ${_getEffectiveFormattedStatus(order)}',
                     ),
                     _buildInfoRow(
                       Icons.category_outlined,
                       'Tipe: ${order.serviceType}',
                     ),
-                    if (order.status == 'quote_proposed')
+                    if ({
+                      'quote_proposed',
+                      'quote_revision_requested',
+                    }.contains(order.status))
                       _buildInfoRow(
                         Icons.monetization_on_outlined,
                         'Penawaran: Rp ${order.quotedPrice}',
+                      ),
+                    if (order.status == 'quote_revision_requested' &&
+                        (order.quoteRevisionRequest?.reason.isNotEmpty ??
+                            false))
+                      _buildInfoRow(
+                        Icons.edit_note_rounded,
+                        'Alasan revisi: ${order.quoteRevisionRequest!.reason}',
                       ),
                   ],
                 ),
@@ -505,6 +546,40 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   }
 
   Widget _buildActionButtons(Order order) {
+    if (isOrderWorkflowBlockedByRefund(order.refundStatus)) {
+      final isRefunded = order.refundStatus == 'refunded';
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isRefunded ? Colors.green.shade50 : Colors.orange.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isRefunded ? Colors.green.shade200 : Colors.orange.shade200,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              isRefunded
+                  ? Icons.verified_rounded
+                  : Icons.currency_exchange_rounded,
+              color: isRefunded
+                  ? Colors.green.shade800
+                  : Colors.orange.shade800,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                isRefunded
+                    ? 'Refund telah selesai. Pesanan ini tidak dapat dilanjutkan.'
+                    : 'Pesanan tidak dapat dilanjutkan selama proses refund berlangsung.',
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     // 1. STATUS: pending => tampilkan Tolak / Terima
     if (order.status == 'pending') {
       return Row(
@@ -542,13 +617,23 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       );
     }
 
-    // 2. SURVEY: accepted || quote_proposed => Ajukan / Ubah Penawaran
-    if ((order.status == 'accepted' || order.status == 'quote_proposed') &&
+    // 2. SURVEY: ajukan harga, ubah harga, atau jawab permintaan revisi.
+    if ({
+          'accepted',
+          'quote_proposed',
+          'quote_revision_requested',
+        }.contains(order.status) &&
         order.serviceType == 'survey') {
       return ElevatedButton.icon(
-        icon: const Icon(Icons.attach_money),
+        icon: Icon(
+          order.status == 'quote_revision_requested'
+              ? Icons.edit_note_rounded
+              : Icons.attach_money,
+        ),
         label: Text(
-          order.status == 'quote_proposed'
+          order.status == 'quote_revision_requested'
+              ? 'Kirim Revisi Harga'
+              : order.status == 'quote_proposed'
               ? 'Ubah Penawaran'
               : 'Ajukan Penawaran',
         ),
@@ -1114,8 +1199,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     switch (status) {
       case 'quote_proposed':
         return 'Penawaran diajukan';
+      case 'quote_revision_requested':
+        return 'Customer meminta revisi harga';
       case 'quote_rejected':
-        return 'Penawaran ditolak';
+        return 'Survei selesai • Penawaran ditolak';
       case 'quote_accepted':
         return 'Penawaran diterima';
       case 'pending':
@@ -1134,6 +1221,32 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         return 'Batas penerimaan berakhir';
       default:
         return status;
+    }
+  }
+
+  String _getEffectiveFormattedStatus(Order order) {
+    switch (order.refundStatus) {
+      case 'submitted':
+        return 'Refund diajukan';
+      case 'awaiting_worker_response':
+        return 'Menunggu tanggapan refund';
+      case 'under_review':
+        return 'Refund ditinjau Admin';
+      case 'more_evidence_required':
+        return 'Perlu bukti tambahan';
+      case 'rework_offered':
+        return 'Perbaikan ditawarkan';
+      case 'approved':
+      case 'awaiting_refund_destination':
+      case 'approved_manual':
+      case 'processing':
+        return 'Refund sedang diproses';
+      case 'failed':
+        return 'Pemrosesan refund terkendala';
+      case 'refunded':
+        return 'Refund selesai';
+      default:
+        return _getFormattedStatus(order.status);
     }
   }
 }

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../../core/api/api_service.dart';
 import '../../../../core/models/order_model.dart';
 import '../../../../core/state/auth_provider.dart';
+import '../../../../core/utils/order_list_policy.dart';
 import '../../../../shared_widgets/order_summary_card.dart';
 import '../../../../shared_widgets/content_loading_skeleton.dart';
 import '../../../chat/pages/chat_detail_page.dart';
@@ -283,25 +284,17 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
                 .toList();
 
             final queuedOrders = validOrders.where((o) {
-              return [
-                'pending',
-                'accepted',
-                'quote_proposed',
-                'quote_accepted',
-                'ready_to_start',
-                'work_in_progress',
-                'completion_submitted',
-              ].contains(o.status);
+              return shouldShowWorkerOrderInQueue(
+                orderStatus: o.status,
+                refundStatus: o.refundStatus,
+              );
             }).toList();
 
             final historyOrders = validOrders.where((o) {
-              return [
-                'completed',
-                'cancelled',
-                'quote_rejected',
-                'rejected',
-                'worker_acceptance_expired',
-              ].contains(o.status);
+              return shouldShowWorkerOrderInHistory(
+                orderStatus: o.status,
+                refundStatus: o.refundStatus,
+              );
             }).toList();
 
             const activeWarrantyStatuses = {
@@ -314,7 +307,11 @@ class _WorkerOrdersPageState extends State<WorkerOrdersPage>
               'escalated',
             };
             final warrantyOrders = validOrders
-                .where((o) => activeWarrantyStatuses.contains(o.warrantyStatus))
+                .where(
+                  (o) =>
+                      !isOrderWorkflowBlockedByRefund(o.refundStatus) &&
+                      activeWarrantyStatuses.contains(o.warrantyStatus),
+                )
                 .toList();
 
             return TabBarView(
@@ -624,37 +621,60 @@ class _OrderCard extends StatelessWidget {
           break;
 
         case 'quote_proposed':
+        case 'quote_revision_requested':
+          final priceController = TextEditingController(
+            text: order.quotedPrice?.round().toString() ?? '',
+          );
           final nominal = await showDialog<num>(
             context: context,
-            builder: (context) {
-              final controller = TextEditingController();
-              return AlertDialog(
-                title: const Text('Ajukan Harga'),
-                content: TextField(
-                  controller: controller,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Masukkan harga penawaran',
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Batal'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () {
-                      final value = num.tryParse(controller.text);
-                      if (value != null) {
-                        Navigator.pop(context, value);
-                      }
-                    },
-                    child: const Text('Kirim'),
+            builder: (context) => AlertDialog(
+              title: Text(
+                order.status == 'quote_revision_requested'
+                    ? 'Kirim Revisi Harga'
+                    : 'Ubah Penawaran',
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (order.status == 'quote_revision_requested' &&
+                      (order.quoteRevisionRequest?.reason.isNotEmpty ??
+                          false)) ...[
+                    const Text(
+                      'Catatan Customer',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(order.quoteRevisionRequest!.reason),
+                    const SizedBox(height: 14),
+                  ],
+                  TextField(
+                    controller: priceController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Masukkan harga penawaran',
+                    ),
                   ),
                 ],
-              );
-            },
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Batal'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final value = int.tryParse(priceController.text.trim());
+                    if (value != null && value > 0) {
+                      Navigator.pop(context, value);
+                    }
+                  },
+                  child: const Text('Kirim'),
+                ),
+              ],
+            ),
           );
+          priceController.dispose();
 
           if (nominal != null) {
             await apiService.proposeQuote(
@@ -707,6 +727,9 @@ class _OrderCard extends StatelessWidget {
     final hasActiveWarranty = activeWarrantyStatuses.contains(
       order.warrantyStatus,
     );
+    final hasBlockingRefund = isOrderWorkflowBlockedByRefund(
+      order.refundStatus,
+    );
 
     switch (order.status) {
       case 'pending':
@@ -729,8 +752,14 @@ class _OrderCard extends StatelessWidget {
       case 'quote_proposed':
         buttonColor = Colors.indigo.shade100;
         buttonForeground = const Color(0xFF4338CA);
-        buttonText = 'Ajukan Harga';
+        buttonText = 'Ubah Penawaran';
         buttonIcon = Icons.request_quote_outlined;
+        break;
+      case 'quote_revision_requested':
+        buttonColor = Colors.orange.shade100;
+        buttonForeground = const Color(0xFF9A5B00);
+        buttonText = 'Kirim Revisi Harga';
+        buttonIcon = Icons.edit_note_rounded;
         break;
       case 'completed':
       case 'done':
@@ -749,7 +778,6 @@ class _OrderCard extends StatelessWidget {
         }
         break;
       case 'cancelled':
-      case 'quote_rejected':
       case 'worker_acceptance_expired':
         buttonColor = Colors.red.shade100;
         buttonForeground = const Color(0xFFB42318);
@@ -757,6 +785,13 @@ class _OrderCard extends StatelessWidget {
             ? 'Waktu Habis'
             : 'Dibatalkan';
         buttonIcon = Icons.cancel_outlined;
+        onPressed = null;
+        break;
+      case 'quote_rejected':
+        buttonColor = Colors.green.shade100;
+        buttonForeground = const Color(0xFF16835D);
+        buttonText = 'Survei Selesai';
+        buttonIcon = Icons.verified_rounded;
         onPressed = null;
         break;
       default:
@@ -767,7 +802,19 @@ class _OrderCard extends StatelessWidget {
         onPressed = null;
     }
 
-    if (hasActiveWarranty) {
+    if (hasBlockingRefund) {
+      final refundStatus = order.refundStatus!;
+      final isRefunded = refundStatus == 'refunded';
+      buttonColor = isRefunded ? Colors.green.shade100 : Colors.orange.shade100;
+      buttonForeground = isRefunded
+          ? const Color(0xFF16835D)
+          : const Color(0xFFB76E00);
+      buttonText = isRefunded ? 'Refund Selesai' : 'Proses Refund';
+      buttonIcon = isRefunded
+          ? Icons.verified_rounded
+          : Icons.currency_exchange_rounded;
+      onPressed = null;
+    } else if (hasActiveWarranty) {
       buttonColor = const Color(0xFFE8F7EF);
       buttonForeground = const Color(0xFF16835D);
       buttonText = 'Tindak Lanjut';
@@ -780,7 +827,9 @@ class _OrderCard extends StatelessWidget {
       };
     }
 
-    final displayStatus = hasActiveWarranty
+    final displayStatus = hasBlockingRefund
+        ? 'refund:${order.refundStatus}'
+        : hasActiveWarranty
         ? 'warranty:${order.warrantyStatus}'
         : order.status;
 
@@ -821,6 +870,14 @@ class _OrderCard extends StatelessWidget {
   }
 
   Color _statusColor(String status) {
+    if (status == 'refund:refunded') {
+      return const Color(0xFF16835D);
+    }
+    if (status.startsWith('refund:')) {
+      return status == 'refund:failed'
+          ? const Color(0xFFB42318)
+          : const Color(0xFFB76E00);
+    }
     if (status.startsWith('warranty:')) {
       return status == 'warranty:escalated'
           ? const Color(0xFFB42318)
@@ -832,6 +889,7 @@ class _OrderCard extends StatelessWidget {
         return const Color(0xFFB76E00);
       case 'accepted':
       case 'quote_proposed':
+      case 'quote_revision_requested':
       case 'quote_accepted':
         return const Color(0xFF2563EB);
       case 'ready_to_start':
@@ -840,9 +898,9 @@ class _OrderCard extends StatelessWidget {
         return const Color(0xFF7C3AED);
       case 'completed':
       case 'done':
+      case 'quote_rejected':
         return const Color(0xFF16835D);
       case 'cancelled':
-      case 'quote_rejected':
       case 'rejected':
       case 'worker_acceptance_expired':
         return const Color(0xFFB42318);
@@ -852,6 +910,12 @@ class _OrderCard extends StatelessWidget {
   }
 
   IconData _statusIcon(String status) {
+    if (status == 'refund:refunded') {
+      return Icons.verified_rounded;
+    }
+    if (status.startsWith('refund:')) {
+      return Icons.currency_exchange_rounded;
+    }
     if (status.startsWith('warranty:')) {
       return Icons.verified_user_outlined;
     }
@@ -861,6 +925,7 @@ class _OrderCard extends StatelessWidget {
       case 'accepted':
         return Icons.check_circle_outline_rounded;
       case 'quote_proposed':
+      case 'quote_revision_requested':
       case 'quote_accepted':
         return Icons.request_quote_outlined;
       case 'ready_to_start':
@@ -871,9 +936,9 @@ class _OrderCard extends StatelessWidget {
         return Icons.fact_check_outlined;
       case 'completed':
       case 'done':
+      case 'quote_rejected':
         return Icons.verified_rounded;
       case 'cancelled':
-      case 'quote_rejected':
       case 'rejected':
       case 'worker_acceptance_expired':
         return Icons.cancel_outlined;
@@ -883,6 +948,22 @@ class _OrderCard extends StatelessWidget {
   }
 
   String _statusLabel(String status) {
+    if (status.startsWith('refund:')) {
+      const labels = {
+        'submitted': 'Refund Diajukan',
+        'awaiting_worker_response': 'Perlu Tanggapan Anda',
+        'under_review': 'Refund Ditinjau Admin',
+        'more_evidence_required': 'Perlu Bukti Tambahan',
+        'rework_offered': 'Perbaikan Ditawarkan',
+        'approved': 'Refund Disetujui',
+        'awaiting_refund_destination': 'Menunggu Tujuan Refund',
+        'approved_manual': 'Menunggu Transfer Refund',
+        'processing': 'Refund Diproses',
+        'failed': 'Refund Terkendala',
+        'refunded': 'Refund Selesai',
+      };
+      return labels[status.substring('refund:'.length)] ?? 'Proses Refund';
+    }
     if (status.startsWith('warranty:')) {
       return _warrantyLabel(status.substring('warranty:'.length));
     }
@@ -890,6 +971,7 @@ class _OrderCard extends StatelessWidget {
       'pending': 'Pesanan Baru',
       'accepted': 'Diterima',
       'quote_proposed': 'Menunggu Penawaran',
+      'quote_revision_requested': 'Customer Meminta Revisi Harga',
       'quote_accepted': 'Penawaran Disetujui',
       'ready_to_start': 'Siap Dimulai',
       'work_in_progress': 'Dalam Pengerjaan',
@@ -897,7 +979,7 @@ class _OrderCard extends StatelessWidget {
       'completed': 'Selesai',
       'done': 'Selesai',
       'cancelled': 'Dibatalkan',
-      'quote_rejected': 'Penawaran Ditolak',
+      'quote_rejected': 'Survei Selesai • Penawaran Ditolak',
       'rejected': 'Ditolak',
       'worker_acceptance_expired': 'Waktu Respons Habis',
     };

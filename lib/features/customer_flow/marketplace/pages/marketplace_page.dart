@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:home_workers_fe/features/customer_flow/chat/pages/customer_chat_list_page.dart';
+import 'package:home_workers_fe/features/customer_flow/marketplace/controllers/marketplace_page_controller.dart';
 import 'package:home_workers_fe/features/customer_flow/marketplace/widgets/marketplace_service_card.dart';
 import 'package:home_workers_fe/features/customer_flow/marketplace/widgets/nearest_address_loading_overlay.dart';
 import 'package:home_workers_fe/features/notifications/pages/notification_page.dart';
@@ -12,8 +13,15 @@ import '../../../../core/state/auth_provider.dart';
 
 class MarketplacePage extends StatefulWidget {
   final double bottomNavigationClearance;
+  final MarketplacePageController? controller;
+  final ApiService? apiService;
 
-  const MarketplacePage({super.key, this.bottomNavigationClearance = 0});
+  const MarketplacePage({
+    super.key,
+    this.bottomNavigationClearance = 0,
+    this.controller,
+    this.apiService,
+  });
 
   @override
   State<MarketplacePage> createState() => _MarketplacePageState();
@@ -27,13 +35,14 @@ class _MarketplacePageState extends State<MarketplacePage>
   static const Color _surfaceColor = Color(0xFFFFFFFF);
   static const Color _mutedColor = Color(0xFF6B7D87);
 
-  final ApiService _apiService = ApiService();
+  late final ApiService _apiService;
   final TextEditingController _searchController = TextEditingController();
   late Future<List<Service>> _servicesFuture;
   String _searchQuery = '';
   String _selectedSort = 'default';
   Address? _selectedAddress;
   bool _isPreparingNearest = false;
+  int _handledNearestRequestVersion = 0;
 
   @override
   bool get wantKeepAlive => true;
@@ -41,7 +50,20 @@ class _MarketplacePageState extends State<MarketplacePage>
   @override
   void initState() {
     super.initState();
+    _apiService = widget.apiService ?? ApiService();
+    widget.controller?.addListener(_handleControllerRequest);
     _loadServices();
+    _handleControllerRequest();
+  }
+
+  @override
+  void didUpdateWidget(covariant MarketplacePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+    oldWidget.controller?.removeListener(_handleControllerRequest);
+    _handledNearestRequestVersion = 0;
+    widget.controller?.addListener(_handleControllerRequest);
+    _handleControllerRequest();
   }
 
   Future<void> _loadServices() async {
@@ -65,8 +87,18 @@ class _MarketplacePageState extends State<MarketplacePage>
 
   @override
   void dispose() {
+    widget.controller?.removeListener(_handleControllerRequest);
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _handleControllerRequest() {
+    final requestVersion = widget.controller?.nearestRequestVersion ?? 0;
+    if (requestVersion <= _handledNearestRequestVersion) return;
+    _handledNearestRequestVersion = requestVersion;
+    Future<void>.microtask(() async {
+      if (mounted) await _activateNearestSort();
+    });
   }
 
   List<Service> _filteredServices(List<Service> services) {

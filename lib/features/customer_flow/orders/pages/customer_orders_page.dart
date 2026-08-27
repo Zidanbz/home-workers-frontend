@@ -412,6 +412,7 @@ class _OrderCard extends StatelessWidget {
         return const Color(0xFFB76E00);
       case 'accepted':
       case 'quote_proposed':
+      case 'quote_revision_requested':
         return const Color(0xFF2563EB);
       case 'quote_accepted':
         return const Color(0xFF16835D);
@@ -450,9 +451,9 @@ class _OrderCard extends StatelessWidget {
       case 'refund:failed':
         return const Color(0xFFB42318);
       case 'completed':
+      case 'quote_rejected':
         return const Color(0xFF16835D);
       case 'cancelled':
-      case 'quote_rejected':
       case 'worker_acceptance_expired':
         return const Color(0xFFB42318);
       default:
@@ -470,6 +471,8 @@ class _OrderCard extends StatelessWidget {
         return Icons.check_circle_rounded;
       case 'quote_proposed':
         return Icons.request_quote_rounded;
+      case 'quote_revision_requested':
+        return Icons.edit_note_rounded;
       case 'quote_accepted':
         return Icons.payment_rounded;
       case 'ready_to_start':
@@ -513,9 +516,9 @@ class _OrderCard extends StatelessWidget {
       case 'refund:failed':
         return Icons.error_outline_rounded;
       case 'completed':
+      case 'quote_rejected':
         return Icons.verified_rounded;
       case 'cancelled':
-      case 'quote_rejected':
       case 'worker_acceptance_expired':
         return Icons.cancel_rounded;
       default:
@@ -533,6 +536,8 @@ class _OrderCard extends StatelessWidget {
         return 'Disetujui';
       case 'quote_proposed':
         return 'Penawaran Diajukan';
+      case 'quote_revision_requested':
+        return 'Menunggu Revisi Harga';
       case 'quote_accepted':
         return 'Siap Bayar';
       case 'ready_to_start':
@@ -584,7 +589,7 @@ class _OrderCard extends StatelessWidget {
       case 'cancelled':
         return 'Dibatalkan';
       case 'quote_rejected':
-        return 'Penawaran Ditolak';
+        return 'Survei Selesai • Penawaran Ditolak';
       case 'worker_acceptance_expired':
         return 'Worker Tidak Merespons';
       default:

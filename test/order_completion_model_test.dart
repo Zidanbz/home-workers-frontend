@@ -2,6 +2,66 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:home_workers_fe/core/models/order_model.dart';
 
 void main() {
+  test('permintaan revisi harga diparsing bersama versi quote', () {
+    final order = Order.fromJson({
+      'id': 'order-revision',
+      'status': 'quote_revision_requested',
+      'serviceType': 'survey',
+      'quotedPrice': 100000,
+      'quoteRevision': 2,
+      'quoteRevisionRequest': {
+        'status': 'pending',
+        'reason': 'Harga material perlu diperiksa kembali.',
+        'requestedPrice': 100000,
+        'requestedQuoteRevision': 2,
+        'requestNumber': 1,
+        'requestedAt': '2026-08-23T04:00:00.000Z',
+      },
+      'jadwalPerbaikan': '2026-08-24T02:00:00.000Z',
+      'dibuatPada': '2026-08-23T02:00:00.000Z',
+    });
+
+    expect(order.quoteRevision, 2);
+    expect(order.quoteRevisionRequest?.reason, contains('Harga material'));
+    expect(order.quoteRevisionRequest?.requestedQuoteRevision, 2);
+    expect(order.quoteRevisionRequest?.requestedPrice, 100000);
+  });
+
+  test('harga penawaran survey diprioritaskan dari biaya survei awal', () {
+    final order = Order.fromJson({
+      'id': 'order-survey-quote',
+      'status': 'quote_accepted',
+      'customerId': 'customer-1',
+      'serviceType': 'survey',
+      'serviceHarga': 20000,
+      'biayaSurvei': 20000,
+      'quotedPrice': 10000,
+      'finalPrice': 10000,
+      'jadwalPerbaikan': '2026-08-14T10:00:00.000Z',
+      'dibuatPada': '2026-08-14T09:00:00.000Z',
+    });
+
+    expect(order.quotedPrice, 10000);
+  });
+
+  test('Order mem-parsing snapshot pembayaran final dari server', () {
+    final order = Order.fromJson({
+      'id': 'order-survey',
+      'status': 'quote_accepted',
+      'jadwalPerbaikan': '2026-08-10T10:00:00.000Z',
+      'dibuatPada': '2026-08-10T09:00:00.000Z',
+      'customerId': 'customer-1',
+      'serviceType': 'survey',
+      'finalPaymentAmount': 85000,
+      'finalDiscount': 15000,
+      'finalAppliedVoucher': 'FINAL15',
+    });
+
+    expect(order.finalPaymentAmount, 85000);
+    expect(order.finalDiscount, 15000);
+    expect(order.finalAppliedVoucher, 'FINAL15');
+  });
+
   test('Order mem-parsing foto before dan after dari respons backend', () {
     final order = Order.fromJson({
       'id': 'order-1',

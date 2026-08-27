@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:home_workers_fe/core/models/address_model.dart';
 import 'package:home_workers_fe/core/models/chat_model.dart';
+import 'package:home_workers_fe/core/models/content_video_model.dart';
 import 'package:home_workers_fe/core/models/message_model.dart';
 import 'package:home_workers_fe/core/models/notification_model.dart';
 import 'package:home_workers_fe/core/models/order_model.dart';
@@ -1383,6 +1385,48 @@ class ApiService {
     }
   }
 
+  Future<List<ContentVideo>> getContentVideos(String token) async {
+    final url = Uri.parse('$_baseUrl/content/videos');
+    try {
+      final response = await http.get(
+        url,
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      final responseBody = _decodeJsonObject(response.body);
+      if (response.statusCode != 200 || responseBody['success'] != true) {
+        throw _asException(
+          responseBody['message']?.toString() ?? 'Gagal memuat konten video.',
+        );
+      }
+
+      final data = responseBody['data'];
+      final rawVideos = data is Map ? data['videos'] : null;
+      if (rawVideos is! List) return const [];
+
+      final videos = <ContentVideo>[];
+      for (final item in rawVideos) {
+        if (item is! Map) continue;
+        try {
+          videos.add(ContentVideo.fromJson(Map<String, dynamic>.from(item)));
+        } on FormatException {
+          // Satu dokumen rusak tidak boleh menghilangkan seluruh section.
+        }
+      }
+      videos.sort(
+        (left, right) => left.sortOrder.compareTo(right.sortOrder) != 0
+            ? left.sortOrder.compareTo(right.sortOrder)
+            : left.title.compareTo(right.title),
+      );
+      return videos;
+    } catch (error) {
+      if (error is Exception) rethrow;
+      throw _asException('Gagal memuat konten video.');
+    }
+  }
+
   Future<void> markChatAsRead(String token, String chatId) async {
     final url = Uri.parse('$_baseUrl/chats/$chatId/read');
     try {
@@ -1975,15 +2019,23 @@ class ApiService {
         body: jsonEncode({'price': proposedPrice}),
       );
 
-      final responseBody = jsonDecode(response.body);
+      final responseBody = _decodeJsonObject(response.body);
 
       if (response.statusCode == 200 && responseBody['success'] == true) {
         // Quote dikirim berhasil
       } else {
-        throw _asException(responseBody['message'] ?? 'Gagal mengirim quote');
+        throw _asException(
+          _responseErrorMessage(responseBody, fallback: 'Gagal mengirim quote'),
+        );
       }
-    } catch (e) {
+    } on AppException {
+      rethrow;
+    } on SocketException catch (e) {
       throw _asException('Gagal terhubung ke server. $e');
+    } on http.ClientException catch (e) {
+      throw _asException('Gagal terhubung ke server. $e');
+    } catch (_) {
+      throw _asException('Terjadi kesalahan saat mengirim penawaran.');
     }
   }
 
@@ -2106,8 +2158,6 @@ class ApiService {
       print(
         '📄 [createOrderWithPayment] Response Headers: ${response.headers}',
       );
-      print('📝 [createOrderWithPayment] Response Body: ${response.body}');
-
       // Check if response body is empty
       if (response.body.isEmpty) {
         print('❌ [createOrderWithPayment] Empty response body');
@@ -2126,13 +2176,12 @@ class ApiService {
         print('✅ [createOrderWithPayment] Successfully parsed JSON response');
       } catch (e) {
         print('❌ [createOrderWithPayment] Failed to parse JSON: $e');
-        print('📝 [createOrderWithPayment] Raw response: ${response.body}');
         throw _asException('Invalid JSON response from server');
       }
 
       if (response.statusCode == 201 && responseBody['success'] == true) {
         final data = responseBody['data'];
-        print('✅ [createOrderWithPayment] Success! Data: $data');
+        print('✅ [createOrderWithPayment] Payment session created');
 
         // Ensure data is not null and is a Map
         if (data == null) {
@@ -2227,41 +2276,60 @@ class ApiService {
     }
   }
 
-  /// Request withdrawal (Worker Only) - Fixed according to documentation
+  /// Mengajukan withdrawal Worker dengan tujuan yang dapat diproses Admin.
   Future<void> requestWithdraw({
     required String token,
     required int amount,
-    required String bankAccount,
-    required String bankName,
+    required String destinationType,
+    required String institutionName,
+    required String accountNumber,
+    required String accountName,
   }) async {
     final url = Uri.parse('$_baseUrl/wallet/me/withdraw');
+    final normalizedType = destinationType.trim().toLowerCase();
+    if (normalizedType != 'bank' && normalizedType != 'ewallet') {
+      throw _asException('Jenis tujuan penarikan tidak valid.');
+    }
+
+    final destination = <String, dynamic>{
+      'type': normalizedType,
+      normalizedType == 'bank' ? 'bank' : 'provider': institutionName.trim(),
+      'accountNumber': accountNumber.trim(),
+      'accountName': accountName.trim(),
+    };
 
     try {
-      final response = await http.post(
-        url,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'amount': amount,
-          'destination': {
-            'type': 'bank',
-            'bankName': bankName,
-            'bankAccount': bankAccount,
-          },
-        }),
-      );
+      final response = await http
+          .post(
+            url,
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({'amount': amount, 'destination': destination}),
+          )
+          .timeout(const Duration(seconds: 30));
 
-      final responseBody = jsonDecode(response.body);
+      final responseBody = _decodeJsonObject(response.body);
 
       if (response.statusCode != 200 || responseBody['success'] != true) {
         throw _asException(
-          responseBody['message'] ?? 'Failed to request withdrawal',
+          _responseErrorMessage(
+            responseBody,
+            fallback: 'Failed to request withdrawal',
+          ),
         );
       }
-    } catch (e) {
+    } on AppException {
+      rethrow;
+    } on SocketException catch (e) {
       throw _asException('Failed to connect to the server. $e');
+    } on http.ClientException catch (e) {
+      throw _asException('Failed to connect to the server. $e');
+    } on TimeoutException catch (e) {
+      throw _asException('Failed to connect to the server. $e');
+    } catch (_) {
+      throw _asException('Terjadi kesalahan saat mengajukan penarikan.');
     }
   }
 
@@ -2489,7 +2557,7 @@ class ApiService {
     required String token,
     required String orderId,
     required String decision,
-    String? voucherCode,
+    required num expectedPrice,
   }) async {
     final url = Uri.parse('$_baseUrl/orders/$orderId/quote/respond');
     final response = await http.put(
@@ -2498,11 +2566,58 @@ class ApiService {
         'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
       },
-      body: jsonEncode({'decision': decision}),
+      body: jsonEncode({'decision': decision, 'expectedPrice': expectedPrice}),
     );
 
-    if (response.statusCode != 200) {
-      throw _asException('Failed to respond to quote: ${response.body}');
+    final responseBody = _decodeJsonObject(response.body);
+    if (response.statusCode != 200 || responseBody['success'] != true) {
+      throw _asException(
+        _responseErrorMessage(
+          responseBody,
+          fallback: 'Failed to respond to quote',
+        ),
+      );
+    }
+  }
+
+  Future<void> requestQuoteRevision({
+    required String token,
+    required String orderId,
+    required String reason,
+    required num expectedPrice,
+    required int expectedRevision,
+  }) async {
+    final url = Uri.parse('$_baseUrl/orders/$orderId/quote/revision-request');
+    try {
+      final response = await http.put(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'reason': reason,
+          'expectedPrice': expectedPrice,
+          'expectedRevision': expectedRevision,
+        }),
+      );
+      final responseBody = _decodeJsonObject(response.body);
+      if (response.statusCode != 200 || responseBody['success'] != true) {
+        throw _asException(
+          _responseErrorMessage(
+            responseBody,
+            fallback: 'Gagal meminta revisi harga',
+          ),
+        );
+      }
+    } on AppException {
+      rethrow;
+    } on SocketException catch (error) {
+      throw _asException('Gagal terhubung ke server. $error');
+    } on http.ClientException catch (error) {
+      throw _asException('Gagal terhubung ke server. $error');
+    } catch (_) {
+      throw _asException('Terjadi kesalahan saat meminta revisi harga.');
     }
   }
 
@@ -2537,8 +2652,6 @@ class ApiService {
         '💳 [startPaymentForQuote] Response Status: ${response.statusCode}',
       );
       print('💳 [startPaymentForQuote] Response Headers: ${response.headers}');
-      print('💳 [startPaymentForQuote] Response Body: ${response.body}');
-
       // Check if response body is empty
       if (response.body.isEmpty) {
         print('❌ [startPaymentForQuote] Empty response body');
@@ -2557,13 +2670,12 @@ class ApiService {
         print('✅ [startPaymentForQuote] Successfully parsed JSON response');
       } catch (e) {
         print('❌ [startPaymentForQuote] Failed to parse JSON: $e');
-        print('📝 [startPaymentForQuote] Raw response: ${response.body}');
         throw _asException('Invalid JSON response from server');
       }
 
       if (response.statusCode == 200 && data['success'] == true) {
         final responseData = data['data'];
-        print('✅ [startPaymentForQuote] Success! Data: $responseData');
+        print('✅ [startPaymentForQuote] Payment session created');
 
         // Ensure data is not null and is a Map
         if (responseData == null) {
@@ -3023,6 +3135,26 @@ class ApiService {
     };
   }
 
+  String _responseErrorMessage(
+    Map<String, dynamic> body, {
+    required String fallback,
+  }) {
+    final errors = body['errors'];
+    if (errors is List && errors.isNotEmpty) {
+      final first = errors.first;
+      if (first is String && first.trim().isNotEmpty) {
+        return first.trim();
+      }
+      if (first is Map && first['message'] != null) {
+        final message = first['message'].toString().trim();
+        if (message.isNotEmpty) return message;
+      }
+    }
+
+    final message = body['message']?.toString().trim();
+    return message == null || message.isEmpty ? fallback : message;
+  }
+
   String _friendlyMessage(String raw) {
     final source = raw.trim();
     if (source.isEmpty) {
@@ -3213,6 +3345,10 @@ class ApiService {
       'this feature is for workers only': 'Fitur ini hanya untuk worker.',
       'amount and destination are required':
           'Nominal dan tujuan penarikan wajib diisi.',
+      'bank/provider, account number, and account name are required':
+          'Bank/provider, nomor tujuan, dan nama pemilik wajib diisi.',
+      'amount must be a whole rupiah value':
+          'Nominal penarikan harus berupa Rupiah tanpa desimal.',
       'photo url is required': 'URL foto wajib diisi.',
       'category name is required': 'Nama kategori wajib diisi.',
       'voucher code is required': 'Kode voucher wajib diisi.',

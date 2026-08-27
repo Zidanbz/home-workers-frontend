@@ -15,7 +15,9 @@ class WorkerWithdrawPage extends StatefulWidget {
 class _WorkerWithdrawPageState extends State<WorkerWithdrawPage> {
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
+  final _institutionController = TextEditingController();
   final _destinationController = TextEditingController();
+  final _accountNameController = TextEditingController();
 
   String? _selectedType;
   bool _isLoading = false;
@@ -33,17 +35,28 @@ class _WorkerWithdrawPageState extends State<WorkerWithdrawPage> {
     _fetchWallet();
   }
 
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _institutionController.dispose();
+    _destinationController.dispose();
+    _accountNameController.dispose();
+    super.dispose();
+  }
+
   Future<void> _fetchWallet() async {
     final token = Provider.of<AuthProvider>(context, listen: false).token;
     if (token == null) return;
 
     try {
       final wallet = await ApiService().getMyWallet(token);
+      if (!mounted) return;
       setState(() {
         _wallet = wallet;
         _isWalletLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _walletError = ApiService.readableError(
           e,
@@ -79,20 +92,22 @@ class _WorkerWithdrawPageState extends State<WorkerWithdrawPage> {
       await ApiService().requestWithdraw(
         token: token!,
         amount: int.parse(_amountController.text),
-        bankAccount: _destinationController.text,
-        bankName: _selectedType == 'bank' ? 'Bank Transfer' : 'E-Wallet',
+        destinationType: _selectedType!,
+        institutionName: _institutionController.text.trim(),
+        accountNumber: _destinationController.text.trim(),
+        accountName: _accountNameController.text.trim(),
       );
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Permintaan tarik dana berhasil dikirim!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        Navigator.pop(context); // Kembali ke halaman sebelumnya
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Permintaan tarik dana berhasil dikirim!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      Navigator.pop(context); // Kembali ke halaman sebelumnya
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -102,7 +117,7 @@ class _WorkerWithdrawPageState extends State<WorkerWithdrawPage> {
         ),
       );
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -215,8 +230,9 @@ class _WorkerWithdrawPageState extends State<WorkerWithdrawPage> {
                       border: OutlineInputBorder(),
                     ),
                     validator: (value) {
-                      if (value == null || value.isEmpty)
+                      if (value == null || value.isEmpty) {
                         return 'Masukkan jumlah';
+                      }
                       final number = int.tryParse(value);
                       if (number == null || number <= 0) {
                         return 'Jumlah harus lebih dari 0';
@@ -231,7 +247,7 @@ class _WorkerWithdrawPageState extends State<WorkerWithdrawPage> {
 
                   // Dropdown tujuan
                   DropdownButtonFormField<String>(
-                    value: _selectedType,
+                    initialValue: _selectedType,
                     items: _destinationTypes.map((type) {
                       return DropdownMenuItem(
                         value: type,
@@ -243,6 +259,7 @@ class _WorkerWithdrawPageState extends State<WorkerWithdrawPage> {
                     onChanged: (value) {
                       setState(() {
                         _selectedType = value;
+                        _institutionController.clear();
                         _destinationController.clear();
                       });
                     },
@@ -253,6 +270,38 @@ class _WorkerWithdrawPageState extends State<WorkerWithdrawPage> {
                     ),
                     validator: (value) =>
                         value == null ? 'Pilih jenis tujuan' : null,
+                  ),
+                  const SizedBox(height: 16),
+
+                  TextFormField(
+                    controller: _institutionController,
+                    decoration: InputDecoration(
+                      labelText: _selectedType == 'ewallet'
+                          ? 'Provider E-Wallet'
+                          : 'Nama Bank',
+                      hintText: _selectedType == 'ewallet'
+                          ? 'Contoh: DANA, OVO, GoPay'
+                          : 'Contoh: BCA, BRI, Mandiri',
+                      prefixIcon: Icon(
+                        _selectedType == 'ewallet'
+                            ? Icons.account_balance_wallet_outlined
+                            : Icons.account_balance_outlined,
+                      ),
+                      border: const OutlineInputBorder(),
+                    ),
+                    textCapitalization: TextCapitalization.words,
+                    validator: (value) {
+                      final normalized = value?.trim() ?? '';
+                      if (normalized.isEmpty) {
+                        return _selectedType == 'ewallet'
+                            ? 'Masukkan provider e-wallet'
+                            : 'Masukkan nama bank';
+                      }
+                      if (normalized.length < 2) {
+                        return 'Nama bank/provider terlalu pendek';
+                      }
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 16),
 
@@ -268,11 +317,34 @@ class _WorkerWithdrawPageState extends State<WorkerWithdrawPage> {
                     ),
                     keyboardType: TextInputType.number,
                     validator: (value) {
-                      if (value == null || value.isEmpty) {
+                      final normalized = value?.trim() ?? '';
+                      if (normalized.isEmpty) {
                         return 'Masukkan nomor rekening atau e-wallet';
                       }
-                      if (value.length < 6) {
-                        return 'Nomor terlalu pendek';
+                      if (!RegExp(r'^\d{6,30}$').hasMatch(normalized)) {
+                        return 'Nomor harus terdiri dari 6–30 digit';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 24),
+
+                  TextFormField(
+                    controller: _accountNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Nama Pemilik',
+                      hintText: 'Sesuai rekening atau akun e-wallet',
+                      prefixIcon: Icon(Icons.person_outline),
+                      border: OutlineInputBorder(),
+                    ),
+                    textCapitalization: TextCapitalization.words,
+                    validator: (value) {
+                      final normalized = value?.trim() ?? '';
+                      if (normalized.isEmpty) {
+                        return 'Masukkan nama pemilik';
+                      }
+                      if (normalized.length < 2) {
+                        return 'Nama pemilik terlalu pendek';
                       }
                       return null;
                     },

@@ -44,14 +44,15 @@ flutter build appbundle --build-name=1.0.3 --build-number=14
 
 ---
 
-## 3. Setelah naikkan versi: pembaruan wajib (Remote Config)
+## 3. Setelah naikkan versi: pembaruan wajib (Backend Version Policy)
 
-Jika fitur **paksa update** aktif (lihat [`force-update-remote-config.md`](force-update-remote-config.md) dan [`environment-and-mandatory-update.md`](environment-and-mandatory-update.md)):
+Jika fitur **paksa update** aktif (lihat [`force-update-backend.md`](force-update-backend.md) dan [`environment-and-mandatory-update.md`](environment-and-mandatory-update.md)):
 
-1. Di **Firebase Console → Remote Config**, parameter **`force_update_min_build_android`** memakai **build number** (angka setelah `+`).
-2. Setelah rilis build baru ke pengguna, sesuaikan nilai minimum jika Anda ingin memutus pengguna yang masih di build lama (misalnya set minimum ke `14` agar yang masih `13` diminta update).
+1. Di **Dashboard Admin → Pengaturan Sistem**, isi **Build terbaru** memakai build number (angka setelah `+`).
+2. Setelah rilis tersedia di Play Store, naikkan **Build minimum** jika ingin memutus build lama (misalnya minimum `14` membuat build `13` wajib update).
+3. Dashboard mewajibkan build terbaru tidak lebih kecil dari build minimum dan meminta konfirmasi ketika minimum dinaikkan.
 
-Urutan praktis: naikkan dulu `pubspec` → build AAB → unggah Play Store → lalu publish perubahan Remote Config jika ingin mulai memaksa dari build tersebut.
+Urutan praktis: naikkan `pubspec` → build AAB → unggah dan pastikan tersedia di Play Store → baru naikkan build minimum lewat Dashboard Admin.
 
 ---
 
@@ -71,4 +72,4 @@ Versi dan build tetap mengikuti **`pubspec.yaml`** saat build lewat Flutter, kec
 
 ## Ringkasan satu baris
 
-**Ubah hampir selalu cukup di `pubspec.yaml` pada baris `version: x.y.z+build` — naikkan `build` wajib tiap unggahan Play Store; sesuaikan `x.y.z` menurut jenis rilis; sinkronkan Remote Config jika memakai paksa update.**
+**Ubah hampir selalu cukup di `pubspec.yaml` pada baris `version: x.y.z+build` — naikkan `build` wajib tiap unggahan Play Store; sesuaikan `x.y.z` menurut jenis rilis; sinkronkan Backend Version Policy setelah build tersedia jika memakai paksa update.**

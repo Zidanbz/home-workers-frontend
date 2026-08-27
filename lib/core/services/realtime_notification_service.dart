@@ -2,11 +2,12 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../models/notification_model.dart';
 import '../api/api_service.dart';
+import '../navigation/app_navigator.dart';
+import '../utils/notification_sound_policy.dart';
 
 class RealtimeNotificationService extends ChangeNotifier {
   static final RealtimeNotificationService _instance =
@@ -26,11 +27,18 @@ class RealtimeNotificationService extends ChangeNotifier {
   StreamSubscription<QuerySnapshot>? _notificationSubscription;
   String? _currentUserId;
   bool _isInitialized = false;
+  bool _hasNotificationBaseline = false;
+  final List<NotificationItem> _incomingOrderQueue = [];
+  final Set<String> _dismissedIncomingOrderIds = {};
+  final Map<String, DateTime> _recentForegroundFcmOrders = {};
 
   // Getters
   List<NotificationItem> get notifications => _notifications;
   int get unreadCount => _notifications.where((n) => !n.isRead).length;
   bool get isInitialized => _isInitialized;
+  NotificationItem? get incomingOrderNotification =>
+      _incomingOrderQueue.isEmpty ? null : _incomingOrderQueue.first;
+  int get incomingOrderQueueLength => _incomingOrderQueue.length;
 
   /// Initialize notification service
   static Future<void> initialize() async {
@@ -64,11 +72,14 @@ class RealtimeNotificationService extends ChangeNotifier {
 
     // Create notification channel for Android
     const androidChannel = AndroidNotificationChannel(
-      'home_workers_channel',
-      'Home Workers Notifications',
+      generalNotificationChannelId,
+      'Notifikasi Umum',
       description: 'Notifications for Home Workers app',
       importance: Importance.high,
       playSound: true,
+      sound: RawResourceAndroidNotificationSound(
+        generalNotificationSoundResource,
+      ),
     );
 
     await _localNotifications
@@ -76,6 +87,24 @@ class RealtimeNotificationService extends ChangeNotifier {
           AndroidFlutterLocalNotificationsPlugin
         >()
         ?.createNotificationChannel(androidChannel);
+
+    const newOrderChannel = AndroidNotificationChannel(
+      newOrderNotificationChannelId,
+      'Pesanan Baru',
+      description: 'Notifikasi prioritas tinggi untuk pesanan Worker baru',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+      sound: RawResourceAndroidNotificationSound(
+        newOrderNotificationSoundResource,
+      ),
+    );
+
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannel(newOrderChannel);
   }
 
   /// Initialize FCM
@@ -154,10 +183,16 @@ class RealtimeNotificationService extends ChangeNotifier {
     await _notificationSubscription?.cancel();
     _notificationSubscription = null;
     _currentUserId = null;
+    _hasNotificationBaseline = false;
     if (clearData && _notifications.isNotEmpty) {
       _notifications = [];
-      notifyListeners();
     }
+    if (clearData) {
+      _incomingOrderQueue.clear();
+      _dismissedIncomingOrderIds.clear();
+      _recentForegroundFcmOrders.clear();
+    }
+    if (clearData) notifyListeners();
     print(
       '🔔 [RealtimeNotificationService] Stopped listening to notifications',
     );
@@ -186,14 +221,30 @@ class RealtimeNotificationService extends ChangeNotifier {
       final previousIds = _notifications.map((n) => n.id).toSet();
       final newIds = newNotifications.map((n) => n.id).toSet();
       final addedIds = newIds.difference(previousIds);
+      final isInitialSnapshot = !_hasNotificationBaseline;
 
       // Update state
       _notifications = newNotifications;
+
+      final incomingCandidates = isInitialSnapshot
+          ? newNotifications.where(_canQueueIncomingOrder)
+          : newNotifications.where(
+              (notification) =>
+                  addedIds.contains(notification.id) &&
+                  _canQueueIncomingOrder(notification),
+            );
+      for (final notification in incomingCandidates) {
+        _enqueueIncomingOrder(notification);
+      }
+      _hasNotificationBaseline = true;
       notifyListeners();
 
       // Show local notifications for new items
       for (final notification in newNotifications) {
-        if (addedIds.contains(notification.id) && !notification.isRead) {
+        if (!isInitialSnapshot &&
+            addedIds.contains(notification.id) &&
+            !notification.isRead &&
+            !_wasRecentlyShownByFcm(notification)) {
           _showLocalNotification(notification);
         }
       }
@@ -212,8 +263,31 @@ class RealtimeNotificationService extends ChangeNotifier {
   void _handleForegroundMessage(RemoteMessage message) {
     print('🔔 [FCM] Received foreground message: ${message.messageId}');
 
+    final type = message.data['type']?.toString() ?? 'general';
+    final relatedId = message.data['relatedId']?.toString();
+    final wasRecentlyShown =
+        relatedId != null && _wasOrderRecentlyShown(relatedId);
+    if (type == 'new_order' && relatedId != null && relatedId.isNotEmpty) {
+      _recentForegroundFcmOrders[relatedId] = DateTime.now();
+      _enqueueIncomingOrder(
+        NotificationItem(
+          id: message.messageId ?? 'fcm-$relatedId',
+          title: message.notification?.title ?? 'Order baru masuk',
+          body:
+              message.notification?.body ??
+              'Ada pesanan baru yang menunggu konfirmasi.',
+          timestamp: DateTime.now(),
+          isRead: false,
+          type: type,
+          relatedId: relatedId,
+          data: Map<String, dynamic>.from(message.data),
+        ),
+      );
+      notifyListeners();
+    }
+
     // Show local notification
-    _showLocalNotificationFromFCM(message);
+    if (!wasRecentlyShown) _showLocalNotificationFromFCM(message);
 
     // The Firestore listener will automatically update the UI
     // when the notification is saved to Firestore by the backend
@@ -222,28 +296,104 @@ class RealtimeNotificationService extends ChangeNotifier {
   /// Handle background notification tap
   void _handleBackgroundNotificationTap(RemoteMessage message) {
     print('🔔 [FCM] Notification tapped: ${message.messageId}');
-    // Navigation will be handled by the UI layer
+    _openNotification(message.data);
   }
 
   /// Handle local notification tap
   void _handleNotificationTap(NotificationResponse response) {
     print('🔔 [Local] Notification tapped: ${response.id}');
-    // Navigation will be handled by the UI layer
+    final payload = response.payload;
+    if (payload == null) return;
+    final parts = payload.split('|');
+    _openNotification({
+      'type': parts.isNotEmpty ? parts.first : 'general',
+      'relatedId': parts.length > 1 ? parts[1] : '',
+    });
+  }
+
+  void _openNotification(Map<String, dynamic> data) {
+    final type = data['type']?.toString();
+    final relatedId = data['relatedId']?.toString();
+    if (type == 'new_order' && relatedId != null) {
+      AppNavigator.openOrder(relatedId);
+    }
+  }
+
+  bool _canQueueIncomingOrder(NotificationItem notification) {
+    final orderId = notification.relatedId?.trim();
+    if (notification.type != 'new_order' ||
+        notification.isRead ||
+        orderId == null ||
+        orderId.isEmpty ||
+        _dismissedIncomingOrderIds.contains(orderId)) {
+      return false;
+    }
+
+    final rawDeadline = notification.data['acceptanceDeadlineAt']?.toString();
+    final deadline = rawDeadline == null
+        ? null
+        : DateTime.tryParse(rawDeadline);
+    if (deadline != null) return deadline.isAfter(DateTime.now());
+
+    return notification.timestamp.isAfter(
+      DateTime.now().subtract(const Duration(hours: 2)),
+    );
+  }
+
+  void _enqueueIncomingOrder(NotificationItem notification) {
+    if (!_canQueueIncomingOrder(notification)) return;
+    final orderId = notification.relatedId!.trim();
+    _incomingOrderQueue.removeWhere(
+      (item) => item.relatedId?.trim() == orderId,
+    );
+    _incomingOrderQueue.insert(0, notification);
+    _incomingOrderQueue.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  }
+
+  bool _wasRecentlyShownByFcm(NotificationItem notification) {
+    final orderId = notification.relatedId?.trim();
+    if (notification.type != 'new_order' || orderId == null) return false;
+    return _wasOrderRecentlyShown(orderId);
+  }
+
+  bool _wasOrderRecentlyShown(String orderId) {
+    final shownAt = _recentForegroundFcmOrders[orderId];
+    if (shownAt == null) return false;
+    return DateTime.now().difference(shownAt) < const Duration(seconds: 30);
+  }
+
+  void dismissIncomingOrder(String orderId) {
+    final normalizedOrderId = orderId.trim();
+    if (normalizedOrderId.isEmpty) return;
+    _dismissedIncomingOrderIds.add(normalizedOrderId);
+    _incomingOrderQueue.removeWhere(
+      (item) => item.relatedId?.trim() == normalizedOrderId,
+    );
+    notifyListeners();
   }
 
   /// Show local notification
   void _showLocalNotification(NotificationItem notification) {
+    if (notification.type == 'new_order' && notification.relatedId != null) {
+      _recentForegroundFcmOrders[notification.relatedId!.trim()] =
+          DateTime.now();
+    }
     _localNotifications.show(
       notification.id.hashCode,
       notification.title,
       notification.body,
-      const NotificationDetails(
+      NotificationDetails(
         android: AndroidNotificationDetails(
-          'home_workers_channel',
-          'Home Workers Notifications',
+          notificationChannelIdFor(notification.type),
+          notification.type == 'new_order'
+              ? 'Pesanan Baru'
+              : 'Home Workers Notifications',
           channelDescription: 'Notifications for Home Workers app',
           importance: Importance.high,
           priority: Priority.high,
+          sound: RawResourceAndroidNotificationSound(
+            notificationSoundResourceFor(notification.type),
+          ),
           showWhen: true,
           icon: '@drawable/notification_icon',
         ),
@@ -266,13 +416,18 @@ class RealtimeNotificationService extends ChangeNotifier {
       message.messageId.hashCode,
       notification.title,
       notification.body,
-      const NotificationDetails(
+      NotificationDetails(
         android: AndroidNotificationDetails(
-          'home_workers_channel',
-          'Home Workers Notifications',
+          notificationChannelIdFor(message.data['type']?.toString()),
+          message.data['type'] == 'new_order'
+              ? 'Pesanan Baru'
+              : 'Home Workers Notifications',
           channelDescription: 'Notifications for Home Workers app',
           importance: Importance.high,
           priority: Priority.high,
+          sound: RawResourceAndroidNotificationSound(
+            notificationSoundResourceFor(message.data['type']?.toString()),
+          ),
           showWhen: true,
           icon: '@drawable/notification_icon',
         ),
@@ -309,6 +464,7 @@ class RealtimeNotificationService extends ChangeNotifier {
           isRead: true, // Mark as read
           type: _notifications[index].type,
           relatedId: _notifications[index].relatedId,
+          data: _notifications[index].data,
         );
         notifyListeners();
       }

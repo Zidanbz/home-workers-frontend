@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:home_workers_fe/features/auth/pages/select_role_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -32,6 +33,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        systemOverlayStyle: SystemUiOverlayStyle.dark.copyWith(
+          statusBarColor: Colors.transparent,
+        ),
         actions: [
           // Tombol Skip
           TextButton(

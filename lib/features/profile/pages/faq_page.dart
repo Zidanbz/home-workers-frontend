@@ -1,10 +1,35 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+Future<bool> _launchSupportUrl(Uri uri) {
+  return launchUrl(uri, mode: LaunchMode.externalApplication);
+}
 
 class FAQPage extends StatelessWidget {
-  const FAQPage({super.key});
+  const FAQPage({super.key, this.launchSupportUrl = _launchSupportUrl});
+
+  final Future<bool> Function(Uri uri) launchSupportUrl;
 
   static const Color _primaryColor = Color(0xFF1A374D);
   static const Color _bgColor = Color(0xFFD9D9D9);
+  static const String _supportWhatsAppNumber = '6281313622428';
+
+  Future<void> _openWhatsAppSupport(BuildContext context) async {
+    final uri = Uri.https('wa.me', '/$_supportWhatsAppNumber', {
+      'text': 'Halo tim Home Workers, saya membutuhkan bantuan.',
+    });
+
+    try {
+      final opened = await launchSupportUrl(uri);
+      if (opened || !context.mounted) return;
+    } catch (_) {
+      if (!context.mounted) return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Tidak bisa membuka WhatsApp.')),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +82,7 @@ class FAQPage extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [_primaryColor.withOpacity(0.1), _bgColor],
+            colors: [_primaryColor.withValues(alpha: 0.1), _bgColor],
           ),
         ),
         child: Column(
@@ -95,7 +120,7 @@ class FAQPage extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 16,
-                      color: _primaryColor.withOpacity(0.7),
+                      color: _primaryColor.withValues(alpha: 0.7),
                     ),
                   ),
                 ],
@@ -116,67 +141,72 @@ class FAQPage extends StatelessWidget {
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: _primaryColor.withOpacity(0.1),
+                          color: _primaryColor.withValues(alpha: 0.1),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
                       ],
                     ),
-                    child: Theme(
-                      data: Theme.of(
-                        context,
-                      ).copyWith(dividerColor: Colors.transparent),
-                      child: ExpansionTile(
-                        leading: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: _primaryColor.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(
-                            item.icon,
-                            color: _primaryColor,
-                            size: 24,
-                          ),
-                        ),
-                        title: Text(
-                          item.question,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: _primaryColor,
-                          ),
-                        ),
-                        iconColor: _primaryColor,
-                        collapsedIconColor: _primaryColor,
-                        tilePadding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 8,
-                        ),
-                        childrenPadding: const EdgeInsets.fromLTRB(
-                          20,
-                          0,
-                          20,
-                          20,
-                        ),
-                        children: [
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(16),
+                    child: Material(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                      clipBehavior: Clip.antiAlias,
+                      child: Theme(
+                        data: Theme.of(
+                          context,
+                        ).copyWith(dividerColor: Colors.transparent),
+                        child: ExpansionTile(
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: _bgColor.withOpacity(0.3),
+                              color: _primaryColor.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Text(
-                              item.answer,
-                              style: TextStyle(
-                                fontSize: 14,
-                                height: 1.5,
-                                color: _primaryColor.withOpacity(0.8),
-                              ),
+                            child: Icon(
+                              item.icon,
+                              color: _primaryColor,
+                              size: 24,
                             ),
                           ),
-                        ],
+                          title: Text(
+                            item.question,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: _primaryColor,
+                            ),
+                          ),
+                          iconColor: _primaryColor,
+                          collapsedIconColor: _primaryColor,
+                          tilePadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 8,
+                          ),
+                          childrenPadding: const EdgeInsets.fromLTRB(
+                            20,
+                            0,
+                            20,
+                            20,
+                          ),
+                          children: [
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: _bgColor.withValues(alpha: 0.3),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                item.answer,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  height: 1.5,
+                                  color: _primaryColor.withValues(alpha: 0.8),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   );
@@ -194,7 +224,7 @@ class FAQPage extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: _primaryColor.withOpacity(0.1),
+                      color: _primaryColor.withValues(alpha: 0.1),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -222,16 +252,12 @@ class FAQPage extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,
-                        color: _primaryColor.withOpacity(0.7),
+                        color: _primaryColor.withValues(alpha: 0.7),
                       ),
                     ),
                     const SizedBox(height: 16),
                     ElevatedButton(
-                      onPressed: () {
-                        // TODO: Implementasi Contact Support
-                        // Contoh: Navigator.pushNamed(context, '/support');
-                        // atau buka chat support internal.
-                      },
+                      onPressed: () => _openWhatsAppSupport(context),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _primaryColor,
                         foregroundColor: Colors.white,
@@ -244,9 +270,16 @@ class FAQPage extends StatelessWidget {
                         ),
                         elevation: 0,
                       ),
-                      child: const Text(
-                        'Hubungi Support',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.chat_outlined, size: 18),
+                          SizedBox(width: 8),
+                          Text(
+                            'Hubungi via WhatsApp',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ],
                       ),
                     ),
                   ],
