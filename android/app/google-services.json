@@ -1,34 +1,41 @@
 {
   "project_info": {
-    "project_number": "132125085396",
-    "project_id": "howek-dev",
-    "storage_bucket": "howek-dev.firebasestorage.app"
+    "project_number": "891691718664",
+    "project_id": "home-workers-fa5cd",
+    "storage_bucket": "home-workers-fa5cd.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:132125085396:android:975700e2095b2e65017541",
+        "mobilesdk_app_id": "1:891691718664:android:411e6ffdbd1e617d1459bd",
         "android_client_info": {
-          "package_name": "com.homeworkers.app"
+          "package_name": "com.example.home_workers_fe"
         }
       },
       "oauth_client": [
         {
-          "client_id": "132125085396-984levalimj08hagnoh5i7j62e1h9q0a.apps.googleusercontent.com",
+          "client_id": "891691718664-4dvnlivp2uiqgdte9p3p1n0bkf9m80p7.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyAtKZk2rjKe-43RMGCSwe2HaQqDjOl_uoc"
+          "current_key": "AIzaSyByZ_z2fq2TGRKZKFcKrPrEEacLEttpdCY"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "132125085396-984levalimj08hagnoh5i7j62e1h9q0a.apps.googleusercontent.com",
+              "client_id": "891691718664-4dvnlivp2uiqgdte9p3p1n0bkf9m80p7.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "891691718664-df6narc91kga6ckpud5tacmgmm36pgv3.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.homeworkers.app"
+              }
             }
           ]
         }
@@ -36,44 +43,59 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:132125085396:android:c5bc223718210931017541",
+        "mobilesdk_app_id": "1:891691718664:android:08caee9df5a6437d1459bd",
         "android_client_info": {
-          "package_name": "com.homeworkers.app.dev"
+          "package_name": "com.homeworkers.app"
         }
       },
       "oauth_client": [
         {
-          "client_id": "132125085396-b1tqc603n9ner9kkss6j5mdnd6gag9j7.apps.googleusercontent.com",
+          "client_id": "891691718664-39ppdeortqt92cli5ur86p909757spnl.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.homeworkers.app.dev",
-            "certificate_hash": "7d6c97b6d49bb5f4167229768e2ee5260d5d7dc5"
-          }
-        },
-        {
-          "client_id": "132125085396-kg49ej7egf08d4ejgcett6lsdpddg9sl.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.homeworkers.app.dev",
+            "package_name": "com.homeworkers.app",
             "certificate_hash": "61d66579c4d64a69d7966859fd104093163b8b9c"
           }
         },
         {
-          "client_id": "132125085396-984levalimj08hagnoh5i7j62e1h9q0a.apps.googleusercontent.com",
+          "client_id": "891691718664-55uv1rr9ttpr58mqiorscthgqicdavau.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.homeworkers.app",
+            "certificate_hash": "7d6c97b6d49bb5f4167229768e2ee5260d5d7dc5"
+          }
+        },
+        {
+          "client_id": "891691718664-5clba4iir2t2u541g0l169m2do6i2c88.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.homeworkers.app",
+            "certificate_hash": "36ad202bb933eb51a1c154424693a0af4aa99fdd"
+          }
+        },
+        {
+          "client_id": "891691718664-4dvnlivp2uiqgdte9p3p1n0bkf9m80p7.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyAtKZk2rjKe-43RMGCSwe2HaQqDjOl_uoc"
+          "current_key": "AIzaSyByZ_z2fq2TGRKZKFcKrPrEEacLEttpdCY"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "132125085396-984levalimj08hagnoh5i7j62e1h9q0a.apps.googleusercontent.com",
+              "client_id": "891691718664-4dvnlivp2uiqgdte9p3p1n0bkf9m80p7.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "891691718664-df6narc91kga6ckpud5tacmgmm36pgv3.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.homeworkers.app"
+              }
             }
           ]
         }
